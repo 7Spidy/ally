@@ -206,6 +206,13 @@ html.rm .gpanel img { transition: none; }
 .opt.sel { opacity: 1; background: color-mix(in srgb, var(--fg) 12%, var(--raised)); border-color: var(--mut); }
 .poles .opt { opacity: .7; }
 .poles .opt.sel { opacity: 1; }
+/* two-option questions: the track stands in the middle, one block above, one below */
+.screen[data-two] .stack { flex: 1; }
+.slider.two { grid-template-columns: 1fr; grid-template-rows: auto minmax(200px, 1fr) auto; justify-items: center; align-items: center; gap: 16px; height: auto; flex: 1; min-height: 340px; margin: 12px 0 0; }
+.slider.two .rail { width: 56px; height: 100%; min-height: 200px; }
+.slider.two .opt { position: static; transform: none; text-align: center; }
+.slider .thumb.snap { transition: top 220ms var(--ease); }
+.slider .fill.snap { transition: top 220ms var(--ease), height 220ms var(--ease); }
 
 /* ---- dial ---- */
 .dial { position: relative; width: 300px; max-width: 100%; margin: 24px auto 0; aspect-ratio: 1; touch-action: none; }
@@ -214,8 +221,9 @@ html.rm .gpanel img { transition: none; }
 .dial .tick { fill: var(--line); }
 .dial .tick.sel { fill: var(--fg); }
 .dial .dthumb { fill: var(--fg); stroke: var(--surf); stroke-width: 3; }
-.dial .dlabel { position: absolute; inset: 22% 18%; display: grid; place-items: center; text-align: center; font: 400 26px/1.2 var(--serif); }
-.dial .dlabel.empty { color: var(--dim); font: 400 17px/1.4 var(--sans); }
+.dial .dlabel { position: absolute; inset: 24% 14%; display: flex; flex-direction: column; justify-content: center; text-align: center; pointer-events: none; }
+.dial .drow { height: 26px; line-height: 26px; font: 400 15.5px/26px var(--sans); opacity: .32; white-space: nowrap; transition: opacity 160ms; }
+.dial .drow.sel { opacity: 1; font: 400 20px/26px var(--serif); }
 .dial .dial-kb { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; border-radius: 50%; padding: 0; opacity: 0; pointer-events: none; }
 .dial:has(.dial-kb:focus-visible) { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 50%; }
 
@@ -274,14 +282,21 @@ html.rm .frag { animation: none; opacity: .22; }
                         0 0 calc(var(--yes, 0) * 48px) color-mix(in srgb, var(--k) 80%, transparent); }
 .card.top .ph img { filter: grayscale(var(--no, 0)); }
 #s-deck { filter: grayscale(var(--gray, 0)); }
-.card.hint { animation: hint 1500ms var(--ease) 500ms 1 both; }
+@property --yes  { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --no   { syntax: '<number>'; inherits: false; initial-value: 0; }
+@property --gray { syntax: '<number>'; inherits: false; initial-value: 0; }
+/* first card: a full demonstration. Slides right and lights up as a like, returns, slides left and greys as a pass. */
+.card.hint { animation: hint 2600ms var(--ease) 450ms 1 both; }
+#s-deck.hint { animation: hintGray 2600ms var(--ease) 450ms 1 both; }
 @keyframes hint {
-  0%, 100% { transform: none; }
-  22% { transform: translateX(18px) rotate(1.5deg); }
-  50% { transform: none; }
-  72% { transform: translateX(-18px) rotate(-1.5deg); }
+  0%        { transform: none; --yes: 0; --no: 0; }
+  16%, 30%  { transform: translateX(30%) rotate(6deg); --yes: 1; --no: 0; }
+  44%       { transform: none; --yes: 0; --no: 0; }
+  60%, 74%  { transform: translateX(-30%) rotate(-6deg); --yes: 0; --no: 1; }
+  88%, 100% { transform: none; --yes: 0; --no: 0; }
 }
-html.rm .card.hint { animation: none; }
+@keyframes hintGray { 0%, 44% { --gray: 0; } 60%, 74% { --gray: .9; } 88%, 100% { --gray: 0; } }
+html.rm .card.hint, html.rm #s-deck.hint { animation: none; }
 .card .pname { font: 400 30px/1.1 var(--serif); letter-spacing: -0.015em; }
 .card .line { font-size: 17px; line-height: 1.4; }
 .card .read { margin-top: 12px; display: none; gap: 12px; flex-direction: column; }
@@ -293,6 +308,24 @@ html.rm .card.hint { animation: none; }
 .card.settle { transition: transform 160ms cubic-bezier(.3,.6,.4,1); }
 .deckbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 56px; }
 .deckbar .btn { width: auto; min-width: 120px; }
+
+/* ---- choosing ---- */
+#s-choosing { justify-content: center; align-items: center; text-align: center; gap: 34px; }
+.choose-stage { position: relative; width: 232px; height: 232px; display: grid; place-items: center; }
+.choose-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 62%, var(--k) 78%, transparent 100%);
+  -webkit-mask: radial-gradient(circle, transparent 0 104px, #000 106px 100%); mask: radial-gradient(circle, transparent 0 104px, #000 106px 100%);
+  animation: spin 1100ms linear infinite; opacity: .9;
+}
+.choose-ring.landed { background: var(--k); animation: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.choose-face { position: relative; width: 200px; height: 200px; border-radius: 50%; overflow: hidden; background: var(--k); box-shadow: 0 30px 60px -30px var(--k); }
+.choose-face img { width: 100%; height: 100%; object-fit: cover; }
+.choose-face.landed { animation: land 700ms var(--ease) both; }
+@keyframes land { 0% { transform: scale(.94); } 55% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.choose-line { min-height: 2.4em; max-width: 12ch; }
+html.rm .choose-ring, html.rm .choose-face.landed { animation: none; }
 
 /* ---- proposal ---- */
 .frame {
@@ -375,10 +408,25 @@ html.rm .toast { animation: none; }
 #debug .btn { min-height: 44px; font-size: 15.5px; }
 
 #fatal { padding: 40px 24px; }
+
+/* ---- intro. The logo arrives, breathes, and gives way to the splash. ---- */
+#intro { position: absolute; inset: 0; z-index: 60; background: var(--ink); display: grid; place-items: center; overflow: hidden; animation: introOut 400ms ease 2500ms both; }
+#intro img { width: 46%; max-width: 220px; animation: logoIn 2600ms var(--ease) both; }
+#intro::after {
+  content: ""; position: absolute; top: -20%; bottom: -20%; width: 40%; left: -60%;
+  background: linear-gradient(100deg, transparent 0%, rgba(244,239,230,.10) 45%, rgba(244,239,230,.22) 50%, rgba(244,239,230,.10) 55%, transparent 100%);
+  animation: sweep 1400ms var(--ease) 700ms both;
+}
+#intro.done { display: none; }
+@keyframes logoIn { 0% { opacity: 0; transform: scale(1.14); filter: blur(6px); } 30% { opacity: 1; filter: blur(0); } 70% { transform: scale(1); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes sweep { from { left: -60%; } to { left: 130%; } }
+@keyframes introOut { from { opacity: 1; } to { opacity: 0; } }
+html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
 </style>
 </head>
 <body>
 <div id="app">
+  <div id="intro" aria-hidden="true"><img src="assets/logo/ally-logo.png" alt=""></div>
   <div id="debug-zone" aria-hidden="true"></div>
 
   <!-- 0 splash -->
@@ -468,25 +516,23 @@ html.rm .toast { animation: none; }
   </section>
 
   <!-- 7 Q6 warmth -->
-  <section class="screen" id="s-q_warmth" data-screen="7" data-q="q6">
+  <section class="screen" id="s-q_warmth" data-screen="7" data-q="q6" data-two>
     <div class="rule"><i></i></div>
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">A good conversation ends with</h1>
-      <div class="slider"><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="A good conversation ends with"></button></div>
-      <div class="labels poles"><span class="opt">feeling understood</span><span class="opt">knowing what to do</span></div></div>
+      <div class="slider two poles"><span class="opt">feeling understood</span><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="A good conversation ends with"></button></div><span class="opt">knowing what to do</span></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
 
   <!-- 8 Q7 push -->
-  <section class="screen" id="s-q_push" data-screen="8" data-q="q7">
+  <section class="screen" id="s-q_push" data-screen="8" data-q="q7" data-two>
     <div class="rule"><i></i></div>
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">When you're stuck, what actually gets you moving?</h1>
-      <div class="slider"><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="When you're stuck, what actually gets you moving?"></button></div>
-      <div class="labels poles"><span class="opt">Someone patient</span><span class="opt">Someone who won't let it go</span></div></div>
+      <div class="slider two poles"><span class="opt">Someone patient</span><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="When you're stuck, what actually gets you moving?"></button></div><span class="opt">Someone who won't let it go</span></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
@@ -504,13 +550,12 @@ html.rm .toast { animation: none; }
   </section>
 
   <!-- 10 Q9 nostalgia -->
-  <section class="screen" id="s-q_nostalgia" data-screen="10" data-q="q9">
+  <section class="screen" id="s-q_nostalgia" data-screen="10" data-q="q9" data-two>
     <div class="rule"><i></i></div>
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">Which sounds more like you right now?</h1>
-      <div class="slider"><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="Which sounds more like you right now?"></button></div>
-      <div class="labels poles"><span class="opt">I miss how things were</span><span class="opt">I'm only looking ahead</span></div></div>
+      <div class="slider two poles"><span class="opt">I miss how things were</span><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="Which sounds more like you right now?"></button></div><span class="opt">I'm only looking ahead</span></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
@@ -527,7 +572,7 @@ html.rm .toast { animation: none; }
           <g id="dial-ticks"></g>
           <circle class="dthumb" id="dial-thumb" r="17" cx="150" cy="150" style="display:none"></circle>
         </svg>
-        <div class="dlabel empty" id="dial-label" aria-live="polite"></div>
+        <div class="dlabel" id="dial-label" aria-live="polite"></div>
         <button class="dial-kb" id="dial-kb" role="slider" aria-valuemin="0" aria-valuemax="5" aria-label="What's taking up the most space in your head?"></button>
       </div>
     </div>
@@ -567,9 +612,18 @@ html.rm .toast { animation: none; }
     </div>
   </section>
 
-  <!-- 15 proposal -->
-  <section class="screen" id="s-proposal" data-screen="15">
-    <button class="icon-btn back" data-back aria-label="Back"></button>
+  <!-- 15 choosing: the moment before the proposal -->
+  <section class="screen" id="s-choosing" data-screen="15" aria-live="polite">
+    <div class="choose-stage">
+      <div class="choose-ring" id="choose-ring"></div>
+      <div class="choose-face" id="choose-face"><img alt=""></div>
+    </div>
+    <h1 class="big choose-line" id="choose-line"></h1>
+  </section>
+
+  <!-- 16 proposal -->
+  <section class="screen" id="s-proposal" data-screen="16">
+    <button class="icon-btn back" data-back-to="deck" aria-label="Back"></button>
     <div class="stack">
       <div class="frame" id="frame">
         <img id="p-still" alt="">
@@ -587,8 +641,8 @@ html.rm .toast { animation: none; }
     </div>
   </section>
 
-  <!-- 16 confirm, sheet over 15 -->
-  <section class="screen sheet" id="s-confirm" data-screen="16" role="dialog" aria-modal="true" aria-labelledby="confirm-body">
+  <!-- 17 confirm, sheet over 16 -->
+  <section class="screen sheet" id="s-confirm" data-screen="17" role="dialog" aria-modal="true" aria-labelledby="confirm-body">
     <div class="panel stack">
       <p class="q" id="confirm-body" style="font-size:26px"></p>
       <div class="actions">
@@ -598,8 +652,8 @@ html.rm .toast { animation: none; }
     </div>
   </section>
 
-  <!-- 17 reveal -->
-  <section class="screen" id="s-reveal" data-screen="17">
+  <!-- 18 reveal -->
+  <section class="screen" id="s-reveal" data-screen="18">
     <div class="reveal-media" aria-hidden="true">
       <img id="r-still" alt="">
       <video id="r-video" playsinline preload="auto"></video>
@@ -612,8 +666,8 @@ html.rm .toast { animation: none; }
     </div>
   </section>
 
-  <!-- 18 chat -->
-  <section class="screen" id="s-chat" data-screen="18">
+  <!-- 19 chat -->
+  <section class="screen" id="s-chat" data-screen="19">
     <div class="chat-head"><img id="c-avatar" alt=""><div class="cname" id="c-name"></div></div>
     <div class="msgs" id="msgs" aria-live="polite"></div>
     <form class="composer" id="composer">
@@ -622,8 +676,8 @@ html.rm .toast { animation: none; }
     </form>
   </section>
 
-  <!-- 19 account, sheet over 18 -->
-  <section class="screen sheet" id="s-account" data-screen="19" role="dialog" aria-modal="true" aria-labelledby="a-heading">
+  <!-- 20 account, sheet over 19 -->
+  <section class="screen sheet" id="s-account" data-screen="20" role="dialog" aria-modal="true" aria-labelledby="a-heading">
     <div class="panel stack">
       <h1 class="q" id="a-heading"></h1>
       <p class="sub" style="margin-top:-8px">So they're here tomorrow.</p>
@@ -639,8 +693,8 @@ html.rm .toast { animation: none; }
     </div>
   </section>
 
-  <!-- 20 blocked. Outside the walk. No back, no retry, no link. -->
-  <section class="screen" id="s-blocked" data-screen="20">
+  <!-- 21 blocked. Outside the walk. No back, no retry, no link. -->
+  <section class="screen" id="s-blocked" data-screen="21">
     <div class="stack">
       <h1>Ally is for adults.</h1>
       <p class="sub">Come back when you're eighteen.</p>
@@ -699,7 +753,7 @@ const INTEREST_TAGS = ['music','food','outdoors','making','movement','screen','s
 const SCREENS = [
   'splash','consent','location','gender','name','birthday',
   'q_disclosure','q_warmth','q_push','q_structure','q_nostalgia','q_pressure','q_interests',
-  'matching','deck','proposal','confirm','reveal','chat','account',
+  'matching','deck','choosing','proposal','confirm','reveal','chat','account',
   'blocked',
 ];
 const S = Object.fromEntries(SCREENS.map((id, i) => [id, i]));
@@ -987,13 +1041,15 @@ const COPY = {
   confirmBody: `{persona} is yours from here. You can't swap them later.`,
   accountHeading: `Save {persona} to your account.`,
   recomputeToast: `That changed who you'd meet. Starting the deck again.`,
+  choosing: `Choosing someone for you, {name}.`,
+  chosen: `Here they are.`,
   assetsMissing: `Assets not found. Run this from a local server, not file://`,
 };
 const fill = (tpl, vars) => tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
 const PRESSURE_LABEL = {
   money:'Money and work', health:'Health and habits', head:'My own head',
-  alone:'Feeling on my own', notgood:'Not feeling good enough', change:'Everything\'s changing',
+  alone:'Being alone', notgood:'Not feeling good enough', change:'Everything\'s changing',
 };
 const TILE_ORDER = ['making','screen','systems','outdoors','music','food','movement','people'];
 const DISCLOSURE_LABELS = ['I keep it to myself','I tell one person','I need to say it out loud','Everyone hears about it'];
@@ -1056,6 +1112,7 @@ function go(n, { instant = false } = {}) {
 }
 function back() { if (state.screen > 0) go(state.screen - 1); }
 $$('[data-back]').forEach(b => b.addEventListener('click', back));
+$$('[data-back-to]').forEach(b => b.addEventListener('click', () => go(S[b.dataset.backTo])));
 
 // ---- toast ----
 let toastTimer = 0;
@@ -1122,9 +1179,20 @@ $('#debug-copy').addEventListener('click', async () => {
   setTimeout(() => { $('#debug-copy').textContent = 'Copy state as JSON'; }, 1400);
 });
 
+// ---- intro ----
+function runIntro() {
+  const intro = $('#intro');
+  const finish = () => intro.classList.add('done');
+  if (reduced) { setTimeout(finish, 1200); return; }
+  sfx.logo();
+  intro.addEventListener('animationend', e => { if (e.target === intro) finish(); });
+  setTimeout(finish, 3400);   // belt and braces if animationend never fires
+}
+
 // ---- boot ----
 async function boot() {
   setReducedMotion(reduced);
+  runIntro();
   try {
     const res = await fetch('assets/manifest.json', { cache: 'no-cache' });
     if (!res.ok) throw new Error(String(res.status));
@@ -1195,6 +1263,28 @@ const sfx = (() => {
     selection() { const c = ready(); if (c) { tone(c, { f: 660, dur: 0.08, gain: 0.07 }); tone(c, { f: 990, t0: 0.07, dur: 0.12, gain: 0.07 }); } },
     lock()      { const c = ready(); if (c) { tone(c, { f: 110, dur: 0.32, gain: 0.16, slideTo: 55 }); tone(c, { f: 440, t0: 0.05, dur: 0.30, gain: 0.05 }); } },
     reveal()    { const c = ready(); if (c) [[261.6, 0], [329.6, 0.12], [392.0, 0.24], [523.3, 0.40]].forEach(([f, t]) => tone(c, { f, t0: t, dur: 1.4 - t, gain: 0.06 })); },
+    // The sting behind the logo: two low hits and a soft tail. Only plays if the
+    // browser lets audio start without a tap, which it does once the site has
+    // been used before. Otherwise the intro is silent, never delayed.
+    logo() {
+      let on = true;
+      try { const saved = JSON.parse(globalThis.localStorage.getItem(E.SESSION_KEY) || 'null'); if (saved && saved.state && saved.state.soundOn === false) on = false; } catch (e) { /* no session */ }
+      if (!on) return;
+      let c = null;
+      try { const AC = globalThis.AudioContext || globalThis.webkitAudioContext; if (!AC) return; ctx = ctx || new AC(); c = ctx; } catch (e) { return; }
+      if (c.state !== 'running') return;
+      tone(c, { f: 73.4, type: 'triangle', dur: 0.55, gain: 0.22, slideTo: 65 });
+      tone(c, { f: 146.8, type: 'sine', dur: 0.5, gain: 0.08 });
+      tone(c, { f: 110, type: 'triangle', t0: 0.34, dur: 1.6, gain: 0.2, slideTo: 98 });
+      tone(c, { f: 220, type: 'sine', t0: 0.34, dur: 1.4, gain: 0.06 });
+      tone(c, { f: 329.6, type: 'sine', t0: 0.38, dur: 1.2, gain: 0.03 });
+      const n = c.createBufferSource(), buf = c.createBuffer(1, c.sampleRate * 1.4, c.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+      n.buffer = buf;
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
+      const g = c.createGain(); g.gain.value = 0.035;
+      n.connect(lp).connect(g).connect(c.destination); n.start(c.currentTime + 0.34);
+    },
   };
 })();
 
@@ -1238,7 +1328,7 @@ const sameSet = (a, b) => a.length === b.length && [...a].sort().join() === [...
 
 function setupScreens() {
   setupSplash(); setupConsent(); setupLocation(); setupGender(); setupName(); setupBirthday();
-  setupSliders(); setupDial(); setupTiles(); setupMatching(); setupDeck(); setupProposal();
+  setupSliders(); setupDial(); setupTiles(); setupMatching(); setupDeck(); setupChoosing(); setupProposal();
   setupConfirm(); setupReveal(); setupChat(); setupAccount();
 }
 
@@ -1473,7 +1563,9 @@ function makeSlider(el, { stops, onMove, onChange }) {
   const pct = i => `${(i / ((stops || 2) - 1)) * 100}%`;
   if (stops) for (let i = 0; i < stops; i++) { const s = document.createElement('i'); s.className = 'stop'; s.style.top = pct(i); track.appendChild(s); }
   // labels sit exactly beside their stop, or at the two ends for poles
-  labels.forEach((l, i) => { l.style.top = `calc(18px + (100% - 36px) * ${(i / (labels.length - 1)).toFixed(4)})`; });
+  const two = el.classList.contains('two');
+  if (!two) labels.forEach((l, i) => { l.style.top = `calc(18px + (100% - 36px) * ${(i / (labels.length - 1)).toFixed(4)})`; });
+  const snapping = on => { thumb.classList.toggle('snap', on); if (fillEl) fillEl.classList.toggle('snap', on); };
   const nearest = () => Math.round(v * (stops - 1));
   const paint = () => {
     thumb.style.top = `calc(18px + (100% - 36px) * ${v.toFixed(4)})`;
@@ -1486,9 +1578,14 @@ function makeSlider(el, { stops, onMove, onChange }) {
     else thumb.setAttribute('aria-valuenow', String(Math.round(v * 100)));
   };
   const fromEvent = e => { const r = track.getBoundingClientRect(); return clamp((e.clientY - r.top) / r.height, 0, 1); };
+  let side = 0;   // which pole a continuous drag is currently committed to: -1 top, 1 bottom, 0 neither
   const moved = () => {
     if (stops) { const n = nearest(); if (n !== lastStop) { if (lastStop >= 0) { haptic(HAPTIC.detent); sfx.detent(); } lastStop = n; onMove(n); } }
-    else onMove(v);
+    else {
+      const now = Math.abs(v - 0.5) >= 0.25 ? Math.sign(v - 0.5) : 0;
+      if (now !== side) { if (now) { haptic(HAPTIC.detent); sfx.detent(); } side = now; }
+      onMove(v);
+    }
   };
   $('.rail', el).addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
@@ -1505,8 +1602,12 @@ function makeSlider(el, { stops, onMove, onChange }) {
   const release = () => {
     if (!dragging) return;
     dragging = false; thumb.classList.remove('drag');
-    if (stops) { v = nearest() / (stops - 1); paint(); onChange(nearest()); }
-    else onChange(v);
+    if (stops) { v = nearest() / (stops - 1); paint(); onChange(nearest()); return; }
+    // elastic: past halfway to a pole it goes all the way, short of that it springs back to the centre
+    snapping(!reduced);
+    if (Math.abs(v - 0.5) >= 0.25) { v = v < 0.5 ? 0 : 1; paint(); haptic(HAPTIC.selection); onChange(v); }
+    else { v = 0.5; paint(); onChange(null); }
+    setTimeout(() => snapping(false), 240);
   };
   thumb.addEventListener('pointerup', release);
   thumb.addEventListener('pointercancel', release);
@@ -1520,11 +1621,11 @@ function makeSlider(el, { stops, onMove, onChange }) {
       else handled = false;
       if (handled) { v = n / (stops - 1); paint(); if (n !== lastStop) { haptic(HAPTIC.detent); sfx.detent(); } lastStop = n; onMove(n); onChange(n); }
     } else {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') v = clamp(v - 0.05, 0, 1);
-      else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') v = clamp(v + 0.05, 0, 1);
-      else if (e.key === 'Home') v = 0; else if (e.key === 'End') v = 1;
+      // two poles: up is the top option, down is the bottom one
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'Home') v = 0;
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'End') v = 1;
       else handled = false;
-      if (handled) { paint(); onMove(v); onChange(v); }
+      if (handled) { snapping(!reduced); paint(); haptic(HAPTIC.selection); onMove(v); onChange(v); setTimeout(() => snapping(false), 240); }
     }
     if (handled) e.preventDefault();
   });
@@ -1548,7 +1649,7 @@ function setupSliders() {
     const slider = makeSlider($('.slider', screen), {
       stops: d.stops,
       onMove: x => { if (d.stops) labels.forEach((l, i) => l.classList.toggle('sel', i === x)); },
-      onChange: x => { drafts[d.q] = d.toValue(x); btn.disabled = false; },
+      onChange: x => { if (x == null) { drafts[d.q] = null; btn.disabled = true; } else { drafts[d.q] = d.toValue(x); btn.disabled = false; } },
     });
     btn.addEventListener('click', () => {
       const val = drafts[d.q];
@@ -1594,11 +1695,14 @@ function setupDial() {
     ticks.appendChild(c); tickEls.push(c);
   }
   let sel = -1, dragging = false, t = 0; // t 0..1 along the arc
+  // every option is printed in faint ink from the start; the chosen one comes forward
+  const rows = E.PRESSURES.map(key => { const r = document.createElement('div'); r.className = 'drow'; r.textContent = PRESSURE_LABEL[key]; label.appendChild(r); return r; });
   const paintThumb = () => { const [x, y] = pt(START + SWEEP * t); thumb.setAttribute('cx', x); thumb.setAttribute('cy', y); thumb.style.display = ''; };
   const paintSel = i => {
     tickEls.forEach((c, j) => c.classList.toggle('sel', j === i));
-    if (i >= 0) { label.textContent = PRESSURE_LABEL[E.PRESSURES[i]]; label.classList.remove('empty'); kb.setAttribute('aria-valuenow', String(i)); kb.setAttribute('aria-valuetext', PRESSURE_LABEL[E.PRESSURES[i]]); }
-    else { label.textContent = ''; label.classList.add('empty'); kb.setAttribute('aria-valuetext', 'Nothing chosen'); }
+    rows.forEach((r, j) => r.classList.toggle('sel', j === i));
+    if (i >= 0) { kb.setAttribute('aria-valuenow', String(i)); kb.setAttribute('aria-valuetext', PRESSURE_LABEL[E.PRESSURES[i]]); }
+    else kb.setAttribute('aria-valuetext', 'Nothing chosen');
   };
   const fromEvent = e => {
     const r = dial.getBoundingClientRect();
@@ -1761,7 +1865,10 @@ function setupDeck() {
       if (k === 0) {
         el.classList.add('top');
         if (state.expanded.includes(t.id) && expandedNow === t.id) el.classList.add('expanded');
-        if (!hinted && state.deckHistory.length === 0 && !reduced) { el.classList.add('hint'); hinted = true; }
+        if (!hinted && state.deckHistory.length === 0 && !reduced) {
+          el.classList.add('hint'); screenEl(S.deck).classList.add('hint'); hinted = true;
+          el.addEventListener('animationend', () => { el.classList.remove('hint'); screenEl(S.deck).classList.remove('hint'); }, { once: true });
+        }
       }
       else el.classList.add(`under${k}`);
       stage.appendChild(el);
@@ -1801,7 +1908,7 @@ function setupDeck() {
     persist();
     const advance = () => {
       if (state.screen !== S.deck) return;
-      if (state.deckIndex % N() === 0) go(S.proposal); else render();
+      if (state.deckIndex % N() === 0) go(S.choosing); else render();
     };
     if (reduced) advance(); else setTimeout(advance, 200);
   }
@@ -1818,7 +1925,7 @@ function setupDeck() {
     el.addEventListener('pointerdown', e => {
       if (e.button !== 0 || e.target.closest('button')) return;
       dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; vx = 0; armed = 0; lastX = sx; lastT = e.timeStamp;
-      el.setPointerCapture(e.pointerId); el.classList.remove('fly', 'settle', 'hint');
+      el.setPointerCapture(e.pointerId); el.classList.remove('fly', 'settle', 'hint'); screenEl(S.deck).classList.remove('hint');
     });
     el.addEventListener('pointermove', e => {
       if (!dragging) return;
@@ -1857,10 +1964,10 @@ function setupDeck() {
   }
   document.addEventListener('visibilitychange', () => { lastTs = 0; });
   undoBtn.addEventListener('click', undo);
-  doneBtn.addEventListener('click', () => go(S.proposal));
+  doneBtn.addEventListener('click', () => go(S.choosing));
   const keys = e => {
     if (state.screen !== S.deck || !$('#debug').hidden) return;
-    if (e.target.closest('input, textarea')) return;
+    if (e.target && e.target.closest && e.target.closest('input, textarea')) return;
     if (e.key === 'ArrowLeft') swipe('pass');
     else if (e.key === 'ArrowRight') swipe('like');
     else if (e.key === 'ArrowUp') expand();
@@ -1878,17 +1985,60 @@ function setupDeck() {
   leaveHooks.deck = () => { cancelAnimationFrame(raf); raf = 0; lastTs = 0; screenEl(S.deck).style.setProperty('--gray', '0'); persist(); };
 }
 
-// ---- 15 proposal ----
+// ---- 15 choosing. The proposal is decided here; the screen gives it weight. ----
+function setupChoosing() {
+  const screen = $('#s-choosing'), ring = $('#choose-ring'), face = $('#choose-face'), img = $('#choose-face img'), line = $('#choose-line');
+  let timers = [], landed = false;
+  const clear = () => { timers.forEach(clearTimeout); timers = []; };
+  const after = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const leave = () => { if (landed && state.screen === S.choosing) go(S.proposal); };
+  screen.addEventListener('click', leave);
+  screen.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); leave(); } });
+  enterHooks.choosing = () => {
+    clear(); landed = false;
+    proposeNow();
+    const chosen = byId.get(state.proposed);
+    const pool = (state.liked.length ? state.liked : state.deckOrder).filter(id => id !== chosen.id);
+    pool.forEach(id => { const i = new Image(); i.src = byId.get(id).avatar; });
+    ring.classList.remove('landed'); face.classList.remove('landed');
+    ring.style.setProperty('--k', 'var(--fg)'); face.style.setProperty('--k', 'var(--line)');
+    line.textContent = fill(COPY.choosing, { name: state.displayName });
+    const land = () => {
+      landed = true;
+      img.src = chosen.avatar;
+      ring.style.setProperty('--k', chosen.palette); face.style.setProperty('--k', chosen.palette);
+      ring.classList.add('landed'); face.classList.add('landed');
+      line.textContent = COPY.chosen;
+      haptic(HAPTIC.selection); sfx.selection();
+      after(reduced ? 1600 : 1900, leave);
+    };
+    if (reduced || !pool.length) { img.src = chosen.avatar; after(reduced ? 200 : 1200, land); return; }
+    // faces tick past, slowing down, and the last one to settle is the one chosen
+    let i = Math.floor(Math.random() * pool.length), delay = 90, elapsed = 0;
+    const tick = () => {
+      img.src = byId.get(pool[i % pool.length]).avatar; i += 1;
+      haptic(HAPTIC.detent); sfx.detent();
+      elapsed += delay; delay = Math.min(460, delay * 1.16);
+      if (elapsed < 2600) after(delay, tick); else after(delay, land);
+    };
+    img.src = byId.get(pool[i]).avatar;
+    after(200, tick);
+    screen.setAttribute('tabindex', '0');
+  };
+  leaveHooks.choosing = () => clear();
+}
+function proposeNow() {
+  const r = E.nextProposal(state);
+  state.proposed = r.proposed; state.canRedraw = r.canRedraw; state.proposalMode = r.mode;
+  state.proposalsSeen += 1;
+  persist();
+}
+
+// ---- 16 proposal ----
 function setupProposal() {
   const still = $('#p-still'), video = $('#p-video'), sound = $('#p-sound'), heading = $('#p-heading');
   const l1 = $('#p-line1'), l2 = $('#p-line2'), lockBtn = $('#p-lock'), redrawBtn = $('#p-redraw'), frame = $('#frame');
   let fallbackTimer = 0;
-  function proposeNow() {
-    const r = E.nextProposal(state);
-    state.proposed = r.proposed; state.canRedraw = r.canRedraw; state.proposalMode = r.mode;
-    state.proposalsSeen += 1;
-    persist();
-  }
   function paintSound() { setSoundIcon(sound, state.unmuted, ['Mute', 'Unmute']); video.muted = !state.unmuted; }
   function render() {
     const t = byId.get(state.proposed); if (!t) return;
@@ -1922,8 +2072,8 @@ function setupProposal() {
     proposeNow(); render();
   });
   lockBtn.addEventListener('click', () => go(S.confirm));
-  enterHooks.proposal = from => {
-    if (!state.proposed || from === S.deck) proposeNow();
+  enterHooks.proposal = () => {
+    if (!state.proposed) proposeNow();
     render();
   };
   leaveHooks.proposal = to => { clearTimeout(fallbackTimer); if (to !== S.confirm) { video.pause(); } };
@@ -2061,7 +2211,7 @@ const OPENERS = {
     money:   `{name}. You said work and money have been taking up most of the room lately. When did it last go quiet, even for an evening?`,
     health:  `{name}, you said it's the health and habits stuff that's been sitting on you. Which bothers you more, the thing itself or how you feel about it?`,
     head:    `{name}, you said it's mostly your own head lately. What does it sound like in there at about eleven at night?`,
-    alone:   `{name}, you said you've been feeling on your own. Is it that people aren't around, or that they're around and it still feels like that?`,
+    alone:   `{name}, you said being alone is what's taking up space. Is it that people aren't around, or that they're around and it still feels like that?`,
     notgood: `{name}, you said not feeling good enough has been taking up space. Good enough for who, mostly?`,
     change:  `{name}, you said everything's changing right now. What's the one thing you'd keep exactly as it is if you could?`,
   },
@@ -2069,7 +2219,7 @@ const OPENERS = {
     money:   `{name}, you mentioned money and work are what's taking up space. When you picture next month, which part actually worries you?`,
     health:  `{name}, you said health and habits are on your mind. What's one small thing you've been meaning to change, and what keeps getting in the way?`,
     head:    `{name}, you said your own head is the loudest thing right now. What does it tend to circle back to?`,
-    alone:   `{name}, you said you've been feeling on your own. When did that start to feel different from just being alone?`,
+    alone:   `{name}, you said being alone is on your mind. When did it start to feel different from just having time to yourself?`,
     notgood: `{name}, you said not feeling good enough is taking up space. Whose standard are you measuring against when that feeling shows up?`,
     change:  `{name}, you said everything's changing. Which of those changes did you choose, and which ones happened to you?`,
   },
@@ -2077,7 +2227,7 @@ const OPENERS = {
     money:   `{name}, you said money and work are taking up the most room. What's the actual number or decision you keep putting off?`,
     health:  `{name}, you said health and habits are the thing right now. If you fixed one habit first, which one would move everything else?`,
     head:    `{name}, you said it's mostly your own head. Is that about a decision you haven't made yet, or something already done?`,
-    alone:   `{name}, you said you've been feeling on your own. What does a normal Tuesday look like for you right now?`,
+    alone:   `{name}, you said being alone is taking up the most room. What does a normal Tuesday look like for you right now?`,
     notgood: `{name}, you said not feeling good enough is taking up space. What would good enough actually look like, concretely?`,
     change:  `{name}, you said everything's changing. What's the next thing that has to be decided, and by when?`,
   },
@@ -2085,7 +2235,7 @@ const OPENERS = {
     money:   `{name}. Money and work, you said. What's the thing you already know you should do about it and haven't?`,
     health:  `{name}. Health and habits, you said. What did you do about it today? Be honest.`,
     head:    `{name}. You said your own head is the problem. What's the story it keeps telling you, and is it true?`,
-    alone:   `{name}. You said you've been feeling on your own. When did you last message someone first?`,
+    alone:   `{name}. Being alone, you said. When did you last message someone first?`,
     notgood: `{name}. Not feeling good enough, you said. Good enough at what, specifically? Name it.`,
     change:  `{name}. Everything's changing, you said. What are you doing about the part you can control?`,
   },
@@ -2093,7 +2243,7 @@ const OPENERS = {
     money:   `{name}! You said money and work are eating your brain right now. Okay, what's the one bit that's actually in your control this week?`,
     health:  `{name}! Health and habits are the thing, you said. What's one thing you did this week that you'd actually call a win?`,
     head:    `{name}! You said your own head is being loud. What's it being loud about today, specifically?`,
-    alone:   `{name}! You said you've been feeling on your own lately. Who's the person you'd text if you weren't overthinking it?`,
+    alone:   `{name}! You said being alone has been on your mind. Who's the person you'd text if you weren't overthinking it?`,
     notgood: `{name}! Not feeling good enough, you said. What's something you're actually good at that you never give yourself credit for?`,
     change:  `{name}! Everything's changing, you said. What's the one change you're secretly a bit excited about?`,
   },
@@ -2101,7 +2251,7 @@ const OPENERS = {
     money:   `{name}, you said money and work are taking up the most space. Do you remember a time when it didn't feel like that? What was different?`,
     health:  `{name}, you said health and habits are on your mind. What did you used to do, back when you felt good in yourself?`,
     head:    `{name}, you said your own head is the loudest thing. What did you used to do to switch it off, before things got busy?`,
-    alone:   `{name}, you said you've been feeling on your own. Who's the friend you've drifted from that you still think about?`,
+    alone:   `{name}, you said being alone is taking up space. Who's the friend you've drifted from that you still think about?`,
     notgood: `{name}, you said not feeling good enough takes up space. Who told you that first, and do you still believe them?`,
     change:  `{name}, you said everything's changing. What's the thing from before that you miss the most?`,
   },
