@@ -37,6 +37,7 @@ button, input { font: inherit; color: inherit; }
 button { cursor: pointer; touch-action: manipulation; }
 img, video { display: block; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+h1[tabindex="-1"]:focus-visible, .q[tabindex="-1"]:focus-visible { outline: none; }   /* headings take focus on screen change for readers, not for a ring */
 
 /* ---- phone frame ---- */
 #app {
@@ -180,23 +181,31 @@ html.rm .gpanel img { transition: none; }
 .drum div { height: 44px; line-height: 44px; text-align: center; scroll-snap-align: center; font-size: 22px; color: var(--dim); }
 .drum div.sel { color: var(--fg); }
 
-/* ---- sliders ---- */
-.slider { position: relative; margin: 36px 0 8px; padding: 22px 0; touch-action: none; }
-.slider .track { position: relative; height: 4px; border-radius: 2px; background: var(--line); }
-.slider .fill { position: absolute; top: 0; height: 100%; border-radius: 2px; background: var(--fg); }
-.slider .stop { position: absolute; top: -4px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--line); }
+/* ---- sliders, vertical. Top of the track is the left pole / first stop. ---- */
+.slider {
+  position: relative; display: grid; grid-template-columns: 56px 1fr; gap: 18px;
+  height: 320px; margin: 28px 0 8px; touch-action: none;
+}
+.slider .rail { position: relative; height: 100%; padding: 18px 0; }
+.slider .track { position: absolute; left: 50%; top: 18px; bottom: 18px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--line); }
+.slider .fill { position: absolute; left: 0; width: 100%; border-radius: 2px; background: var(--fg); }
+.slider .stop { position: absolute; left: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--line); }
 .slider .thumb {
-  position: absolute; top: 50%; left: 0; width: 36px; height: 36px; margin: -18px 0 0 -18px;
+  position: absolute; left: 50%; top: 18px; width: 36px; height: 36px; margin: -18px 0 0 -18px;
   border-radius: 50%; background: var(--fg); border: 0; padding: 0; cursor: grab;
   box-shadow: 0 6px 20px -6px rgba(0,0,0,.8);
 }
 .slider .thumb.drag { cursor: grabbing; }
-.stops { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
-.stops span { opacity: .45; transition: opacity 160ms; font-size: 17px; }
-.stops span.sel { opacity: 1; }
-.poles { display: flex; justify-content: space-between; gap: 16px; margin-top: 8px; }
-.poles span { font-size: 17px; max-width: 45%; }
-.poles span:last-child { text-align: right; }
+.slider .labels { position: relative; height: 100%; padding: 18px 0; }
+.opt {
+  position: absolute; left: 0; max-width: 100%; transform: translateY(-50%);
+  display: inline-block; background: var(--raised); border: 1px solid var(--line); border-radius: 14px;
+  padding: 10px 14px; font-size: 17px; line-height: 1.3; opacity: .45; cursor: pointer;
+  transition: opacity 160ms, background 160ms, border-color 160ms;
+}
+.opt.sel { opacity: 1; background: color-mix(in srgb, var(--fg) 12%, var(--raised)); border-color: var(--mut); }
+.poles .opt { opacity: .7; }
+.poles .opt.sel { opacity: 1; }
 
 /* ---- dial ---- */
 .dial { position: relative; width: 300px; max-width: 100%; margin: 24px auto 0; aspect-ratio: 1; touch-action: none; }
@@ -251,6 +260,28 @@ html.rm .frag { animation: none; opacity: .22; }
     transparent 62%);
 }
 .card .info { position:absolute; left:0; right:0; bottom:0; padding:0 20px 20px; }
+/* drag feedback: --no rises on a left drag, --yes on a right drag, both 0..1 */
+.card .mark {
+  position: absolute; top: 50%; left: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px;
+  border-radius: 50%; display: grid; place-items: center; pointer-events: none; opacity: 0; z-index: 2;
+}
+.card .mark svg { width: 44px; height: 44px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.card .mark.no  { background: rgba(10,9,16,.72); color: var(--fg); opacity: var(--no, 0); }
+.card .mark.yes { background: var(--k); color: var(--fg); opacity: var(--yes, 0); transform: scale(calc(.85 + .15 * var(--yes, 0))); }
+.card.top { box-shadow: 0 0 0 1px color-mix(in srgb, var(--k) 45%, transparent),
+                        0 22px 46px -26px var(--k),
+                        0 0 0 calc(var(--yes, 0) * 3px) var(--k),
+                        0 0 calc(var(--yes, 0) * 48px) color-mix(in srgb, var(--k) 80%, transparent); }
+.card.top .ph img { filter: grayscale(var(--no, 0)); }
+#s-deck { filter: grayscale(var(--gray, 0)); }
+.card.hint { animation: hint 1500ms var(--ease) 500ms 1 both; }
+@keyframes hint {
+  0%, 100% { transform: none; }
+  22% { transform: translateX(18px) rotate(1.5deg); }
+  50% { transform: none; }
+  72% { transform: translateX(-18px) rotate(-1.5deg); }
+}
+html.rm .card.hint { animation: none; }
 .card .pname { font: 400 30px/1.1 var(--serif); letter-spacing: -0.015em; }
 .card .line { font-size: 17px; line-height: 1.4; }
 .card .read { margin-top: 12px; display: none; gap: 12px; flex-direction: column; }
@@ -430,8 +461,8 @@ html.rm .toast { animation: none; }
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">When something's bothering you, what usually happens?</h1>
-      <div class="slider stops4" data-stops="4"><div class="track"></div><button class="thumb" role="slider" aria-valuemin="0" aria-valuemax="3" aria-label="When something's bothering you, what usually happens?"></button></div>
-      <div class="stops"><span>I keep it to myself</span><span>I tell one person</span><span>I need to say it out loud</span><span>Everyone hears about it</span></div>
+      <div class="slider" data-stops="4"><div class="rail"><div class="track"></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="3" aria-label="When something's bothering you, what usually happens?"></button></div>
+      <div class="labels stops"><span class="opt">I keep it to myself</span><span class="opt">I tell one person</span><span class="opt">I need to say it out loud</span><span class="opt">Everyone hears about it</span></div></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
@@ -442,8 +473,8 @@ html.rm .toast { animation: none; }
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">A good conversation ends with</h1>
-      <div class="slider cont"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-valuemin="0" aria-valuemax="100" aria-label="A good conversation ends with"></button></div>
-      <div class="poles"><span>feeling understood</span><span>knowing what to do</span></div>
+      <div class="slider"><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="A good conversation ends with"></button></div>
+      <div class="labels poles"><span class="opt">feeling understood</span><span class="opt">knowing what to do</span></div></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
@@ -454,8 +485,8 @@ html.rm .toast { animation: none; }
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">When you're stuck, what actually gets you moving?</h1>
-      <div class="slider cont"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-valuemin="0" aria-valuemax="100" aria-label="When you're stuck, what actually gets you moving?"></button></div>
-      <div class="poles"><span>Someone patient</span><span>Someone who won't let it go</span></div>
+      <div class="slider"><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="When you're stuck, what actually gets you moving?"></button></div>
+      <div class="labels poles"><span class="opt">Someone patient</span><span class="opt">Someone who won't let it go</span></div></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
@@ -466,8 +497,8 @@ html.rm .toast { animation: none; }
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">Your ideal week looks</h1>
-      <div class="slider stops4" data-stops="4"><div class="track"></div><button class="thumb" role="slider" aria-valuemin="0" aria-valuemax="3" aria-label="Your ideal week looks"></button></div>
-      <div class="stops"><span>Open, I'll see what happens</span><span>Loosely sketched</span><span>Mostly planned</span><span>Every hour accounted for</span></div>
+      <div class="slider" data-stops="4"><div class="rail"><div class="track"></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="3" aria-label="Your ideal week looks"></button></div>
+      <div class="labels stops"><span class="opt">Open, I'll see what happens</span><span class="opt">Loosely sketched</span><span class="opt">Mostly planned</span><span class="opt">Every hour accounted for</span></div></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
@@ -478,8 +509,8 @@ html.rm .toast { animation: none; }
     <button class="icon-btn back" data-back aria-label="Back"></button>
     <div class="stack">
       <h1 class="q">Which sounds more like you right now?</h1>
-      <div class="slider cont"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-valuemin="0" aria-valuemax="100" aria-label="Which sounds more like you right now?"></button></div>
-      <div class="poles"><span>I miss how things were</span><span>I'm only looking ahead</span></div>
+      <div class="slider"><div class="rail"><div class="track"><div class="fill"></div></div><button class="thumb" role="slider" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-label="Which sounds more like you right now?"></button></div>
+      <div class="labels poles"><span class="opt">I miss how things were</span><span class="opt">I'm only looking ahead</span></div></div>
     </div>
     <div class="actions"><button class="btn primary" data-qgo disabled>Continue</button></div>
   </section>
@@ -1124,7 +1155,7 @@ function applyPalette(hex) {
 
 // ---- feedback stubs, implemented in the motion/haptics/sound section ----
 // ---- haptics, section 9.6. navigator.vibrate where it exists, silence elsewhere. ----
-const HAPTIC = { detent: 8, selection: [12, 40, 12], liked: 18, lock: [20, 60, 20, 60, 40] };
+const HAPTIC = { detent: 8, selection: [12, 40, 12], liked: 18, passed: 10, lock: [20, 60, 20, 60, 40] };
 function haptic(pattern) {
   try {
     if (typeof navigator.vibrate !== 'function') return;
@@ -1433,30 +1464,43 @@ function setRule(screen) {
 }
 function qContinueButton(q) { return $(`.screen[data-q="${q}"] [data-qgo]`); }
 
+// Vertical slider. v runs 0 at the top to 1 at the bottom; the top is the
+// spec's "left edge" so the axis mapping in section 6.2 is unchanged.
 function makeSlider(el, { stops, onMove, onChange }) {
   const track = $('.track', el), thumb = $('.thumb', el), fillEl = $('.fill', el);
+  const labels = $$('.opt', el);
   let v = 0.5, dragging = false, lastStop = -1;
-  if (stops) for (let i = 0; i < stops; i++) { const s = document.createElement('i'); s.className = 'stop'; s.style.left = `${(i / (stops - 1)) * 100}%`; track.appendChild(s); }
+  const pct = i => `${(i / ((stops || 2) - 1)) * 100}%`;
+  if (stops) for (let i = 0; i < stops; i++) { const s = document.createElement('i'); s.className = 'stop'; s.style.top = pct(i); track.appendChild(s); }
+  // labels sit exactly beside their stop, or at the two ends for poles
+  labels.forEach((l, i) => { l.style.top = `calc(18px + (100% - 36px) * ${(i / (labels.length - 1)).toFixed(4)})`; });
   const nearest = () => Math.round(v * (stops - 1));
   const paint = () => {
-    thumb.style.left = `${v * 100}%`;
+    thumb.style.top = `calc(18px + (100% - 36px) * ${v.toFixed(4)})`;
     if (fillEl) {
-      if (v < 0.5) { fillEl.style.left = `${v * 100}%`; fillEl.style.width = `${(0.5 - v) * 100}%`; }
-      else { fillEl.style.left = '50%'; fillEl.style.width = `${(v - 0.5) * 100}%`; }
+      if (v < 0.5) { fillEl.style.top = `${v * 100}%`; fillEl.style.height = `${(0.5 - v) * 100}%`; }
+      else { fillEl.style.top = '50%'; fillEl.style.height = `${(v - 0.5) * 100}%`; }
+      labels[0].classList.toggle('sel', v < 0.5); labels[1].classList.toggle('sel', v > 0.5);
     }
     if (stops) thumb.setAttribute('aria-valuenow', String(nearest()));
     else thumb.setAttribute('aria-valuenow', String(Math.round(v * 100)));
   };
-  const fromEvent = e => { const r = track.getBoundingClientRect(); return clamp((e.clientX - r.left) / r.width, 0, 1); };
+  const fromEvent = e => { const r = track.getBoundingClientRect(); return clamp((e.clientY - r.top) / r.height, 0, 1); };
   const moved = () => {
     if (stops) { const n = nearest(); if (n !== lastStop) { if (lastStop >= 0) { haptic(HAPTIC.detent); sfx.detent(); } lastStop = n; onMove(n); } }
     else onMove(v);
   };
-  el.addEventListener('pointerdown', e => {
+  $('.rail', el).addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
     dragging = true; thumb.classList.add('drag'); thumb.setPointerCapture(e.pointerId);
     v = fromEvent(e); paint(); moved(); e.preventDefault();
   });
+  // tapping an option block is allowed too; it moves the thumb there
+  labels.forEach((l, i) => l.addEventListener('click', () => {
+    v = stops ? i / (stops - 1) : i; paint();
+    if (stops) { if (nearest() !== lastStop) { haptic(HAPTIC.detent); sfx.detent(); } lastStop = nearest(); onMove(nearest()); onChange(nearest()); }
+    else { onMove(v); onChange(v); }
+  }));
   thumb.addEventListener('pointermove', e => { if (!dragging) return; v = fromEvent(e); paint(); moved(); });
   const release = () => {
     if (!dragging) return;
@@ -1486,7 +1530,7 @@ function makeSlider(el, { stops, onMove, onChange }) {
   });
   return {
     set(value, answered) { v = value; lastStop = answered && stops ? nearest() : -1; paint(); if (answered) (stops ? onMove(nearest()) : onMove(v)); },
-    reset() { v = 0.5; lastStop = -1; paint(); },
+    reset() { v = 0.5; lastStop = -1; paint(); if (fillEl) labels.forEach(l => l.classList.remove('sel')); },
   };
 }
 
@@ -1500,7 +1544,7 @@ function setupSliders() {
   ];
   for (const d of defs) {
     const screen = screenEl(d.screen), btn = qContinueButton(d.q);
-    const labels = $$('.stops span', screen);
+    const labels = $$('.stops .opt', screen);
     const slider = makeSlider($('.slider', screen), {
       stops: d.stops,
       onMove: x => { if (d.stops) labels.forEach((l, i) => l.classList.toggle('sel', i === x)); },
@@ -1516,7 +1560,7 @@ function setupSliders() {
     enterHooks[SCREENS[d.screen]] = () => {
       setRule(d.screen);
       const val = state.answers[d.q];
-      labels.forEach(l => l.classList.remove('sel'));
+      if (d.stops) labels.forEach(l => l.classList.remove('sel'));
       if (val != null) { drafts[d.q] = val; slider.set(d.toPos(val), true); btn.disabled = false; }
       else { drafts[d.q] = null; slider.reset(); btn.disabled = true; }
       if (d.screen === S.q_disclosure) preloadFirstFour();
@@ -1697,7 +1741,9 @@ function setupDeck() {
         <p class="line"></p>
         <p class="line"></p>
         <div class="read"><p class="line"></p><button type="button" class="collapse">Close</button></div>
-      </div>`;
+      </div>
+      <div class="mark no" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+      <div class="mark yes" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>`;
     $('.ph img', el).src = t.portrait;
     $('.pname', el).textContent = `${firstName(t)}, ${t.age}`;
     const lines = $$('.info > .line', el);
@@ -1712,7 +1758,11 @@ function setupDeck() {
     for (let k = 2; k >= 0; k--) {
       const t = byId.get(state.deckOrder[(state.deckIndex + k) % n]);
       const el = makeCard(t);
-      if (k === 0) { el.classList.add('top'); if (state.expanded.includes(t.id) && expandedNow === t.id) el.classList.add('expanded'); }
+      if (k === 0) {
+        el.classList.add('top');
+        if (state.expanded.includes(t.id) && expandedNow === t.id) el.classList.add('expanded');
+        if (!hinted && state.deckHistory.length === 0 && !reduced) { el.classList.add('hint'); hinted = true; }
+      }
       else el.classList.add(`under${k}`);
       stage.appendChild(el);
     }
@@ -1722,7 +1772,12 @@ function setupDeck() {
     attachDrag($('.card.top', stage));
     preloadPortrait(byId.get(state.deckOrder[(state.deckIndex + 3) % n]));
   }
-  let expandedNow = null;
+  let expandedNow = null, hinted = false;
+  function setFeedback(el, p) {   // p: -1..1, negative is a pass in progress
+    el.style.setProperty('--no', String(Math.max(0, -p)));
+    el.style.setProperty('--yes', String(Math.max(0, p)));
+    screenEl(S.deck).style.setProperty('--gray', String(Math.max(0, -p) * 0.9));
+  }
   function expand() {
     const el = $('.card.top', stage); if (!el) return;
     const id = el.dataset.id;
@@ -1736,10 +1791,12 @@ function setupDeck() {
     const w = el.offsetWidth || 340;
     el.classList.add('fly');
     el.style.transform = `translate(${dir === 'like' ? w * 1.6 : -w * 1.6}px, ${-20}px) rotate(${reduced ? 0 : dir === 'like' ? 8 : -8}deg)`;
+    setFeedback(el, dir === 'like' ? 1 : -1);
     const likedBefore = state.liked.includes(id);
     state.deckHistory.push({ id, dir, likedBefore });
     if (dir === 'like') { if (!likedBefore) state.liked.push(id); haptic(HAPTIC.liked); }
-    else if (likedBefore) state.liked = state.liked.filter(x => x !== id);
+    else { if (likedBefore) state.liked = state.liked.filter(x => x !== id); haptic(HAPTIC.passed); }
+    screenEl(S.deck).style.setProperty('--gray', '0');
     state.deckIndex += 1; expandedNow = null;
     persist();
     const advance = () => {
@@ -1757,11 +1814,11 @@ function setupDeck() {
   }
   function attachDrag(el) {
     if (!el) return;
-    let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false, lastX = 0, lastT = 0, vx = 0;
+    let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false, lastX = 0, lastT = 0, vx = 0, armed = 0;
     el.addEventListener('pointerdown', e => {
       if (e.button !== 0 || e.target.closest('button')) return;
-      dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; vx = 0; lastX = sx; lastT = e.timeStamp;
-      el.setPointerCapture(e.pointerId); el.classList.remove('fly', 'settle');
+      dragging = true; sx = e.clientX; sy = e.clientY; dx = dy = 0; vx = 0; armed = 0; lastX = sx; lastT = e.timeStamp;
+      el.setPointerCapture(e.pointerId); el.classList.remove('fly', 'settle', 'hint');
     });
     el.addEventListener('pointermove', e => {
       if (!dragging) return;
@@ -1769,15 +1826,20 @@ function setupDeck() {
       const dt = e.timeStamp - lastT; if (dt > 0) { vx = (e.clientX - lastX) / dt; lastX = e.clientX; lastT = e.timeStamp; }
       const rot = reduced ? 0 : clamp(dx / el.offsetWidth * 16, -8, 8);
       el.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg)`;
+      const p = clamp(dx / (0.32 * el.offsetWidth), -1, 1);
+      setFeedback(el, p);
+      // a tick the moment the drag crosses the commit threshold, in either direction
+      const side = Math.abs(p) >= 1 ? Math.sign(p) : 0;
+      if (side !== armed) { if (side) haptic(HAPTIC.detent); armed = side; }
     });
     const release = e => {
       if (!dragging) return; dragging = false;
       try { el.releasePointerCapture(e.pointerId); } catch (err) { /* already released */ }
       const w = el.offsetWidth, h = el.offsetHeight;
-      if (dy < -0.32 * h && Math.abs(dy) > Math.abs(dx)) { el.classList.add('settle'); el.style.transform = ''; expand(); return; }
+      if (dy < -0.32 * h && Math.abs(dy) > Math.abs(dx)) { el.classList.add('settle'); el.style.transform = ''; setFeedback(el, 0); expand(); return; }
       if (dx > 0.32 * w || vx > 0.4) return swipe('like');
       if (dx < -0.32 * w || vx < -0.4) return swipe('pass');
-      el.classList.add('settle'); el.style.transform = '';
+      el.classList.add('settle'); el.style.transform = ''; setFeedback(el, 0);
     };
     el.addEventListener('pointerup', release);
     el.addEventListener('pointercancel', release);
@@ -1813,7 +1875,7 @@ function setupDeck() {
     if (!raf) raf = requestAnimationFrame(tick);
     stage.focus({ preventScroll: true });
   };
-  leaveHooks.deck = () => { cancelAnimationFrame(raf); raf = 0; lastTs = 0; persist(); };
+  leaveHooks.deck = () => { cancelAnimationFrame(raf); raf = 0; lastTs = 0; screenEl(S.deck).style.setProperty('--gray', '0'); persist(); };
 }
 
 // ---- 15 proposal ----
