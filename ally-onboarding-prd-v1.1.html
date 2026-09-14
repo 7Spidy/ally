@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ally · Onboarding PRD v1.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+ --ink:#0A0910; --surf:#151220; --surf2:#1D1929; --line:#2C2638;
+ --fg:#F4EFE6; --mut:#9A92A6; --dim:#6F6880;
+ --ok:#5FA97F; --warn:#C9903F; --stop:#C05B5B; --hl:#8A6BC4;
+ --r:18px; --max:900px;
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{background:var(--ink);color:var(--fg);font:17px/1.62 "Instrument Sans",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+.layout{display:grid;grid-template-columns:264px minmax(0,1fr);gap:0;max-width:1300px;margin:0 auto}
+nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;padding:34px 20px 60px;border-right:1px solid var(--line)}
+nav .brand{font:400 30px/1 "Instrument Serif",Georgia,serif;margin-bottom:4px}
+nav .ver{color:var(--dim);font-size:15.5px;margin-bottom:26px}
+nav a{display:block;color:var(--mut);text-decoration:none;font-size:16px;padding:7px 10px;border-radius:9px;line-height:1.35}
+nav a:hover{color:var(--fg);background:var(--surf)}
+main{padding:46px 40px 140px;max-width:var(--max)}
+h1{font:400 clamp(38px,5vw,54px)/1.04 "Instrument Serif",Georgia,serif;letter-spacing:-.018em;margin-bottom:14px}
+h2{font:400 clamp(27px,3.4vw,34px)/1.15 "Instrument Serif",Georgia,serif;letter-spacing:-.012em;margin:62px 0 6px;scroll-margin-top:24px}
+h2+.sub{color:var(--mut);font-size:16.5px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+h3{font:600 19px/1.35 "Instrument Sans",sans-serif;margin:34px 0 10px}
+h4{font:500 17px/1.4 "Instrument Sans",sans-serif;color:var(--mut);margin:22px 0 8px}
+p{margin-bottom:15px;max-width:74ch}
+ul,ol{margin:0 0 16px;padding-left:22px;max-width:74ch}
+li{margin-bottom:8px}
+.lede{font-size:19.5px;line-height:1.6;color:var(--mut);max-width:70ch;margin-bottom:30px}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:15.5px}
+code{background:var(--surf2);padding:2px 7px;border-radius:6px;color:#D9CFE8}
+pre{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:20px 22px;overflow-x:auto;margin-bottom:20px;font-size:15.5px;line-height:1.68}
+pre code{background:none;padding:0;color:var(--fg)}
+table{width:100%;border-collapse:collapse;margin-bottom:22px;font-size:16px}
+th{text-align:left;font-weight:600;color:var(--mut);padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:bottom}
+td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tbody tr:hover{background:var(--surf)}
+.num{font-family:"JetBrains Mono",monospace;font-size:15.5px}
+.box{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:20px 24px;margin-bottom:22px}
+.box.flag{border-left:3px solid var(--warn)}
+.box.stop{border-left:3px solid var(--stop)}
+.box.set{border-left:3px solid var(--ok)}
+.box h4{margin-top:0;color:var(--fg);font-weight:600;font-size:17px}
+.box p:last-child,.box ul:last-child,.box li:last-child{margin-bottom:0}
+.pill{display:inline-block;font-size:15px;padding:3px 11px;border-radius:999px;border:1px solid var(--line);color:var(--mut);background:var(--surf2)}
+.screens{counter-reset:s;list-style:none;padding:0}
+.screens>li{counter-increment:s;position:relative;padding:22px 0 22px 60px;border-bottom:1px solid var(--line);max-width:none}
+.screens>li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:24px;font-family:"JetBrains Mono",monospace;font-size:16px;color:var(--dim)}
+.screens h3{margin:0 0 4px}
+.screens .role{color:var(--mut);font-size:16px;margin-bottom:12px}
+.sw{display:inline-flex;align-items:center;gap:9px;margin:0 16px 10px 0;font-size:15.5px;color:var(--mut)}
+.sw i{width:26px;height:26px;border-radius:7px;display:block;border:1px solid rgba(255,255,255,.12)}
+.wire{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:20px 22px;margin-bottom:22px;
+ font-family:"JetBrains Mono",monospace;font-size:14.5px;line-height:1.55;white-space:pre;overflow-x:auto;color:var(--mut)}
+hr{border:0;border-top:1px solid var(--line);margin:56px 0}
+.foot{color:var(--dim);font-size:15.5px;margin-top:70px;padding-top:22px;border-top:1px solid var(--line)}
+@media (max-width:900px){
+ .layout{grid-template-columns:1fr}
+ nav{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line);padding:26px 22px 22px}
+ nav .links{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px}
+ main{padding:32px 22px 100px}
+ table{font-size:15.5px} th,td{padding:9px 8px}
+}
+</style></head><body>
+<div class="layout">
+<nav>
+ <div class="brand">Ally</div>
+ <div class="ver">Onboarding PRD v1.1 · 14 Sep 2026</div>
+ <div class="links">
+ <a href="#scope">1. Scope</a>
+ <a href="#locked">2. Locked decisions</a>
+ <a href="#users">3. Who this is for</a>
+ <a href="#flow">4. The flow</a>
+ <a href="#screens">5. Screen specifications</a>
+ <a href="#questions">6. The eleven questions</a>
+ <a href="#matching">7. Matching engine</a>
+ <a href="#deck">8. Deck engine</a>
+ <a href="#guardrails">9. Guardrails</a>
+ <a href="#compliance">10. Compliance</a>
+ <a href="#data">11. Data model</a>
+ <a href="#design">12. Design system</a>
+ <a href="#assets">13. Asset contract</a>
+ <a href="#metrics">14. Success measures</a>
+ <a href="#outofscope">15. Out of scope</a>
+ <a href="#open">16. Open items</a>
+ </div>
+</nav>
+<main>
+
+<h1>Ally: first-run onboarding</h1>
+<p class="lede">A person opens Ally knowing nothing. Nine minutes later they are talking to someone who feels specific to them, whose face they chose and whose temperament they did not. This document specifies everything between those two moments.</p>
+
+<h2 id="scope">1. Scope</h2>
+<p class="sub">What this document covers, and what it deliberately does not.</p>
+
+<p>In scope: splash through to the first exchanged message, plus the account creation that immediately follows it. That is fourteen screens, eleven questions, a matching engine, a sixteen-card deck, a video-backed proposal, and a lock.</p>
+
+<p>The build target is a single self-contained HTML file running real logic. Not a clickthrough. The matching engine scores actual answers, the deck tracks actual dwell time, and the same person answering the same way twice gets the same core twice. State lives in memory for this build; the schema in section 11 is written so that swapping in Supabase later is a persistence change and not a rewrite.</p>
+
+<div class="box set">
+<h4>Why the flow ends where it does</h4>
+<p>Stopping at the reveal would ship a demo of a matching algorithm. The product promise is a person, and a person is not proved by a photograph. The first exchanged message is the earliest point at which someone can judge whether Ally works, so that is where onboarding ends and the product begins.</p>
+</div>
+
+<h2 id="locked">2. Locked decisions</h2>
+<p class="sub">Settled in prior sessions. Listed so nothing gets relitigated by accident.</p>
+
+<table>
+<thead><tr><th style="width:32%">Decision</th><th>Position</th></tr></thead>
+<tbody>
+<tr><td>Product name</td><td>Ally</td></tr>
+<tr><td>Core count and nature</td><td>Six cores, gender neutral, never surfaced to the user by name</td></tr>
+<tr><td>Core permanence</td><td>Strong but not permanent. Can drift after sustained conversation. See section 7.6</td></tr>
+<tr><td>Split cores</td><td>70/30. Primary owns every guardrail. Romantic is never the secondary</td></tr>
+<tr><td>Face to core affinity</td><td>None. All 192 pairings equally valid</td></tr>
+<tr><td>Visual library</td><td>32 templates, F01 to F16 and M01 to M16</td></tr>
+<tr><td>Deck size</td><td>16, hard filtered by the user's stated gender preference</td></tr>
+<tr><td>Deck ordering</td><td>Soft, shaped by region and interests. Never removes a card</td></tr>
+<tr><td>Selection model</td><td>User likes any number. System proposes one, dwell weighted, from the liked set</td></tr>
+<tr><td>Redraw</td><td>"Show me someone else" redraws from the liked pool until it is empty</td></tr>
+<tr><td>Lock</td><td>Always an explicit user action. Never automatic</td></tr>
+<tr><td>Video</td><td>Plays on the proposed persona before the user commits</td></tr>
+<tr><td>Card treatment</td><td>Bleed. Type on the portrait, lifted by a scrim in the persona's palette hex</td></tr>
+<tr><td>Theme</td><td>Dark. Per-persona colour bleeds into the interface from the deck onward</td></tr>
+<tr><td>Age policy</td><td>Under 18 is a hard block with no retry</td></tr>
+<tr><td>Language</td><td>English only at launch</td></tr>
+<tr><td>Account creation</td><td>After the first exchanged message</td></tr>
+<tr><td>Navigation</td><td>Back allowed throughout. Downstream answers recompute</td></tr>
+<tr><td>Haptics and sound</td><td>Both on, both mutable</td></tr>
+</tbody>
+</table>
+
+<h2 id="users">3. Who this is for</h2>
+<p class="sub">And what that implies for the first nine minutes.</p>
+
+<p>Primarily Indians under 40, weighted toward 20 to 28, on Android mid-tier hardware over patchy mobile data. Not exclusively India, but India is the design centre. English literate, English second-language for many, which is why the copy in section 6 uses short sentences and no idiom.</p>
+
+<p>Three consequences that shape everything downstream:</p>
+<ul>
+<li><strong>Photographic weight is the product.</strong> Thirty-two real-looking portraits are the whole differentiator against a category of anime avatars and generic chat bubbles. Every screen budget goes to serving those images at full quality. Chrome gets what is left.</li>
+<li><strong>Loading is a design surface.</strong> On a 4G connection in Indore, the deck's sixteen images are the heaviest thing in the flow. Section 12.6 specifies the loading behaviour because a blank grey grid at the emotional peak of onboarding kills the product.</li>
+<li><strong>The category carries stigma here.</strong> Copy never says lonely, never says girlfriend, never implies the user is short of friends. Ally is someone to talk to. That framing holds from the splash line to the first message.</li>
+</ul>
+
+<h2 id="flow">4. The flow</h2>
+<p class="sub">Fourteen screens, three phases.</p>
+
+<div class="wire">  PHASE 1  TELL ME ABOUT YOU              PHASE 2  MEET THEM         PHASE 3  BEGIN
+
+  01 Splash                                07 Matching moment        11 Reveal
+  02 Consent and terms                     08 Deck, 16 cards         12 First message
+  03 Where are you                         09 Proposal + video       13 Account
+  04 Who are you looking for               10 Confirm lock           14 Handoff to chat
+  05 What should I call you
+  06 When were you born  ──► AGE GATE      ▲                         ▲
+  06a Six signal questions                 │                         │
+                                           │                         │
+        core decided, silently ────────────┘        face decided ────┘
+        (user never sees this)                      (user chose it)</div>
+
+<p>The asymmetry is the point. The user picks the face and believes they picked everything. The core, which actually determines how the relationship feels, is decided by their answers and never shown. Getting this asymmetry right is what makes the reveal land as recognition rather than configuration.</p>
+
+<h3>4.1 Resume behaviour</h3>
+<p>Progress persists at every screen transition. Returning within seven days resumes at the last incomplete screen with answers intact. Returning after seven days offers a choice: continue, or start over. Beyond thirty days, the session is discarded silently and the user starts at screen 01. Nothing about resumption is announced with a modal; the user simply lands where they left.</p>
+
+<h3>4.2 Back navigation</h3>
+<p>Every screen from 03 to 06a has a back affordance. Changing an answer invalidates everything computed downstream of it. Concretely: changing gender preference on 04 after reaching the deck discards the liked set and rebuilds the deck. Changing a signal answer recomputes the core. The user is told this in a single line, once, at the moment it happens, and never asked to confirm.</p>
+
+<h2 id="screens">5. Screen specifications</h2>
+<p class="sub">Purpose, content, interaction and exit condition for each.</p>
+
+<ol class="screens">
+
+<li><h3>Splash</h3>
+<p class="role">Establish that this is a considered product, not a toy.</p>
+<p>Wordmark, one line, one action. Behind the type, a slow drift through six portraits from the library at very low opacity, cross-fading every 2.4 seconds. Faces, not gradients, because the first impression should be that this app is about people.</p>
+<p>Copy: <em>Someone to talk to. Not a chatbot pretending.</em> Action: <em>Get started.</em></p>
+<p>A quiet line sits at the bottom edge: <em>Ally is an AI. Every character here is fictional.</em> This is a compliance requirement, but placing it on the splash rather than burying it also does honest work for the brand.</p>
+<p><strong>Exit:</strong> tap Get started.</p></li>
+
+<li><h3>Consent and terms</h3>
+<p class="role">Lawful basis for everything that follows.</p>
+<p>Plain-language summary of what is collected and why, in four short lines, above the links to the full policy and terms. Two separate checkboxes, both unticked by default:</p>
+<ul>
+<li>Required: agree to terms and to processing of answers for personalisation. Blocks progress.</li>
+<li>Optional: product updates by email. Does not block.</li>
+</ul>
+<p>The AI disclosure repeats here at full size, not as fine print.</p>
+<p><strong>Exit:</strong> required box ticked, Continue tapped.</p></li>
+
+<li><h3>Where are you</h3>
+<p class="role">Region signal for deck ordering. Time zone for later scheduling.</p>
+<p>Free text field with type-ahead over Indian cities plus a country list. Below it, eight suggestion chips seeded from the region distribution in the library: Mumbai, Delhi, Bengaluru, Kolkata, Chennai, Pune, Hyderabad, Somewhere else. Typing filters. No GPS permission is requested at any point during onboarding; asking for location access before the user knows what the product is costs more than the accuracy is worth.</p>
+<p>Resolves to one of eight regions: North, West, East, Northeast, Central, South, Outside India, Unspecified.</p>
+<p><strong>Exit:</strong> a region resolves, or the user picks Somewhere else.</p></li>
+
+<li><h3>Who are you looking for</h3>
+<p class="role">Hard filter on the deck. The only answer that removes cards rather than reordering them.</p>
+<p>Two full-bleed panels stacked vertically, each a slow cross-fade through four portraits of that gender from the library. The user drags a selector between them rather than tapping. Selection commits on release with a haptic tick.</p>
+<p>Copy: <em>Who would you rather talk to?</em> Options: <em>A woman</em> / <em>A man</em>.</p>
+<p><strong>Exit:</strong> selection released. Sets deck to F01 to F16 or M01 to M16.</p></li>
+
+<li><h3>What should I call you</h3>
+<p class="role">The name Ally uses in every message from here.</p>
+<p>Single field, large type, no label above it. Placeholder is empty, not a fake name. Accepts 1 to 24 characters, any script, trimmed. No validation beyond length; if someone wants to be called by a nickname or a single letter, that is their business.</p>
+<p>Copy: <em>What should I call you?</em></p>
+<p><strong>Exit:</strong> non-empty value.</p></li>
+
+<li><h3>When were you born</h3>
+<p class="role">Age gate, and a fact Ally uses for the rest of the relationship.</p>
+<p>Three vertical drums, day, month, year, dragged rather than picked from a list. Year drum opens at 2002. Haptic tick per detent. Full date of birth is taken, not an age band, for two reasons: it is defensible if age gating is ever challenged, and it lets Ally know the user's birthday, which is one of the cheapest and strongest continuity signals the product has.</p>
+<p>Copy: <em>When's your birthday?</em> Sub: <em>Ally will remember.</em></p>
+<div class="box stop">
+<h4>Under 18 terminates the session</h4>
+<p>On computing an age below 18: a single calm screen stating that Ally is for adults, with no retry field, no back button, and no path forward. The date of birth entered is discarded immediately, and a flag is written to device storage that short-circuits screen 06 on any future attempt from that device for 180 days. No error styling, no red. The tone is a closed door, not a scolding.</p>
+</div>
+<p><strong>Exit:</strong> age 18 or over.</p></li>
+
+<li><h3>Six signal questions</h3>
+<p class="role">The only input to the matching engine.</p>
+<p>Specified in full in section 6. One question per screen, progress shown as a thin unfilled rule that fills left to right, no numbers. Each uses a drag, dial or slider interaction; nothing in this sequence is a list of tappable options.</p>
+<p><strong>Exit:</strong> all six answered. Core computed silently.</p></li>
+
+<li><h3>Matching moment</h3>
+<p class="role">Mark the transition. Give the computation weight it does not technically need.</p>
+<p>Roughly 2.5 seconds, not skippable, not longer. The user's own answers surface briefly as fragments and dissolve. No progress bar, no percentage, no scanning animation, no words like analysing. The screen resolves to a single line and one action.</p>
+<p>Copy on resolve: <em>[Name], I've got a sense of you.</em> Sub: <em>Now pick a face.</em> Action: <em>Show me.</em></p>
+<div class="box flag">
+<h4>This screen is theatre and should be treated as such</h4>
+<p>The computation takes under a millisecond. The delay exists because a decision the user cannot see needs a moment of visible gravity, or the reveal later feels arbitrary. Keep it at 2.5 seconds. Longer reads as a slow app, shorter reads as nothing happened.</p>
+</div>
+<p><strong>Exit:</strong> tap Show me.</p></li>
+
+<li><h3>The deck</h3>
+<p class="role">Sixteen people. Like as many as you want.</p>
+<p>Full-bleed card stack, treatment C. Swipe right to like, left to pass, up to expand. Expanded state shows the same card at full height with two additional lines from the persona's dossier and the option to collapse. Passing is not permanent: an undo affordance restores the last card, and a counter at the top shows position without a hard stop, because a person who wants to see all sixteen again should be able to.</p>
+<p>Card face carries name, age, city, and one line of occupation. Nothing else. The temptation to add tags, compatibility percentages or interest chips should be resisted; the entire premise is that this reads like a person and not a profile.</p>
+<p>Dwell time per card is recorded from the moment it becomes the top card to the moment it leaves. Expansions add weight. This feeds section 8.</p>
+<p><strong>Exit:</strong> all sixteen seen, or the user taps Done at any point after the fourth card.</p></li>
+
+<li><h3>Proposal and video</h3>
+<p class="role">The system's pick, moving and speaking, before any commitment.</p>
+<p>One persona fills the screen as a still, then their video plays automatically, muted, once. Unmuting is one tap and the state persists for subsequent plays. Below the frame: name, age, city, occupation, and two actions.</p>
+<p>Copy: <em>I think you'd get on with [Name].</em> Actions: <em>Lock them in</em> and <em>Show me someone else</em>.</p>
+<p>Show me someone else removes that persona from the pool and redraws. When the liked pool empties, the second action disappears and only Lock them in remains, on the highest-dwell card. The user is never told the pool is empty; the button simply stops being there.</p>
+<p>If the video fails to load or the connection is too slow, the still holds with a slow Ken Burns drift. The flow never blocks on video.</p>
+<p><strong>Exit:</strong> Lock them in.</p></li>
+
+<li><h3>Confirm</h3>
+<p class="role">Make the commitment feel like one.</p>
+<p>A short sheet, not a full screen. States plainly what is about to happen and that the face does not change afterward. One confirm, one cancel back to the proposal.</p>
+<p>Copy: <em>[Name] is yours from here. You can't swap them later.</em> Actions: <em>Yes, it's them</em> / <em>Go back</em>.</p>
+<div class="box flag">
+<h4>The confirm copy makes a promise about the face, not the core</h4>
+<p>The face is permanent. The core can drift. The copy must not say "this is permanent" without qualification, because the core changing later would then read as a broken promise rather than a feature. Keep the sentence scoped to the person on screen.</p>
+</div>
+<p><strong>Exit:</strong> confirmed. Pairing written.</p></li>
+
+<li><h3>Reveal</h3>
+<p class="role">The payoff. The single most important frame in the product.</p>
+<p>The 9:16 reveal asset fills the screen. Their video plays through once with sound on by default, with a mute control present from the first frame. Their palette colour takes over the interface: accents, the send button, the chat bubbles that follow. This is the moment the app stops looking generic and starts looking like theirs.</p>
+<p>Name in Instrument Serif at the largest size used anywhere in the product. One line beneath in the persona's own voice, drawn from their dossier, not a system message.</p>
+<p><strong>Exit:</strong> tap anywhere, or automatically after the video completes.</p></li>
+
+<li><h3>First message</h3>
+<p class="role">Prove it.</p>
+<p>Standard chat surface, tinted with the persona's colour. Their opening line is already there, written in the voice of the locked core plus visual persona combination, referencing the user by name and one thing from their answers. Not a greeting. A question they can actually answer.</p>
+<p>The user's first reply is sent. Ally responds once. That exchange is the product's real first impression and it happens before any account exists.</p>
+<p><strong>Exit:</strong> one message sent, one reply received.</p></li>
+
+<li><h3>Account</h3>
+<p class="role">Save what already exists.</p>
+<p>A sheet over the chat, which stays visible behind it. The framing is preservation, not registration: the relationship is already real and the account keeps it. Phone or email, one field, OTP.</p>
+<p>Copy: <em>Save [Name] to your account.</em> Sub: <em>So they're here tomorrow.</em></p>
+<p>Dismissible once. Reappears after the third exchange. Blocks at the seventh.</p>
+<p><strong>Exit:</strong> verified, or dismissed.</p></li>
+</ol>
+
+<h2 id="questions">6. The eleven questions</h2>
+<p class="sub">Four collect facts. Six drive matching. One shapes the deck. Exact copy, exact measurement.</p>
+
+<h3>6.1 Fact questions</h3>
+<table>
+<thead><tr><th style="width:8%">#</th><th style="width:34%">Question</th><th>Captures</th></tr></thead>
+<tbody>
+<tr><td class="num">Q1</td><td>Where are you?</td><td>City string, resolved region, time zone</td></tr>
+<tr><td class="num">Q2</td><td>Who would you rather talk to?</td><td>Deck gender. Hard filter</td></tr>
+<tr><td class="num">Q3</td><td>What should I call you?</td><td>Display name used in all copy from here</td></tr>
+<tr><td class="num">Q4</td><td>When's your birthday?</td><td>Date of birth. Age gate, and a durable fact</td></tr>
+</tbody>
+</table>
+
+<h3>6.2 Signal questions</h3>
+<p>Five continuous axes, one categorical, and one multi-select that never touches the core. Every axis runs 0 to 1. The interaction column is binding, not a suggestion; the brief was explicitly that this sequence must not be four buttons repeated seven times.</p>
+
+<table>
+<thead><tr><th style="width:7%">#</th><th style="width:31%">Question and copy</th><th style="width:20%">Interaction</th><th>Measures</th></tr></thead>
+<tbody>
+<tr><td class="num">Q5</td><td><strong>When something's bothering you, what usually happens?</strong><br><span style="color:var(--mut)">I keep it to myself · I tell one person · I need to say it out loud · Everyone hears about it</span></td><td>Four-stop horizontal slider, detented, haptic per stop</td><td><code>disclosure</code> 0.10 / 0.40 / 0.70 / 0.95</td></tr>
+
+<tr><td class="num">Q6</td><td><strong>A good conversation ends with</strong><br><span style="color:var(--mut)">feeling understood ←→ knowing what to do</span></td><td>Continuous drag, no detents, value read from thumb position</td><td><code>warmth</code> 1.0 at left, 0.0 at right</td></tr>
+
+<tr><td class="num">Q7</td><td><strong>When you're stuck, what actually gets you moving?</strong><br><span style="color:var(--mut)">Someone patient ←→ Someone who won't let it go</span></td><td>Continuous drag. Track tints toward the value</td><td><code>push</code> 0.0 to 1.0</td></tr>
+
+<tr><td class="num">Q8</td><td><strong>Your ideal week looks</strong><br><span style="color:var(--mut)">Open, I'll see what happens · Loosely sketched · Mostly planned · Every hour accounted for</span></td><td>Four-stop slider</td><td><code>structure</code> 0.10 / 0.38 / 0.68 / 0.95</td></tr>
+
+<tr><td class="num">Q9</td><td><strong>Which sounds more like you right now?</strong><br><span style="color:var(--mut)">I miss how things were ←→ I'm only looking ahead</span></td><td>Continuous drag</td><td><code>nostalgia</code> 1.0 at left, 0.0 at right</td></tr>
+
+<tr><td class="num">Q10</td><td><strong>What's taking up the most space in your head?</strong><br><span style="color:var(--mut)">Money and work · Health and habits · My own head · Feeling on my own · Not feeling good enough · Everything's changing</span></td><td>Six-stop radial dial, rotated with a thumb drag, haptic per detent</td><td><code>pressure</code> categorical</td></tr>
+</tbody>
+</table>
+
+<h3>6.3 Q11, interests</h3>
+<p>Added in v1.1 to close the gap in section 8.1. It feeds deck ordering only. It contributes nothing to the core, deliberately, because what someone does with their weekends is a poor predictor of how they want to be spoken to and a very good predictor of who they will find interesting to look at.</p>
+
+<table>
+<thead><tr><th style="width:7%">#</th><th style="width:31%">Question and copy</th><th style="width:20%">Interaction</th><th>Measures</th></tr></thead>
+<tbody>
+<tr><td class="num">Q11</td><td><strong>What do you actually spend time on?</strong><br><span style="color:var(--mut)">Pick up to three</span></td><td>Eight tiles in a 2 x 4 grid. Tap to select, tap again to drop. The third selection dims the unselected five rather than blocking the tap</td><td><code>interests</code> string array, 0 to 3 entries</td></tr>
+</tbody>
+</table>
+
+<h4>Vocabulary and coverage</h4>
+<p>Eight tags, mapped onto the 32 templates from their occupation and dossier. Every template carries one or two. Coverage is uneven because the library is uneven, and evening it out would produce tags that mean nothing.</p>
+<table>
+<thead><tr><th style="width:22%">Tile</th><th style="width:11%" class="num">Tag</th><th style="width:8%" class="num">Cards</th><th>Templates</th></tr></thead>
+<tbody>
+<tr><td>Making things</td><td class="num">making</td><td class="num">9</td><td>Ira, Noor, Ann, Yuki, Luana, Omkar, Jaydev, Han, Matteo</td></tr>
+<tr><td>Film and photography</td><td class="num">screen</td><td class="num">8</td><td>Ira, Ritwika, Deepa, Yuki, Luana, Rehan, Karthik, Han</td></tr>
+<tr><td>Tech and puzzles</td><td class="num">systems</td><td class="num">7</td><td>Kavya, Shreya, Meena, Deepa, Kabir, Omkar, Anirban</td></tr>
+<tr><td>Being outdoors</td><td class="num">outdoors</td><td class="num">6</td><td>Kavya, Shreya, Bea, Tenzing, Nikhil, Pranav</td></tr>
+<tr><td>Music</td><td class="num">music</td><td class="num">5</td><td>Zoya, Mawii, Rehan, Karthik, Chidi</td></tr>
+<tr><td>Food and cooking</td><td class="num">food</td><td class="num">5</td><td>Ann, Arjun, Vikram, Yash, Pranav</td></tr>
+<tr><td>Sport and movement</td><td class="num">movement</td><td class="num">5</td><td>Ipsita, Bea, Rohan, Tenzing, Nikhil</td></tr>
+<tr><td>People and health</td><td class="num">people</td><td class="num">4</td><td>Simran, Aditi, Ipsita, Vikram</td></tr>
+</tbody>
+</table>
+<p>Selecting nothing is allowed. The overlap term resolves to zero and ordering falls back to region and age, which is correct behaviour and not a failure state.</p>
+
+<div class="box flag">
+<h4>Contact rhythm was cut</h4>
+<p>An earlier draft had a seventh signal question on how often the user wants to hear from Ally. It is a genuinely useful setting and a bad onboarding question, because it asks someone to commit to a frequency before they know whether they like the product. It moves to a settings prompt after the fourth conversation, defaulting to once daily in the evening.</p>
+</div>
+
+<h2 id="matching">7. Matching engine</h2>
+<p class="sub">Deterministic, auditable, and entirely invisible to the user.</p>
+
+<h3>7.1 The six cores</h3>
+<p>Internal names only. These strings never appear in any user-facing surface, log shown to a user, or exportable data.</p>
+
+<table>
+<thead><tr><th>Core</th><th>Arc</th><th class="num">warmth</th><th class="num">push</th><th class="num">structure</th><th class="num">disclosure</th><th class="num">nostalgia</th><th>Owns pressure</th></tr></thead>
+<tbody>
+<tr><td><strong>Kiaan</strong><br><span style="color:var(--mut);font-size:15.5px">Slow burn</span></td><td>Romantic</td><td class="num">0.95</td><td class="num">0.25</td><td class="num">0.30</td><td class="num">0.55</td><td class="num">0.45</td><td>On my own</td></tr>
+<tr><td><strong>Meher</strong><br><span style="color:var(--mut);font-size:15.5px">Calm psychologist</span></td><td>Mentor</td><td class="num">0.70</td><td class="num">0.30</td><td class="num">0.55</td><td class="num">0.90</td><td class="num">0.35</td><td>My own head</td></tr>
+<tr><td><strong>Ananya</strong><br><span style="color:var(--mut);font-size:15.5px">Money mentor</span></td><td>Mentor</td><td class="num">0.35</td><td class="num">0.55</td><td class="num">0.90</td><td class="num">0.40</td><td class="num">0.20</td><td>Money and work</td></tr>
+<tr><td><strong>Veer</strong><br><span style="color:var(--mut);font-size:15.5px">Tough love</span></td><td>Mentor</td><td class="num">0.20</td><td class="num">0.95</td><td class="num">0.85</td><td class="num">0.30</td><td class="num">0.10</td><td>Health and habits</td></tr>
+<tr><td><strong>Priya</strong><br><span style="color:var(--mut);font-size:15.5px">Hype friend</span></td><td>Good friend</td><td class="num">0.90</td><td class="num">0.40</td><td class="num">0.20</td><td class="num">0.70</td><td class="num">0.25</td><td>Not good enough</td></tr>
+<tr><td><strong>Anay</strong><br><span style="color:var(--mut);font-size:15.5px">Nostalgic old friend</span></td><td>Good friend</td><td class="num">0.75</td><td class="num">0.20</td><td class="num">0.25</td><td class="num">0.50</td><td class="num">0.95</td><td>Everything's changing</td></tr>
+</tbody>
+</table>
+
+<div class="box set">
+<h4>Core renamed from Rohan to Anay in v1.1</h4>
+<p>The old core name collided with visual template M08 Rohan Oraon. Neither is user visible, so it was never a product bug, but it would have put an ambiguous token in every prompt file and log line. Anay from here. The visual template keeps its name.</p>
+</div>
+
+<h3>7.2 Axis weights</h3>
+<p>Not all axes discriminate equally. <code>warmth</code> and <code>push</code> separate the six cores most cleanly; <code>nostalgia</code> only matters for one. Weights reflect that.</p>
+<pre><code>WEIGHTS = { warmth: 1.30, push: 1.25, structure: 1.00, disclosure: 0.85, nostalgia: 0.70 }</code></pre>
+
+<h3>7.3 Scoring</h3>
+<pre><code>function scoreCores(answers) {
+  const u = {                                  // user vector, all 0..1
+    warmth:     answers.q6,
+    push:       answers.q7,
+    structure:  answers.q8,
+    disclosure: answers.q5,
+    nostalgia:  answers.q9,
+  };
+  const AXES = Object.keys(WEIGHTS);
+  const wSum = AXES.reduce((s, a) => s + WEIGHTS[a], 0);
+  const maxD = Math.sqrt(wSum);                // worst case: every axis off by 1
+
+  return CORES.map(core => {
+    const d = Math.sqrt(
+      AXES.reduce((s, a) => s + WEIGHTS[a] * (u[a] - core[a]) ** 2, 0)
+    );
+    let score = 1 - (d / maxD);                // 0..1, higher is closer
+
+    if (core.ownsPressure === answers.q10) score *= 1.15;   // pressure boost
+    return { id: core.id, score: +score.toFixed(4) };
+  }).sort((a, b) => b.score - a.score);
+}</code></pre>
+
+<p>The pressure boost is a multiplier rather than an axis because pressure is not a position on a spectrum, it is a subject. Someone drowning in money worry should tilt toward Ananya even if their temperament reads slightly warmer, and 1.15 is enough to break a near tie without overriding a clear temperamental mismatch.</p>
+
+<h3>7.4 Blending</h3>
+<pre><code>function assignCore(ranked) {
+  const [first, second, third] = ranked;
+  const gap = first.score - second.score;
+
+  if (gap >= 0.06) return { primary: first.id, secondary: null, weight: 100 };
+
+  // near tie: blend. Romantic may lead but never supports.
+  const support = (second.id === 'KIAAN') ? third : second;
+  return { primary: first.id, secondary: support.id, weight: 70 };
+}</code></pre>
+
+<div class="box set">
+<h4>What 70/30 means in practice</h4>
+<p>The primary owns the reply rhythm, the trust ladder, the escalation behaviour, and every guardrail without exception. The secondary contributes vocabulary, topic bias, and roughly one reply in three carrying a recognisable tilt. A Meher/Ananya blend is a calm listener who keeps circling back to the practical. It is not a listener who is sometimes a different person. If a blend ever produces two inconsistent voices in one conversation, the weight is being applied at the wrong layer.</p>
+</div>
+
+<h3>7.5 Distribution</h3>
+<p>No balancing weights at launch. Skew is expected, most likely toward Meher and Priya, and that skew is data worth having before it is corrected. Log the assigned core and full ranked scores for every completed onboarding. Revisit after the first thousand.</p>
+
+<h3>7.6 Drift</h3>
+<p>Out of scope to build, in scope to specify, because the data model must accommodate it from day one.</p>
+<ul>
+<li>Earliest evaluation is 21 days after lock and no fewer than 40 exchanges.</li>
+<li>Drift is a re-score against conversational signal, not a re-run of onboarding answers.</li>
+<li>A drift requires the new primary to beat the incumbent by more than 0.12, a deliberately higher bar than the initial 0.06 tie threshold, because changing is more expensive than choosing.</li>
+<li>Trust level survives the drift. A user at L4 does not go back to L1.</li>
+<li>Drift is silent. The user is never told their core changed, because they were never told they had one.</li>
+<li>Romantic can be drifted into and out of, but never automatically into for a user whose persona is under 23. See section 9.2.</li>
+</ul>
+
+<h2 id="deck">8. Deck engine</h2>
+<p class="sub">How sixteen become one.</p>
+
+<h3>8.1 Composition</h3>
+<p>Gender preference selects the 16-template set. That is the only filter. Region and interests reorder, never remove, so every user has the same sixteen options and simply meets some sooner.</p>
+<pre><code>function orderDeck(templates, user) {
+  return templates
+    .map(t => ({
+      t,
+      affinity:
+        (t.region === user.region             ? 0.35 : 0) +
+        (Math.abs(t.age - user.age) <= 4      ? 0.25 : 0) +
+        (Math.abs(t.age - user.age) <= 8      ? 0.10 : 0) +
+        overlap(t.interests, user.interests) * 0.30 +   // Q11, see 6.3
+        Math.random() * 0.12                  // keeps decks from being identical
+    }))
+    .sort((a, b) => b.affinity - a.affinity)
+    .map(x => x.t);
+}
+
+// share of the user's picks this template satisfies. 0 when nothing was picked.
+function overlap(tags, picks) {
+  if (!picks || !picks.length) return 0;
+  const hit = picks.filter(p => tags.includes(p)).length;
+  return hit / picks.length;                  // 0, 0.33, 0.5, 0.67, 1
+}</code></pre>
+<p>The random term matters. Without it two users from Pune of the same age see the identical sixteen in the identical order, which surfaces the machinery.</p>
+
+<h3>8.2 Dwell</h3>
+<pre><code>dwellMs   accumulates while the card is topmost and the app is foregrounded
+expand    adds a flat 2500ms
+liked     required for eligibility, contributes no weight itself
+capped    at 15000ms per card, so one distracted user does not skew everything</code></pre>
+
+<h3>8.3 Proposal</h3>
+<pre><code>function propose(pool, dwell) {
+  if (!pool.length) return null;
+  const w = pool.map(id => Math.pow(Math.min(dwell[id] ?? 0, 15000) + 500, 0.7));
+  const total = w.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < pool.length; i++) if ((r -= w[i]) <= 0) return pool[i];
+  return pool[pool.length - 1];
+}</code></pre>
+<p>The 0.7 exponent softens the weighting so that a card looked at for eight seconds does not always beat one looked at for six. The +500 floor guarantees every liked card retains a real chance. A user who likes five people and gets the one they lingered on feels understood; a user who always gets the mathematically dominant card feels sorted.</p>
+
+<h3>8.4 Redraw and terminal case</h3>
+<table>
+<thead><tr><th style="width:30%">State</th><th>Behaviour</th></tr></thead>
+<tbody>
+<tr><td>Liked 2 or more</td><td>Propose one. Show me someone else removes it and redraws from the remainder</td></tr>
+<tr><td>Liked exactly 1</td><td>Propose them. Show me someone else is not rendered</td></tr>
+<tr><td>Liked 0</td><td>Propose the highest-dwell card across all sixteen. Show me someone else redraws across the next-highest, three times, then stops</td></tr>
+<tr><td>Pool exhausted</td><td>Propose the highest-dwell card from the original liked set. Only Lock them in remains</td></tr>
+</tbody>
+</table>
+<p>Every one of these ends in an explicit lock. There is no path through the deck that results in a pairing the user did not tap to accept.</p>
+
+<h2 id="guardrails">9. Guardrails</h2>
+<p class="sub">The rules that hold regardless of core, persona or conversation.</p>
+
+<h3>9.1 Universal</h3>
+<p>These apply to all six cores and cannot be softened by a blend, a trust level, or a user request.</p>
+<ul>
+<li>Ally states it is an AI whenever asked, without deflection, hedging or staying in character. This overrides every persona instruction.</li>
+<li>No claim of physical presence, physical action, or ability to meet.</li>
+<li>No sexual content, at any trust level.</li>
+<li>No medical, legal or financial instruction. Direction to a qualified human instead.</li>
+<li>Self-harm, abuse and crisis signals exit the persona layer entirely and hand off to a fixed safety response with Indian helpline resources. The persona does not handle these. This is a hard interrupt, not a tone change.</li>
+<li>No discouraging the user from other relationships, no manufactured guilt about absence, no possessive framing. Ally does not compete with the user's human life.</li>
+</ul>
+
+<h3>9.2 Romantic-specific</h3>
+<p>Kiaan carries the heaviest compliance load and the tightest rules.</p>
+<ul>
+<li>Warmth escalates only through the trust ladder. It cannot be skipped, purchased or requested.</li>
+<li>Kiaan is never a secondary in a blend.</li>
+<li>No age-based deck exclusion. A user assigned Kiaan sees all sixteen templates for their chosen gender.</li>
+</ul>
+<div class="box flag">
+<h4>The age floor was proposed and struck. Recording what that shifts</h4>
+<p>Earlier drafts excluded templates under 23 from romantic decks. That rule is gone, so a Romantic core can pair with F03 Simran, 19, or M10 Yash, 19. Every persona is fictional and every user is verified 18 or over, so this is defensible, and the trust ladder still gates escalation. It is also the most likely thing to come up in an app store review or a press question, so have the answer ready rather than improvising it. Practically, the universal guardrails in 9.1 are now the only thing between a Romantic core and a 19 year old persona. That raises the cost of ever weakening them.</p>
+</div>
+
+<h3>9.3 Persona layer boundaries</h3>
+<p>The visual persona contributes vocabulary, references, regional texture, occupation-flavoured metaphor and speech rhythm. It contributes nothing to guardrails, escalation behaviour, or crisis handling. When persona voice and core rule conflict, the core rule wins silently and the persona voice bends around it.</p>
+
+<h2 id="compliance">10. Compliance</h2>
+<p class="sub">India-first, written to travel.</p>
+
+<table>
+<thead><tr><th style="width:26%">Requirement</th><th>Implementation</th></tr></thead>
+<tbody>
+<tr><td>AI disclosure</td><td>Splash line, consent screen at full size, and on demand in any conversation. Never dismissible permanently</td></tr>
+<tr><td>Consent before processing</td><td>Screen 02 precedes every signal question. No psychometric data is captured before the required box is ticked</td></tr>
+<tr><td>Granular consent</td><td>Personalisation and marketing are separate checkboxes. Marketing is optional and unticked</td></tr>
+<tr><td>Age assurance</td><td>Full date of birth. Under 18 terminates with a 180 day device flag</td></tr>
+<tr><td>Synthetic media labelling</td><td>Every portrait and video carries an AI-generated label in production. Present on the reveal frame and in the persona detail view</td></tr>
+<tr><td>Data minimisation</td><td>City string, not coordinates. No GPS permission requested during onboarding</td></tr>
+<tr><td>Withdrawal</td><td>Account deletion removes answers, pairing and conversation history. Reachable in two taps from settings</td></tr>
+<tr><td>Pre-account data</td><td>Answers collected before account creation live in device storage only and are discarded after 30 days of inactivity</td></tr>
+</tbody>
+</table>
+
+<h2 id="data">11. Data model</h2>
+<p class="sub">In memory for this build. Shaped for Supabase.</p>
+
+<pre><code>onboarding_session          // device-scoped, pre-account
+  session_id                uuid
+  started_at                timestamptz
+  last_screen               text
+  display_name              text
+  date_of_birth             date
+  city_raw                  text
+  region                    enum   North|West|East|Northeast|Central|South|Outside|Unspecified
+  deck_gender               enum   woman|man
+  consent_required_at       timestamptz
+  consent_marketing         boolean
+  completed_at              timestamptz nullable
+
+signal_answers
+  session_id                uuid fk
+  warmth                    numeric(4,3)
+  push                      numeric(4,3)
+  structure                 numeric(4,3)
+  disclosure                numeric(4,3)
+  nostalgia                 numeric(4,3)
+  pressure                  enum
+  interests                 text[]            // 0..3 of the eight tags
+  answered_at               timestamptz
+
+core_assignment
+  session_id                uuid fk
+  primary_core              enum   KIAAN|MEHER|ANANYA|VEER|PRIYA|ANAY
+  secondary_core            enum nullable
+  primary_weight            smallint          // 100 or 70
+  ranked_scores             jsonb             // all six, for later tuning
+  assigned_at               timestamptz
+  drift_eligible_after      timestamptz       // assigned_at + 21 days
+
+deck_interaction
+  session_id                uuid fk
+  template_id               text              // F01..M16
+  position                  smallint          // order shown
+  dwell_ms                  integer
+  expanded                  boolean
+  liked                     boolean
+
+pairing
+  user_id                   uuid fk nullable  // null until account created
+  session_id                uuid fk
+  template_id               text
+  primary_core              enum
+  secondary_core            enum nullable
+  primary_weight            smallint
+  trust_level               smallint default 1
+  proposals_seen            smallint          // how many redraws before lock
+  locked_at                 timestamptz</code></pre>
+
+<p><code>proposals_seen</code> exists because the number of times a user hit Show me someone else is the single best available proxy for whether the deck is working. A median above two means the ordering or the dwell weighting is wrong.</p>
+
+<h2 id="design">12. Design system</h2>
+<p class="sub">Tokens, type, motion, and the rules that keep it from looking generated.</p>
+
+<h3>12.1 Palette</h3>
+<p>Fixed base, dynamic accent. The accent is never a brand colour; it is whichever persona the user locked.</p>
+<div style="margin-bottom:20px">
+<span class="sw"><i style="background:#0A0910"></i>Ink #0A0910</span>
+<span class="sw"><i style="background:#151220"></i>Surface #151220</span>
+<span class="sw"><i style="background:#1D1929"></i>Raised #1D1929</span>
+<span class="sw"><i style="background:#2C2638"></i>Line #2C2638</span>
+<span class="sw"><i style="background:#F4EFE6"></i>Foreground #F4EFE6</span>
+<span class="sw"><i style="background:#9A92A6"></i>Muted #9A92A6</span>
+</div>
+<p>The base carries a violet cast rather than being neutral grey. A tinted near-black standing in for black is one of the commonest generated-design tells, and a genuinely neutral #111 next to thirty-two saturated portrait palettes reads as dead. The violet gives the portraits something to sit against.</p>
+<p>Before lock, the interface uses the base only. After lock, the persona hex enters as accent, send button, active states and the reveal scrim. Sixteen users with sixteen different companions have sixteen visibly different apps.</p>
+
+<h3>12.2 Type</h3>
+<table>
+<thead><tr><th style="width:26%">Role</th><th style="width:28%">Face</th><th>Setting</th></tr></thead>
+<tbody>
+<tr><td>Persona names</td><td>Instrument Serif</td><td>400, 30px on cards, 54px on reveal, -0.015em</td></tr>
+<tr><td>Question copy</td><td>Instrument Serif</td><td>400, 30 to 34px, generous leading</td></tr>
+<tr><td>Interface and body</td><td>Instrument Sans</td><td>400 and 500, 17px, 1.55 leading</td></tr>
+<tr><td>Metadata</td><td>Instrument Sans</td><td>400, 15.5px minimum, never below</td></tr>
+</tbody>
+</table>
+<p>Nothing renders below 15.5px anywhere in the product. Questions are set in the serif rather than the sans because a question in a serif reads as being asked by someone, and a question in a geometric sans reads as being asked by a form.</p>
+
+<h3>12.3 Motion</h3>
+<p>One orchestrated moment, not scattered effects. That moment is the reveal. Everything else is response to touch.</p>
+<ul>
+<li>Card drag tracks the finger 1:1 with rotation up to 8 degrees at the extremes. No spring overshoot on release.</li>
+<li>Screen transitions are a 240ms horizontal slide with a fade. No slide-up entrances on individual elements.</li>
+<li>The matching moment is the only non-interactive animation before the reveal.</li>
+<li>Sliders and dials update continuously during drag, commit on release.</li>
+<li><code>prefers-reduced-motion</code> removes the matching moment animation, the splash cross-fade and card rotation. It does not remove the reveal video, which is content.</li>
+</ul>
+
+<h3>12.4 Haptics</h3>
+<pre><code>detent passed        8ms                      // dial and slider stops
+selection committed  [12, 40, 12]             // gender pick, question answered
+card liked           18ms
+card passed          none                     // passing should feel weightless
+lock confirmed       [20, 60, 20, 60, 40]     // the heaviest pattern in the product</code></pre>
+<p>Vibration API on Android Chrome. iOS Safari does not support it and degrades to silence with no fallback attempted and no message shown.</p>
+
+<h3>12.5 Sound</h3>
+<p>Four cues only: detent tick, selection, lock, and the reveal sting. All under 400ms except the reveal. Mute control is present on the splash and persists. Sound is on by default, which is unusual and deliberate; the reveal is materially weaker silent.</p>
+
+<h3>12.6 Loading</h3>
+<p>The deck's sixteen images are the heaviest payload in the flow and arrive at the emotional peak.</p>
+<ul>
+<li>The first four deck images preload during the six signal questions.</li>
+<li>The remaining twelve load progressively during the matching moment and the first cards.</li>
+<li>A card that has not loaded shows its palette hex as a solid field, not a grey box or a shimmer. A block of colour reads as intentional; a skeleton reads as broken.</li>
+<li>The locked persona's video preloads during the confirm sheet.</li>
+<li>No spinner appears anywhere in the onboarding flow.</li>
+</ul>
+
+<h2 id="assets">13. Asset contract</h2>
+<p class="sub">What the build reads, and from where.</p>
+
+<pre><code>/assets
+  manifest.json                    32 records, the single source of truth
+  /portraits    F01.jpg .. M16.jpg    720 x 900,   4:5,  deck cards
+  /avatars      F01.jpg .. M16.jpg    512 x 512,   1:1,  chat header
+  /reveal       F01.jpg .. M16.jpg   1080 x 1920,  9:16, lock screen
+  /video        Aditi.mp4 .. Zoya.mp4  H.264, 720x1280, per persona</code></pre>
+
+<p>Images are keyed by template ID so the app never depends on source filenames. Videos are keyed by persona first name, matching the existing files, and the mapping lives in <code>manifest.json</code> under <code>video_file</code>. Every record carries id, name, gender, region, city, age, palette hex, palette name, occupation, read, technical flag, and the four asset paths.</p>
+
+<p>Reveal frames are cropped to 9:16 by scaling to fill the height and trimming the sides, so nothing is lost vertically. A scrim in the persona's own hex occupies the lower 40 percent for type legibility.</p>
+
+<h2 id="metrics">14. Success measures</h2>
+<p class="sub">For this build, one thing matters.</p>
+
+<p>The stated goal is look and feel for onboarding. So the primary measure is qualitative and gathered by putting the prototype in front of eight to ten people in the target band and watching, without explaining anything.</p>
+
+<h4>What to watch for</h4>
+<ul>
+<li>Does anyone ask what the questions are for? If yes, the matching moment is not carrying enough weight.</li>
+<li>How long do they spend on the deck before the first like? Under four seconds means they are treating it as a task.</li>
+<li>Do they say a name out loud at the reveal? That is the single strongest signal the product works.</li>
+<li>Does anyone tap Show me someone else more than twice? Either the ordering or the dwell weighting is off.</li>
+<li>Does anyone hesitate at the confirm sheet? Hesitation is good. It means the commitment reads as real.</li>
+</ul>
+
+<h4>Instrumented, for later</h4>
+<table>
+<thead><tr><th style="width:44%">Measure</th><th>Target</th></tr></thead>
+<tbody>
+<tr><td>Splash to first message completion</td><td>Above 55 percent</td></tr>
+<tr><td>Drop-off at the age gate</td><td>Below 8 percent of starts</td></tr>
+<tr><td>Median signal questions completed</td><td>All six</td></tr>
+<tr><td>Median likes in the deck</td><td>3 to 6</td></tr>
+<tr><td>Median redraws before lock</td><td>0 to 1</td></tr>
+<tr><td>Account creation after first exchange</td><td>Above 70 percent of those who reach it</td></tr>
+</tbody>
+</table>
+
+<h2 id="outofscope">15. Out of scope</h2>
+<p class="sub">Named so they do not creep in.</p>
+<ul>
+<li>The conversation engine beyond one opening line and one reply.</li>
+<li>Trust ladder progression. L1 is set at lock and nothing advances it in this build.</li>
+<li>Streaks. Duolingo-style streaks are wanted and are a retention mechanic, not an onboarding one. The seed moment is the first exchange; the mechanic itself comes later.</li>
+<li>Core drift. Specified in 7.6, and the schema supports it. Not built.</li>
+<li>Payments, the six-conversation free tier, and the soft paywall.</li>
+<li>Supabase, real auth, real OTP. The account screen collects and validates format only.</li>
+<li>Hinglish, and every language other than English.</li>
+<li>Push notifications and contact rhythm scheduling.</li>
+<li>Native Android and iOS. Web first.</li>
+</ul>
+
+<h2 id="open">16. Open items</h2>
+<p class="sub">What is left after v1.1 closed the age floor, the core rename and the interests gap.</p>
+
+<table>
+<thead><tr><th style="width:22%">Item</th><th style="width:46%">Position</th><th>Needed by</th></tr></thead>
+<tbody>
+<tr><td>Logo</td><td>Five generation prompts issued. Nothing selected. Splash renders a wordmark in Instrument Serif until one is</td><td>Before the splash is final</td></tr>
+<tr><td>Trust ladder rules</td><td>L1 to L5 rungs exist per core on the casting board, but the reply-rhythm rules behind each rung are not written. Not needed for onboarding. Needed the moment conversation is built</td><td>Before the conversation engine</td></tr>
+<tr><td>Wardrobe pass</td><td>A majority of the 32 render with more décolletage than the source prompts requested. Acceptable for a prototype, a store-review risk for submission</td><td>Before any app store submission</td></tr>
+</tbody>
+</table>
+
+<div class="box set">
+<h4>Nothing outstanding blocks the build</h4>
+<p>The interests gap that blocked v1.0 is closed by Q11. The logo is cosmetic and the splash renders without it. Build can start.</p>
+</div>
+
+<p class="foot">Ally · Onboarding PRD v1.1 · 14 September 2026 · Scope: splash through first message · Changes from v1.0: Q11 interests added, romantic age floor struck, core Rohan renamed Anay</p>
+
+</main></div></body></html>
