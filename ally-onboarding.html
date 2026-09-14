@@ -1360,16 +1360,22 @@ function setupConsent() {
 function setupLocation() {
   const input = $('#loc-input'), list = $('#loc-list'), chips = $('#loc-chips'), btn = $('#loc-go');
   const CHIPS = ['Mumbai','Delhi','Bengaluru','Kolkata','Chennai','Pune','Hyderabad', E.SOMEWHERE_ELSE];
+  let elsewhere = false;   // "Somewhere else" chosen: the field is cleared for free text, nothing is prefilled
   CHIPS.forEach(c => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = c; b.setAttribute('aria-pressed', 'false');
-    b.addEventListener('click', () => { input.value = c; list.innerHTML = ''; sync(); });
+    b.addEventListener('click', () => {
+      list.innerHTML = '';
+      if (c === E.SOMEWHERE_ELSE) { elsewhere = true; input.value = ''; sync(); input.focus(); }
+      else { elsewhere = false; input.value = c; sync(); }
+    });
     chips.appendChild(b);
   });
   const sync = () => {
     const v = input.value.trim();
-    btn.disabled = !v;
-    $$('.chip', chips).forEach(c => c.setAttribute('aria-pressed', String(c.textContent === v)));
+    if (v) elsewhere = false;
+    btn.disabled = !v && !elsewhere;
+    $$('.chip', chips).forEach(c => c.setAttribute('aria-pressed', String(c.textContent === v || (elsewhere && c.textContent === E.SOMEWHERE_ELSE))));
   };
   input.addEventListener('input', () => {
     list.innerHTML = '';
@@ -1392,7 +1398,7 @@ function setupLocation() {
     commit('q1', st => { st.cityRaw = raw; st.region = region; }, region !== state.region);
     go(S.gender);
   });
-  enterHooks.location = () => { input.value = state.cityRaw || ''; list.innerHTML = ''; sync(); };
+  enterHooks.location = () => { elsewhere = !state.cityRaw && state.region === 'Unspecified'; input.value = state.cityRaw || ''; list.innerHTML = ''; sync(); };
 }
 
 // ---- 3 gender, Q2 ----
