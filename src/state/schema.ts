@@ -96,6 +96,7 @@ export interface OnboardingFlow {
 }
 
 export interface AllyUser {
+  displayName: string;
   consentAt: number | null;
   consentMarketing: boolean;
   accountAt: number | null;
@@ -167,6 +168,7 @@ export function freshState(nowMs: number, day: string): AllyState {
     v: 2,
     savedAt: nowMs,
     user: {
+      displayName: "",
       consentAt: null,
       consentMarketing: false,
       accountAt: null,

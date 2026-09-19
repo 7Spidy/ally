@@ -112,6 +112,7 @@ export function migrate(storage: StorageLike, now: number): AllyState {
   if (v1 && v1.state) {
     const s = v1.state;
     const user = {
+      displayName: s.displayName ?? "",
       consentAt: s.consentAt ?? null,
       consentMarketing: !!s.consentMarketing,
       accountAt: s.accountAt ?? null,
@@ -187,6 +188,7 @@ export function migrate(storage: StorageLike, now: number): AllyState {
       v: 2,
       savedAt: now,
       user: {
+        displayName: "",
         consentAt: null,
         consentMarketing: false,
         accountAt: null,

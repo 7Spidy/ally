@@ -193,7 +193,8 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
         notify: true,
         sound: true,
       };
-      return { ...state, companions: [...state.companions, companion], flow: null };
+      const displayName = flow.displayName || state.user.displayName;
+      return { ...state, companions: [...state.companions, companion], flow: null, user: { ...state.user, displayName } };
     }
 
     case "SEND_MESSAGE": {
@@ -272,7 +273,7 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
       return {
         v: 2,
         savedAt: action.now,
-        user: { consentAt: null, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
+        user: { displayName: "", consentAt: null, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
         companions: [],
         ledger: { slotsUnlocked: 1, unlocks: [], parted: [], day: state.ledger.day, freeUsed: 0, pass: null, passes: [] },
         flow: freshFlow("first", "consent"),
