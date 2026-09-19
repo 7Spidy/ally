@@ -270,12 +270,12 @@ html.rm .frag { animation: none; opacity: .22; }
 .card .info { position:absolute; left:0; right:0; bottom:0; padding:0 20px 20px; }
 /* drag feedback: --no rises on a left drag, --yes on a right drag, both 0..1 */
 .card .mark {
-  position: absolute; top: 50%; left: 50%; width: 96px; height: 96px; margin: -48px 0 0 -48px;
+  position: absolute; top: 20px; width: 52px; height: 52px;
   border-radius: 50%; display: grid; place-items: center; pointer-events: none; opacity: 0; z-index: 2;
 }
-.card .mark svg { width: 44px; height: 44px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.card .mark.no  { background: rgba(10,9,16,.72); color: var(--fg); opacity: var(--no, 0); }
-.card .mark.yes { background: var(--k); color: var(--fg); opacity: var(--yes, 0); transform: scale(calc(.85 + .15 * var(--yes, 0))); }
+.card .mark svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.card .mark.no  { left: 20px; background: #4a1f1f; color: #ff8a8a; opacity: var(--no, 0); transform: scale(calc(.85 + .15 * var(--no, 0))); }
+.card .mark.yes { right: 20px; left: auto; background: #1f3d28; color: #7be097; opacity: var(--yes, 0); transform: scale(calc(.85 + .15 * var(--yes, 0))); }
 .card.top { box-shadow: 0 0 0 1px color-mix(in srgb, var(--k) 45%, transparent),
                         0 22px 46px -26px var(--k),
                         0 0 0 calc(var(--yes, 0) * 3px) var(--k),
@@ -286,8 +286,8 @@ html.rm .frag { animation: none; opacity: .22; }
 @property --no   { syntax: '<number>'; inherits: false; initial-value: 0; }
 @property --gray { syntax: '<number>'; inherits: false; initial-value: 0; }
 /* first card: a full demonstration. Slides right and lights up as a like, returns, slides left and greys as a pass. */
-.card.hint { animation: hint 2600ms var(--ease) 450ms 1 both; }
-#s-deck.hint { animation: hintGray 2600ms var(--ease) 450ms 1 both; }
+.card.hint { animation: hint 5200ms var(--ease) 450ms 1 both; }
+#s-deck.hint { animation: hintGray 5200ms var(--ease) 450ms 1 both; }
 @keyframes hint {
   0%        { transform: none; --yes: 0; --no: 0; }
   16%, 30%  { transform: translateX(30%) rotate(6deg); --yes: 1; --no: 0; }
@@ -338,6 +338,7 @@ html.rm .frame img.kb { animation: none; }
 #s-chat { padding: 0; }
 html.locked #s-chat { background: color-mix(in srgb, var(--k) 9%, var(--surf)); }
 .chat-head { display: flex; align-items: center; gap: 12px; padding: calc(16px + var(--safe-t)) 20px 14px; border-bottom: 1px solid color-mix(in srgb, var(--k) 25%, var(--line)); }
+.chat-head .back { position: static; flex: none; margin-left: -6px; }
 .chat-head img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; background: var(--k); }
 .chat-head .cname { font: 400 24px/1.1 var(--serif); }
 .msgs { flex: 1; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 10px; }
@@ -623,7 +624,10 @@ html.rm .toast { animation: none; }
 
   <!-- 18 chat -->
   <section class="screen" id="s-chat" data-screen="18">
-    <div class="chat-head"><img id="c-avatar" alt=""><div class="cname" id="c-name"></div></div>
+    <div class="chat-head">
+      <button class="icon-btn back" data-back-to="reveal" aria-label="Back"></button>
+      <img id="c-avatar" alt=""><div class="cname" id="c-name"></div>
+    </div>
     <div class="msgs" id="msgs" aria-live="polite"></div>
     <form class="composer" id="composer">
       <input id="c-input" type="text" autocomplete="off" aria-label="Message" enterkeyhint="send">
@@ -1012,6 +1016,7 @@ const STRUCTURE_LABELS = ['Open, I\'ll see what happens','Loosely sketched','Mos
 let state = null;
 let manifest = null;
 let byId = new Map();
+let pendingResume = null;   // screen to jump to once the splash's "Get started" is tapped, on a resumed session
 let reduced = globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const firstName = t => t.name.split(' ')[0];
 const now = () => new Date();
@@ -1149,12 +1154,20 @@ async function boot() {
   state = d.state;
   if (state.locked && byId.has(state.locked)) applyPalette(byId.get(state.locked).palette);
   setupScreens();
+  if (d.mode === 'blocked' || d.mode === 'fresh') {
+    go(state.screen, { instant: true });
+    return;
+  }
+  // resume or choose: always show the splash first, then continue on to
+  // wherever the session left off once "Get started" is tapped.
+  const resumeAt = state.screen > 0 ? state.screen : null;
+  go(S.splash, { instant: true });
   if (d.mode === 'choose') {
     $('#resume').classList.add('on');
-    $('#resume-continue').addEventListener('click', () => { $('#resume').classList.remove('on'); go(state.screen, { instant: true }); });
+    $('#resume-continue').addEventListener('click', () => { $('#resume').classList.remove('on'); go(resumeAt != null ? resumeAt : S.consent, { instant: true }); });
     $('#resume-restart').addEventListener('click', () => { $('#resume').classList.remove('on'); state = E.initialState(); go(0, { instant: true }); });
   } else {
-    go(state.screen, { instant: true });
+    pendingResume = resumeAt;
   }
 }
 
@@ -1259,7 +1272,10 @@ function setupSplash() {
   const btn = $('#sound-toggle');
   const paint = () => setSoundIcon(btn, state.soundOn, ['Sound on', 'Sound off']);
   btn.addEventListener('click', () => { state.soundOn = !state.soundOn; persist(); paint(); if (state.soundOn) sfx.selection(); });
-  $('#splash-go').addEventListener('click', () => go(S.consent));
+  $('#splash-go').addEventListener('click', () => {
+    const to = pendingResume; pendingResume = null;
+    go(to != null ? to : S.consent);
+  });
   enterHooks.splash = () => { paint(); fade.start(); };
   leaveHooks.splash = () => fade.stop();
 }
