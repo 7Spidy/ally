@@ -16,7 +16,7 @@ import styles from "./IntroSheet.module.css";
  */
 export function IntroSheet() {
   const { state, dispatch } = useAlly();
-  const { closeSheet, openSheet } = useSheet();
+  const { closeSheet, openSheet, dismissForNavigation } = useSheet();
   const { templates } = useManifest();
   const router = useRouter();
 
@@ -48,18 +48,23 @@ export function IntroSheet() {
       // and stop. The user taps the add card again once accountAt is set,
       // which reopens this sheet and this time falls through to the next
       // check. See report for details.
-      closeSheet();
+      // dismissForNavigation(), not closeSheet(): closeSheet()'s
+      // history.back() is async and races the openSheet() right after it,
+      // desyncing the React sheet stack from the actual history position
+      // (the pending back() pops whatever is on top once it resolves,
+      // which by then is 'account', not 'intro'). See SheetProvider.tsx.
+      dismissForNavigation();
       openSheet("account");
       return;
     }
     if (activeList.length >= state.ledger.slotsUnlocked) {
-      closeSheet();
+      dismissForNavigation();
       openSheet("unlock", { slot: state.ledger.slotsUnlocked + 1 });
       return;
     }
     dispatch({ type: "START_ROUND2", templates });
-    closeSheet();
-    router.push("/onboarding/gender");
+    dismissForNavigation();
+    router.replace("/onboarding/gender");
   }
 
   function handleNotNow() {

@@ -14,7 +14,7 @@ import styles from "./LeaveSheet.module.css";
  */
 export function LeaveSheet() {
   const { dispatch } = useAlly();
-  const { closeSheet } = useSheet();
+  const { closeSheet, dismissForNavigation } = useSheet();
   const router = useRouter();
 
   function handleKeepGoing() {
@@ -23,8 +23,10 @@ export function LeaveSheet() {
 
   function handleLeave() {
     dispatch({ type: "LEAVE_ROUND2" });
-    closeSheet();
-    router.push("/home");
+    // dismissForNavigation()+router.replace(), not closeSheet()+push(): see
+    // SheetProvider.tsx's dismissForNavigation doc comment.
+    dismissForNavigation();
+    router.replace("/home");
   }
 
   return (

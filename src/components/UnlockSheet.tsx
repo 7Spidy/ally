@@ -18,7 +18,7 @@ import styles from "./UnlockSheet.module.css";
  */
 export function UnlockSheet({ slot }: { slot: number }) {
   const { dispatch } = useAlly();
-  const { closeSheet } = useSheet();
+  const { dismissForNavigation } = useSheet();
   const { templates } = useManifest();
   const showToast = useToast();
   const router = useRouter();
@@ -32,16 +32,19 @@ export function UnlockSheet({ slot }: { slot: number }) {
     showToast(COPY.unlockSheet.toast);
     // Continue the round-two sequence deferred from IntroSheet (§8.2 step 4).
     dispatch({ type: "START_ROUND2", templates });
-    closeSheet();
-    router.push("/onboarding/gender");
+    // dismissForNavigation()+router.replace(), not closeSheet()+push(): see
+    // SheetProvider.tsx's dismissForNavigation doc comment for the race
+    // this avoids.
+    dismissForNavigation();
+    router.replace("/onboarding/gender");
   }
 
   function handleNotNow() {
     // Reachable only before any payment happens (this button never appears
     // after a successful unlock), so no unlock needs rolling back here —
     // this just abandons the round-two attempt.
-    closeSheet();
-    router.push("/home");
+    dismissForNavigation();
+    router.replace("/home");
   }
 
   return (

@@ -23,6 +23,18 @@ export interface SheetContextValue {
   top: SheetEntry | null;
   openSheet: (name: SheetName, props?: Record<string, unknown>) => void;
   closeSheet: () => void;
+  /**
+   * Pops the top sheet WITHOUT calling history.back(). Use this — paired
+   * with router.replace(...), never router.push(...) — when a sheet action
+   * also navigates to a different route in the same handler. closeSheet()'s
+   * history.back() is asynchronous; a router.push() issued right after it
+   * races the deferred back-navigation and gets reverted by it (the back
+   * lands on whatever the history stack looks like once it actually runs,
+   * which is after the push already moved the current position forward).
+   * router.replace() sidesteps this by overwriting the dummy entry
+   * openSheet() pushed instead of adding a new one to navigate past.
+   */
+  dismissForNavigation: () => void;
 }
 
 export const SheetContext = createContext<SheetContextValue | null>(null);
@@ -50,6 +62,10 @@ export function SheetProvider({ children }: { children: React.ReactNode }) {
     else setStack((s) => s.slice(0, -1));
   }, []);
 
+  const dismissForNavigation = useCallback(() => {
+    setStack((s) => s.slice(0, -1));
+  }, []);
+
   useEffect(() => {
     function onPopState() {
       setStack((s) => (s.length ? s.slice(0, -1) : s));
@@ -70,8 +86,8 @@ export function SheetProvider({ children }: { children: React.ReactNode }) {
   }, [stack.length, closeSheet]);
 
   const value = useMemo<SheetContextValue>(
-    () => ({ stack, top: stack[stack.length - 1] ?? null, openSheet, closeSheet }),
-    [stack, openSheet, closeSheet]
+    () => ({ stack, top: stack[stack.length - 1] ?? null, openSheet, closeSheet, dismissForNavigation }),
+    [stack, openSheet, closeSheet, dismissForNavigation]
   );
 
   return <SheetContext.Provider value={value}>{children}</SheetContext.Provider>;

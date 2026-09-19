@@ -48,7 +48,11 @@ function ChatContent() {
   useEffect(() => {
     if (!companion || openedRef.current) return;
     openedRef.current = true;
-    dividerBeforeAtRef.current = companion.lastOpenedAt;
+    // Never on the very-first-ever open (fresh lock, no messages yet) —
+    // otherwise the opener we're about to seed reads as "since you left"
+    // before the user has seen a single message.
+    const isFirstOpenEver = companion.messages.length === 0 && companion.lastOpenedAt === companion.createdAt;
+    dividerBeforeAtRef.current = isFirstOpenEver ? null : companion.lastOpenedAt;
     dispatch({ type: "OPEN_CHAT", companionId: companion.id, now: now() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companion?.id]);
@@ -72,20 +76,21 @@ function ChatContent() {
   // companion", since a round-two companion would otherwise never trigger
   // its own nudge).
   useEffect(() => {
-    if (!companion || state.user.accountAt) return;
+    if (!companion || !template || state.user.accountAt) return;
     const n = companion.exchanges;
+    const personaName = firstNameFromFull(template.name);
     if (n >= 7 && accountNudgeRef.current < 7) {
       accountNudgeRef.current = 7;
-      openSheet("account", { blocking: true });
+      openSheet("account", { personaName, exchanges: n, blocking: true });
     } else if (n === 3 && accountNudgeRef.current < 3) {
       accountNudgeRef.current = 3;
-      openSheet("account");
+      openSheet("account", { personaName, exchanges: n });
     } else if (n === 1 && accountNudgeRef.current < 1) {
       accountNudgeRef.current = 1;
-      openSheet("account");
+      openSheet("account", { personaName, exchanges: n });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companion?.exchanges, state.user.accountAt]);
+  }, [companion?.exchanges, state.user.accountAt, template]);
 
   if (!companion || !template) {
     return <div className={styles.notFound}>Not found.</div>;

@@ -59,6 +59,14 @@ function MatchingScreen() {
     setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
 
+  // One-time setup (core + deck order). Deliberately depends on
+  // [state.flow, templates] to wait for the manifest to finish loading,
+  // but its own dispatches below create a *new* state.flow reference on
+  // every call — which would re-trigger this same effect and, if the
+  // 2500ms resolve timer lived here too, cancel it via cleanup before it
+  // ever fires (a stuck matching screen). So the timer lives in its own
+  // effect below, with an empty dependency array, unaffected by state
+  // changes.
   useEffect(() => {
     if (ran.current || !state.flow) return;
     ran.current = true;
@@ -68,10 +76,13 @@ function MatchingScreen() {
       const ordered = orderDeck(p, { region: state.flow.region, age: state.flow.age, interests: state.flow.answers.q11 });
       dispatch({ type: "DECK_INIT", deckOrder: ordered.map((t) => t.id) });
     }
-    const t = setTimeout(() => setResolved(true), 2500);
-    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.flow, templates]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setResolved(true), 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   if (!state.flow) return null;
 

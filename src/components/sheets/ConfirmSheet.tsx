@@ -21,7 +21,7 @@ export function ConfirmSheet() {
   const router = useRouter();
   const { state } = useAlly();
   const { templates } = useManifest();
-  const { closeSheet } = useSheet();
+  const { closeSheet, dismissForNavigation } = useSheet();
 
   const flow = state.flow;
   const template = flow?.proposed ? templates.find((t) => t.id === flow.proposed) : undefined;
@@ -30,8 +30,13 @@ export function ConfirmSheet() {
   const persona = firstNameFromFull(template.name);
 
   function onYes() {
-    closeSheet();
-    router.push("/onboarding/reveal");
+    // dismissForNavigation(), not closeSheet(): closeSheet()'s
+    // history.back() is asynchronous and races router.replace() below,
+    // reverting it (back() resolves after replace() already moved the
+    // current history position, so it lands one step behind the intended
+    // target). See SheetProvider.tsx's dismissForNavigation doc comment.
+    dismissForNavigation();
+    router.replace("/onboarding/reveal");
   }
 
   return (

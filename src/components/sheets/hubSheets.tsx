@@ -22,19 +22,23 @@ import styles from "./hubSheets.module.css";
 
 function SwitcherSheet({ currentId }: { currentId?: string }) {
   const router = useRouter();
-  const { closeSheet } = useSheet();
+  const { dismissForNavigation } = useSheet();
   const { state } = useAlly();
   const { templates } = useManifest();
   const activeList = active(state);
 
+  // dismissForNavigation()+router.replace(), not closeSheet()+push(): see
+  // SheetProvider.tsx's dismissForNavigation doc comment — pairing
+  // closeSheet()'s async history.back() with a router navigation (in
+  // either order) races and reverts the navigation.
   function go(id: string) {
-    router.push(`/chat/${id}`);
-    closeSheet();
+    dismissForNavigation();
+    router.replace(`/chat/${id}`);
   }
 
   function goHome() {
-    router.push("/home");
-    closeSheet();
+    dismissForNavigation();
+    router.replace("/home");
   }
 
   return (
@@ -64,7 +68,7 @@ function SwitcherSheet({ currentId }: { currentId?: string }) {
 
 function PartSheet({ companionId }: { companionId: string }) {
   const router = useRouter();
-  const { closeSheet } = useSheet();
+  const { closeSheet, dismissForNavigation } = useSheet();
   const { state, dispatch } = useAlly();
   const { templates } = useManifest();
   const [typed, setTyped] = useState("");
@@ -79,8 +83,11 @@ function PartSheet({ companionId }: { companionId: string }) {
 
   function confirm() {
     dispatch({ type: "PART_COMPANION", companionId, now: now() });
+    // dismissForNavigation(), not closeSheet(): see SheetProvider.tsx's
+    // dismissForNavigation doc comment — closeSheet()'s async history.back()
+    // races this router.replace() and reverts it regardless of call order.
+    dismissForNavigation();
     router.replace("/home");
-    closeSheet();
   }
 
   return (
