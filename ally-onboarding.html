@@ -309,24 +309,6 @@ html.rm .card.hint, html.rm #s-deck.hint { animation: none; }
 .deckbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 56px; }
 .deckbar .btn { width: auto; min-width: 120px; }
 
-/* ---- choosing ---- */
-#s-choosing { justify-content: center; align-items: center; text-align: center; gap: 34px; }
-.choose-stage { position: relative; width: 232px; height: 232px; display: grid; place-items: center; }
-.choose-ring {
-  position: absolute; inset: 0; border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent 0 62%, var(--k) 78%, transparent 100%);
-  -webkit-mask: radial-gradient(circle, transparent 0 104px, #000 106px 100%); mask: radial-gradient(circle, transparent 0 104px, #000 106px 100%);
-  animation: spin 1100ms linear infinite; opacity: .9;
-}
-.choose-ring.landed { background: var(--k); animation: none; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.choose-face { position: relative; width: 200px; height: 200px; border-radius: 50%; overflow: hidden; background: var(--k); box-shadow: 0 30px 60px -30px var(--k); }
-.choose-face img { width: 100%; height: 100%; object-fit: cover; }
-.choose-face.landed { animation: land 700ms var(--ease) both; }
-@keyframes land { 0% { transform: scale(.94); } 55% { transform: scale(1.08); } 100% { transform: scale(1); } }
-.choose-line { min-height: 2.4em; max-width: 12ch; }
-html.rm .choose-ring, html.rm .choose-face.landed { animation: none; }
-
 /* ---- proposal ---- */
 .frame {
   position: relative; border-radius: 26px; overflow: hidden; aspect-ratio: 3 / 4; background: var(--k);
@@ -351,9 +333,6 @@ html.rm .frame img.kb { animation: none; }
 .reveal-text { position: absolute; left: 24px; right: 24px; bottom: calc(40px + var(--safe-b)); }
 .reveal-text .rname { font: 400 54px/1.02 var(--serif); letter-spacing: -0.015em; text-shadow: 0 2px 24px rgba(0,0,0,.35); }
 .reveal-text .rline { margin-top: 12px; font-size: 17px; opacity: .92; }
-.reveal-in { animation: revealIn 900ms var(--ease) both; }
-@keyframes revealIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-html.rm .reveal-in { animation: none; }
 
 /* ---- chat ---- */
 #s-chat { padding: 0; }
@@ -408,25 +387,10 @@ html.rm .toast { animation: none; }
 #debug .btn { min-height: 44px; font-size: 15.5px; }
 
 #fatal { padding: 40px 24px; }
-
-/* ---- intro. The logo arrives, breathes, and gives way to the splash. ---- */
-#intro { position: absolute; inset: 0; z-index: 60; background: var(--ink); display: grid; place-items: center; overflow: hidden; animation: introOut 400ms ease 2500ms both; }
-#intro img { width: 46%; max-width: 220px; animation: logoIn 2600ms var(--ease) both; }
-#intro::after {
-  content: ""; position: absolute; top: -20%; bottom: -20%; width: 40%; left: -60%;
-  background: linear-gradient(100deg, transparent 0%, rgba(244,239,230,.10) 45%, rgba(244,239,230,.22) 50%, rgba(244,239,230,.10) 55%, transparent 100%);
-  animation: sweep 1400ms var(--ease) 700ms both;
-}
-#intro.done { display: none; }
-@keyframes logoIn { 0% { opacity: 0; transform: scale(1.14); filter: blur(6px); } 30% { opacity: 1; filter: blur(0); } 70% { transform: scale(1); } 100% { opacity: 1; transform: scale(1); } }
-@keyframes sweep { from { left: -60%; } to { left: 130%; } }
-@keyframes introOut { from { opacity: 1; } to { opacity: 0; } }
-html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="intro" aria-hidden="true"><img src="assets/logo/ally-logo.png" alt=""></div>
   <div id="debug-zone" aria-hidden="true"></div>
 
   <!-- 0 splash -->
@@ -612,17 +576,8 @@ html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
     </div>
   </section>
 
-  <!-- 15 choosing: the moment before the proposal -->
-  <section class="screen" id="s-choosing" data-screen="15" aria-live="polite">
-    <div class="choose-stage">
-      <div class="choose-ring" id="choose-ring"></div>
-      <div class="choose-face" id="choose-face"><img alt=""></div>
-    </div>
-    <h1 class="big choose-line" id="choose-line"></h1>
-  </section>
-
-  <!-- 16 proposal -->
-  <section class="screen" id="s-proposal" data-screen="16">
+  <!-- 15 proposal -->
+  <section class="screen" id="s-proposal" data-screen="15">
     <button class="icon-btn back" data-back-to="deck" aria-label="Back"></button>
     <div class="stack">
       <div class="frame" id="frame">
@@ -641,8 +596,8 @@ html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
     </div>
   </section>
 
-  <!-- 17 confirm, sheet over 16 -->
-  <section class="screen sheet" id="s-confirm" data-screen="17" role="dialog" aria-modal="true" aria-labelledby="confirm-body">
+  <!-- 16 confirm, sheet over 15 -->
+  <section class="screen sheet" id="s-confirm" data-screen="16" role="dialog" aria-modal="true" aria-labelledby="confirm-body">
     <div class="panel stack">
       <p class="q" id="confirm-body" style="font-size:26px"></p>
       <div class="actions">
@@ -652,8 +607,8 @@ html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
     </div>
   </section>
 
-  <!-- 18 reveal -->
-  <section class="screen" id="s-reveal" data-screen="18">
+  <!-- 17 reveal -->
+  <section class="screen" id="s-reveal" data-screen="17">
     <div class="reveal-media" aria-hidden="true">
       <img id="r-still" alt="">
       <video id="r-video" playsinline preload="auto"></video>
@@ -666,8 +621,8 @@ html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
     </div>
   </section>
 
-  <!-- 19 chat -->
-  <section class="screen" id="s-chat" data-screen="19">
+  <!-- 18 chat -->
+  <section class="screen" id="s-chat" data-screen="18">
     <div class="chat-head"><img id="c-avatar" alt=""><div class="cname" id="c-name"></div></div>
     <div class="msgs" id="msgs" aria-live="polite"></div>
     <form class="composer" id="composer">
@@ -676,8 +631,8 @@ html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
     </form>
   </section>
 
-  <!-- 20 account, sheet over 19 -->
-  <section class="screen sheet" id="s-account" data-screen="20" role="dialog" aria-modal="true" aria-labelledby="a-heading">
+  <!-- 19 account, sheet over 18 -->
+  <section class="screen sheet" id="s-account" data-screen="19" role="dialog" aria-modal="true" aria-labelledby="a-heading">
     <div class="panel stack">
       <h1 class="q" id="a-heading"></h1>
       <p class="sub" style="margin-top:-8px">So they're here tomorrow.</p>
@@ -693,8 +648,8 @@ html.rm #intro, html.rm #intro img, html.rm #intro::after { animation: none; }
     </div>
   </section>
 
-  <!-- 21 blocked. Outside the walk. No back, no retry, no link. -->
-  <section class="screen" id="s-blocked" data-screen="21">
+  <!-- blocked. Outside the walk. No back, no retry, no link. -->
+  <section class="screen" id="s-blocked" data-screen="20">
     <div class="stack">
       <h1>Ally is for adults.</h1>
       <p class="sub">Come back when you're eighteen.</p>
@@ -753,7 +708,7 @@ const INTEREST_TAGS = ['music','food','outdoors','making','movement','screen','s
 const SCREENS = [
   'splash','consent','location','gender','name','birthday',
   'q_disclosure','q_warmth','q_push','q_structure','q_nostalgia','q_pressure','q_interests',
-  'matching','deck','choosing','proposal','confirm','reveal','chat','account',
+  'matching','deck','proposal','confirm','reveal','chat','account',
   'blocked',
 ];
 const S = Object.fromEntries(SCREENS.map((id, i) => [id, i]));
@@ -1041,15 +996,13 @@ const COPY = {
   confirmBody: `{persona} is yours from here. You can't swap them later.`,
   accountHeading: `Save {persona} to your account.`,
   recomputeToast: `That changed who you'd meet. Starting the deck again.`,
-  choosing: `Choosing someone for you, {name}.`,
-  chosen: `Here they are.`,
   assetsMissing: `Assets not found. Run this from a local server, not file://`,
 };
 const fill = (tpl, vars) => tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
 const PRESSURE_LABEL = {
   money:'Money and work', health:'Health and habits', head:'My own head',
-  alone:'Being alone', notgood:'Not feeling good enough', change:'Everything\'s changing',
+  alone:'Feeling on my own', notgood:'Not feeling good enough', change:'Everything\'s changing',
 };
 const TILE_ORDER = ['making','screen','systems','outdoors','music','food','movement','people'];
 const DISCLOSURE_LABELS = ['I keep it to myself','I tell one person','I need to say it out loud','Everyone hears about it'];
@@ -1179,20 +1132,9 @@ $('#debug-copy').addEventListener('click', async () => {
   setTimeout(() => { $('#debug-copy').textContent = 'Copy state as JSON'; }, 1400);
 });
 
-// ---- intro ----
-function runIntro() {
-  const intro = $('#intro');
-  const finish = () => intro.classList.add('done');
-  if (reduced) { setTimeout(finish, 1200); return; }
-  sfx.logo();
-  intro.addEventListener('animationend', e => { if (e.target === intro) finish(); });
-  setTimeout(finish, 3400);   // belt and braces if animationend never fires
-}
-
 // ---- boot ----
 async function boot() {
   setReducedMotion(reduced);
-  runIntro();
   try {
     const res = await fetch('assets/manifest.json', { cache: 'no-cache' });
     if (!res.ok) throw new Error(String(res.status));
@@ -1223,9 +1165,10 @@ function applyPalette(hex) {
 
 // ---- feedback stubs, implemented in the motion/haptics/sound section ----
 // ---- haptics, section 9.6. navigator.vibrate where it exists, silence elsewhere. ----
-const HAPTIC = { detent: 8, selection: [12, 40, 12], liked: 18, passed: 10, lock: [20, 60, 20, 60, 40] };
+const HAPTIC = { detent: 8, selection: [12, 40, 12], liked: 18, passed: null, lock: [20, 60, 20, 60, 40] };   // passed: none, passing should feel weightless
 function haptic(pattern) {
   try {
+    if (!pattern) return;
     if (typeof navigator.vibrate !== 'function') return;
     if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;   // Chrome refuses and logs otherwise
     navigator.vibrate(pattern);
@@ -1263,28 +1206,6 @@ const sfx = (() => {
     selection() { const c = ready(); if (c) { tone(c, { f: 660, dur: 0.08, gain: 0.07 }); tone(c, { f: 990, t0: 0.07, dur: 0.12, gain: 0.07 }); } },
     lock()      { const c = ready(); if (c) { tone(c, { f: 110, dur: 0.32, gain: 0.16, slideTo: 55 }); tone(c, { f: 440, t0: 0.05, dur: 0.30, gain: 0.05 }); } },
     reveal()    { const c = ready(); if (c) [[261.6, 0], [329.6, 0.12], [392.0, 0.24], [523.3, 0.40]].forEach(([f, t]) => tone(c, { f, t0: t, dur: 1.4 - t, gain: 0.06 })); },
-    // The sting behind the logo: two low hits and a soft tail. Only plays if the
-    // browser lets audio start without a tap, which it does once the site has
-    // been used before. Otherwise the intro is silent, never delayed.
-    logo() {
-      let on = true;
-      try { const saved = JSON.parse(globalThis.localStorage.getItem(E.SESSION_KEY) || 'null'); if (saved && saved.state && saved.state.soundOn === false) on = false; } catch (e) { /* no session */ }
-      if (!on) return;
-      let c = null;
-      try { const AC = globalThis.AudioContext || globalThis.webkitAudioContext; if (!AC) return; ctx = ctx || new AC(); c = ctx; } catch (e) { return; }
-      if (c.state !== 'running') return;
-      tone(c, { f: 73.4, type: 'triangle', dur: 0.55, gain: 0.22, slideTo: 65 });
-      tone(c, { f: 146.8, type: 'sine', dur: 0.5, gain: 0.08 });
-      tone(c, { f: 110, type: 'triangle', t0: 0.34, dur: 1.6, gain: 0.2, slideTo: 98 });
-      tone(c, { f: 220, type: 'sine', t0: 0.34, dur: 1.4, gain: 0.06 });
-      tone(c, { f: 329.6, type: 'sine', t0: 0.38, dur: 1.2, gain: 0.03 });
-      const n = c.createBufferSource(), buf = c.createBuffer(1, c.sampleRate * 1.4, c.sampleRate), d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
-      n.buffer = buf;
-      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700;
-      const g = c.createGain(); g.gain.value = 0.035;
-      n.connect(lp).connect(g).connect(c.destination); n.start(c.currentTime + 0.34);
-    },
   };
 })();
 
@@ -1328,7 +1249,7 @@ const sameSet = (a, b) => a.length === b.length && [...a].sort().join() === [...
 
 function setupScreens() {
   setupSplash(); setupConsent(); setupLocation(); setupGender(); setupName(); setupBirthday();
-  setupSliders(); setupDial(); setupTiles(); setupMatching(); setupDeck(); setupChoosing(); setupProposal();
+  setupSliders(); setupDial(); setupTiles(); setupMatching(); setupDeck(); setupProposal();
   setupConfirm(); setupReveal(); setupChat(); setupAccount();
 }
 
@@ -1584,14 +1505,9 @@ function makeSlider(el, { stops, onMove, onChange }) {
     else thumb.setAttribute('aria-valuenow', String(Math.round(v * 100)));
   };
   const fromEvent = e => { const r = track.getBoundingClientRect(); return clamp((e.clientY - r.top) / r.height, 0, 1); };
-  let side = 0;   // which pole a continuous drag is currently committed to: -1 top, 1 bottom, 0 neither
   const moved = () => {
     if (stops) { const n = nearest(); if (n !== lastStop) { if (lastStop >= 0) { haptic(HAPTIC.detent); sfx.detent(); } lastStop = n; onMove(n); } }
-    else {
-      const now = Math.abs(v - 0.5) >= 0.25 ? Math.sign(v - 0.5) : 0;
-      if (now !== side) { if (now) { haptic(HAPTIC.detent); sfx.detent(); } side = now; }
-      onMove(v);
-    }
+    else onMove(v);   // free thumb, no snap: report the exact position while dragging
   };
   $('.rail', el).addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
@@ -1609,11 +1525,8 @@ function makeSlider(el, { stops, onMove, onChange }) {
     if (!dragging) return;
     dragging = false; thumb.classList.remove('drag');
     if (stops) { v = nearest() / (stops - 1); paint(); onChange(nearest()); return; }
-    // elastic: past halfway to a pole it goes all the way, short of that it springs back to the centre
-    snapping(!reduced);
-    if (Math.abs(v - 0.5) >= 0.25) { v = v < 0.5 ? 0 : 1; paint(); haptic(HAPTIC.selection); onChange(v); }
-    else { v = 0.5; paint(); onChange(null); }
-    setTimeout(() => snapping(false), 240);
+    // free thumb, no snap: whatever position it's released at is the answer
+    paint(); haptic(HAPTIC.selection); onChange(v);
   };
   thumb.addEventListener('pointerup', release);
   thumb.addEventListener('pointercancel', release);
@@ -1908,13 +1821,13 @@ function setupDeck() {
     const likedBefore = state.liked.includes(id);
     state.deckHistory.push({ id, dir, likedBefore });
     if (dir === 'like') { if (!likedBefore) state.liked.push(id); haptic(HAPTIC.liked); }
-    else { if (likedBefore) state.liked = state.liked.filter(x => x !== id); haptic(HAPTIC.passed); }
+    else { if (likedBefore) state.liked = state.liked.filter(x => x !== id); }   // passing is weightless: no haptic
     screenEl(S.deck).style.setProperty('--gray', '0');
     state.deckIndex += 1; expandedNow = null;
     persist();
     const advance = () => {
       if (state.screen !== S.deck) return;
-      if (state.deckIndex % N() === 0) go(S.choosing); else render();
+      if (state.deckIndex % N() === 0) { proposeNow(); go(S.proposal); } else render();
     };
     if (reduced) advance(); else setTimeout(advance, 200);
   }
@@ -1970,7 +1883,7 @@ function setupDeck() {
   }
   document.addEventListener('visibilitychange', () => { lastTs = 0; });
   undoBtn.addEventListener('click', undo);
-  doneBtn.addEventListener('click', () => go(S.choosing));
+  doneBtn.addEventListener('click', () => { proposeNow(); go(S.proposal); });
   const keys = e => {
     if (state.screen !== S.deck || !$('#debug').hidden) return;
     if (e.target && e.target.closest && e.target.closest('input, textarea')) return;
@@ -1991,48 +1904,6 @@ function setupDeck() {
   leaveHooks.deck = () => { cancelAnimationFrame(raf); raf = 0; lastTs = 0; screenEl(S.deck).style.setProperty('--gray', '0'); persist(); };
 }
 
-// ---- 15 choosing. The proposal is decided here; the screen gives it weight. ----
-function setupChoosing() {
-  const screen = $('#s-choosing'), ring = $('#choose-ring'), face = $('#choose-face'), img = $('#choose-face img'), line = $('#choose-line');
-  let timers = [], landed = false;
-  const clear = () => { timers.forEach(clearTimeout); timers = []; };
-  const after = (ms, fn) => timers.push(setTimeout(fn, ms));
-  const leave = () => { if (landed && state.screen === S.choosing) go(S.proposal); };
-  screen.addEventListener('click', leave);
-  screen.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); leave(); } });
-  enterHooks.choosing = () => {
-    clear(); landed = false;
-    proposeNow();
-    const chosen = byId.get(state.proposed);
-    const pool = (state.liked.length ? state.liked : state.deckOrder).filter(id => id !== chosen.id);
-    pool.forEach(id => { const i = new Image(); i.src = byId.get(id).avatar; });
-    ring.classList.remove('landed'); face.classList.remove('landed');
-    ring.style.setProperty('--k', 'var(--fg)'); face.style.setProperty('--k', 'var(--line)');
-    line.textContent = fill(COPY.choosing, { name: state.displayName });
-    const land = () => {
-      landed = true;
-      img.src = chosen.avatar;
-      ring.style.setProperty('--k', chosen.palette); face.style.setProperty('--k', chosen.palette);
-      ring.classList.add('landed'); face.classList.add('landed');
-      line.textContent = COPY.chosen;
-      haptic(HAPTIC.selection); sfx.selection();
-      after(reduced ? 1600 : 1900, leave);
-    };
-    if (reduced || !pool.length) { img.src = chosen.avatar; after(reduced ? 200 : 1200, land); return; }
-    // faces tick past, slowing down, and the last one to settle is the one chosen
-    let i = Math.floor(Math.random() * pool.length), delay = 90, elapsed = 0;
-    const tick = () => {
-      img.src = byId.get(pool[i % pool.length]).avatar; i += 1;
-      haptic(HAPTIC.detent); sfx.detent();
-      elapsed += delay; delay = Math.min(460, delay * 1.16);
-      if (elapsed < 2600) after(delay, tick); else after(delay, land);
-    };
-    img.src = byId.get(pool[i]).avatar;
-    after(200, tick);
-    screen.setAttribute('tabindex', '0');
-  };
-  leaveHooks.choosing = () => clear();
-}
 function proposeNow() {
   const r = E.nextProposal(state);
   state.proposed = r.proposed; state.canRedraw = r.canRedraw; state.proposalMode = r.mode;
@@ -2040,7 +1911,7 @@ function proposeNow() {
   persist();
 }
 
-// ---- 16 proposal ----
+// ---- 15 proposal ----
 function setupProposal() {
   const still = $('#p-still'), video = $('#p-video'), sound = $('#p-sound'), heading = $('#p-heading');
   const l1 = $('#p-line1'), l2 = $('#p-line2'), lockBtn = $('#p-lock'), redrawBtn = $('#p-redraw'), frame = $('#frame');
@@ -2121,7 +1992,6 @@ function setupReveal() {
     still.src = t.reveal;
     $('#r-name').textContent = t.name;
     $('#r-line').textContent = t.read;
-    $('.reveal-text').classList.remove('reveal-in'); void screen.offsetWidth; $('.reveal-text').classList.add('reveal-in');
     if (video.getAttribute('src') !== t.video) { video.src = t.video; video.load(); }
     video.muted = !state.soundOn; paintSound();
     video.currentTime = 0;
@@ -2217,7 +2087,7 @@ const OPENERS = {
     money:   `{name}. You said work and money have been taking up most of the room lately. When did it last go quiet, even for an evening?`,
     health:  `{name}, you said it's the health and habits stuff that's been sitting on you. Which bothers you more, the thing itself or how you feel about it?`,
     head:    `{name}, you said it's mostly your own head lately. What does it sound like in there at about eleven at night?`,
-    alone:   `{name}, you said being alone is what's taking up space. Is it that people aren't around, or that they're around and it still feels like that?`,
+    alone:   `{name}, you said feeling on your own is what's taking up space. Is it that people aren't around, or that they're around and it still feels like that?`,
     notgood: `{name}, you said not feeling good enough has been taking up space. Good enough for who, mostly?`,
     change:  `{name}, you said everything's changing right now. What's the one thing you'd keep exactly as it is if you could?`,
   },
@@ -2225,7 +2095,7 @@ const OPENERS = {
     money:   `{name}, you mentioned money and work are what's taking up space. When you picture next month, which part actually worries you?`,
     health:  `{name}, you said health and habits are on your mind. What's one small thing you've been meaning to change, and what keeps getting in the way?`,
     head:    `{name}, you said your own head is the loudest thing right now. What does it tend to circle back to?`,
-    alone:   `{name}, you said being alone is on your mind. When did it start to feel different from just having time to yourself?`,
+    alone:   `{name}, you said feeling on your own is on your mind. When did it start to feel different from just having time to yourself?`,
     notgood: `{name}, you said not feeling good enough is taking up space. Whose standard are you measuring against when that feeling shows up?`,
     change:  `{name}, you said everything's changing. Which of those changes did you choose, and which ones happened to you?`,
   },
@@ -2233,7 +2103,7 @@ const OPENERS = {
     money:   `{name}, you said money and work are taking up the most room. What's the actual number or decision you keep putting off?`,
     health:  `{name}, you said health and habits are the thing right now. If you fixed one habit first, which one would move everything else?`,
     head:    `{name}, you said it's mostly your own head. Is that about a decision you haven't made yet, or something already done?`,
-    alone:   `{name}, you said being alone is taking up the most room. What does a normal Tuesday look like for you right now?`,
+    alone:   `{name}, you said feeling on your own is taking up the most room. What does a normal Tuesday look like for you right now?`,
     notgood: `{name}, you said not feeling good enough is taking up space. What would good enough actually look like, concretely?`,
     change:  `{name}, you said everything's changing. What's the next thing that has to be decided, and by when?`,
   },
@@ -2241,7 +2111,7 @@ const OPENERS = {
     money:   `{name}. Money and work, you said. What's the thing you already know you should do about it and haven't?`,
     health:  `{name}. Health and habits, you said. What did you do about it today? Be honest.`,
     head:    `{name}. You said your own head is the problem. What's the story it keeps telling you, and is it true?`,
-    alone:   `{name}. Being alone, you said. When did you last message someone first?`,
+    alone:   `{name}. Feeling on your own, you said. When did you last message someone first?`,
     notgood: `{name}. Not feeling good enough, you said. Good enough at what, specifically? Name it.`,
     change:  `{name}. Everything's changing, you said. What are you doing about the part you can control?`,
   },
@@ -2249,7 +2119,7 @@ const OPENERS = {
     money:   `{name}! You said money and work are eating your brain right now. Okay, what's the one bit that's actually in your control this week?`,
     health:  `{name}! Health and habits are the thing, you said. What's one thing you did this week that you'd actually call a win?`,
     head:    `{name}! You said your own head is being loud. What's it being loud about today, specifically?`,
-    alone:   `{name}! You said being alone has been on your mind. Who's the person you'd text if you weren't overthinking it?`,
+    alone:   `{name}! You said feeling on your own has been on your mind. Who's the person you'd text if you weren't overthinking it?`,
     notgood: `{name}! Not feeling good enough, you said. What's something you're actually good at that you never give yourself credit for?`,
     change:  `{name}! Everything's changing, you said. What's the one change you're secretly a bit excited about?`,
   },
@@ -2257,7 +2127,7 @@ const OPENERS = {
     money:   `{name}, you said money and work are taking up the most space. Do you remember a time when it didn't feel like that? What was different?`,
     health:  `{name}, you said health and habits are on your mind. What did you used to do, back when you felt good in yourself?`,
     head:    `{name}, you said your own head is the loudest thing. What did you used to do to switch it off, before things got busy?`,
-    alone:   `{name}, you said being alone is taking up space. Who's the friend you've drifted from that you still think about?`,
+    alone:   `{name}, you said feeling on your own is taking up space. Who's the friend you've drifted from that you still think about?`,
     notgood: `{name}, you said not feeling good enough takes up space. Who told you that first, and do you still believe them?`,
     change:  `{name}, you said everything's changing. What's the thing from before that you miss the most?`,
   },
