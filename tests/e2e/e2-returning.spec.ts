@@ -8,6 +8,7 @@ import {
   trackHealth,
   assertHealthy,
   screenshotScreen,
+  assertMinFontSize,
 } from "./helpers";
 
 test.describe("E2 reload -> returning splash -> last chat", () => {
@@ -39,10 +40,12 @@ test.describe("E2 reload -> returning splash -> last chat", () => {
     // returning splash briefly, then boot target: last opened chat
     await page.waitForURL(/\/chat\/c_e2test1/, { timeout: 5000 });
     await screenshotScreen(page, "e2-01-returning-to-chat");
+    await assertMinFontSize(page);
 
     await page.goBack();
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e2-02-back-to-home");
+    await assertMinFontSize(page);
 
     assertHealthy(health);
   });

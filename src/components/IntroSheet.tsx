@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
@@ -11,14 +12,34 @@ import { COPY, fill } from "@/lib/copy";
 import styles from "./IntroSheet.module.css";
 
 /**
- * Round-two entry point, spec §8.2 steps 1-3 (§6 'intro sheet').
+ * Round-two entry point, spec §8.2 steps 1-4 (§6 'intro sheet').
  * Opened by the home add card (owned by another work area).
+ *
+ * Step 1's account gate runs BEFORE this sheet's own content is ever
+ * shown, matching the spec's step order (account gate, then intro sheet,
+ * then unlock, then onboarding) — not after a "Start" tap, which would
+ * show "Someone new" copy to a user who hasn't created an account yet.
+ * If there's no account, this sheet immediately hands off to the account
+ * sheet (non-dismissible here, via `exchanges: 7`) with an `onSaved`
+ * callback that reopens this same sheet — "on success, continue" — so the
+ * user never has to tap the add card a second time.
  */
 export function IntroSheet() {
   const { state, dispatch } = useAlly();
   const { closeSheet, openSheet, dismissForNavigation } = useSheet();
   const { templates } = useManifest();
   const router = useRouter();
+  const gatedRef = useRef(false);
+
+  const hasAccount = !!state.user.accountAt;
+
+  useEffect(() => {
+    if (hasAccount || gatedRef.current) return;
+    gatedRef.current = true;
+    dismissForNavigation();
+    openSheet("account", { exchanges: 7, onSaved: () => openSheet("intro") });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasAccount]);
 
   const activeList = active(state)
     .slice()
@@ -40,23 +61,6 @@ export function IntroSheet() {
   }
 
   function handleStart() {
-    if (!state.user.accountAt) {
-      // Spec §8.2 step 1 wants the account sheet non-dismissible here, with
-      // round two continuing automatically once it succeeds. The account
-      // sheet is owned by another work area and doesn't accept a
-      // continuation callback, so we degrade gracefully instead: open it
-      // and stop. The user taps the add card again once accountAt is set,
-      // which reopens this sheet and this time falls through to the next
-      // check. See report for details.
-      // dismissForNavigation(), not closeSheet(): closeSheet()'s
-      // history.back() is async and races the openSheet() right after it,
-      // desyncing the React sheet stack from the actual history position
-      // (the pending back() pops whatever is on top once it resolves,
-      // which by then is 'account', not 'intro'). See SheetProvider.tsx.
-      dismissForNavigation();
-      openSheet("account");
-      return;
-    }
     if (activeList.length >= state.ledger.slotsUnlocked) {
       dismissForNavigation();
       openSheet("unlock", { slot: state.ledger.slotsUnlocked + 1 });
@@ -70,6 +74,8 @@ export function IntroSheet() {
   function handleNotNow() {
     closeSheet();
   }
+
+  if (!hasAccount) return null;
 
   return (
     <Sheet labelledBy="introSheetHeading">

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { FIXED_NOW, setClock, seedState, makeState, makeCompanion, trackHealth, assertHealthy, screenshotScreen } from "./helpers";
+import { FIXED_NOW, setClock, seedState, makeState, makeCompanion, trackHealth, assertHealthy, screenshotScreen, assertMinFontSize } from "./helpers";
 
 test.describe("E6 part with everyone -> zero state", () => {
   test("E6: reload after parting everyone shows returning splash then home zero state", async ({ page }) => {
@@ -30,6 +30,7 @@ test.describe("E6 part with everyone -> zero state", () => {
     await expect(cards).toHaveCount(1);
     await expect(page.getByText("Meet someone new")).toBeVisible();
     await expect(page.getByText("A few questions, a new face.", { exact: false })).toBeVisible();
+    await assertMinFontSize(page);
 
     assertHealthy(health);
   });

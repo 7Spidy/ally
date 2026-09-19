@@ -61,10 +61,11 @@ describe("clock", () => {
 
 // ---- Boot logic (24-29) ----
 //
-// `src/lib/boot.ts`'s `bootTarget(state, blocked)` is the pure decision
-// app/page.tsx's BootPage renders from; test the decision directly here
-// (route-level behavior, i.e. that BootPage actually calls router.replace
-// with this target, is still covered by Playwright E2E E1/E2/E9).
+// `src/lib/boot.ts`'s `bootTarget(state, blocked, now)` is the pure
+// decision app/page.tsx's BootPage renders from; test the decision
+// directly here (route-level behavior, i.e. that BootPage actually calls
+// router.replace with this target, is still covered by Playwright E2E
+// E1/E2/E9).
 function fakeCompanion(overrides: Partial<Companion>): Companion {
   return {
     id: "c_test",
@@ -94,7 +95,7 @@ describe("Boot logic", () => {
       fakeCompanion({ id: "c_a", lastOpenedAt: 500, status: "active" }),
       fakeCompanion({ id: "c_b", lastOpenedAt: 900, status: "active" }),
     ];
-    const out = bootTarget(state, false);
+    const out = bootTarget(state, false, 1000);
     expect(out).toEqual({ phase: "returning-splash", target: "/chat/c_b" });
   });
 
@@ -102,7 +103,7 @@ describe("Boot logic", () => {
     const state = freshState(1000, "2024-01-01");
     state.flow = null;
     state.companions = [fakeCompanion({ id: "c_a", status: "parted", partedAt: 500, purgeAt: 999999999 })];
-    const out = bootTarget(state, false);
+    const out = bootTarget(state, false, 1000);
     expect(out).toEqual({ phase: "returning-splash", target: "/home" });
   });
 
@@ -160,7 +161,31 @@ describe("Boot logic", () => {
     const state = freshState(1000, "2024-01-01");
     state.flow = freshFlow("round2", "gender");
     state.companions = [];
-    const out = bootTarget(state, false);
+    const out = bootTarget(state, false, 1000);
+    expect(out).toEqual({ phase: "first-splash", step: "consent" });
+  });
+
+  // PRD §4.1 / spec §4.2's 7/30-day resume rule: a first-run flow's age is
+  // state.savedAt vs. the `now` passed to bootTarget().
+  const DAY = 86400000;
+  it("boot: a first-run flow under 7 days old resumes silently at its step", () => {
+    const state = freshState(1000, "2024-01-01");
+    state.flow = { ...freshFlow("first", "gender") };
+    const out = bootTarget(state, false, 1000 + 6.9 * DAY);
+    expect(out).toEqual({ phase: "first-splash", step: "gender" });
+  });
+
+  it("boot: a first-run flow 7-30 days old offers continue-or-start-over, never resumes silently", () => {
+    const state = freshState(1000, "2024-01-01");
+    state.flow = { ...freshFlow("first", "gender") };
+    expect(bootTarget(state, false, 1000 + 7 * DAY)).toEqual({ phase: "first-choose", step: "gender" });
+    expect(bootTarget(state, false, 1000 + 30 * DAY)).toEqual({ phase: "first-choose", step: "gender" });
+  });
+
+  it("boot: a first-run flow beyond 30 days old is discarded silently, landing at consent", () => {
+    const state = freshState(1000, "2024-01-01");
+    state.flow = { ...freshFlow("first", "gender") };
+    const out = bootTarget(state, false, 1000 + 30.1 * DAY);
     expect(out).toEqual({ phase: "first-splash", step: "consent" });
   });
 

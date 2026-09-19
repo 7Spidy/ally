@@ -14,8 +14,3 @@
   outline: none;
   border-bottom-color: var(--accent);
 }
-
-.otp {
-  letter-spacing: 0.3em;
-  font-size: 26px;
-}

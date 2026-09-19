@@ -8,12 +8,16 @@
 import type { AllyState } from "@/state/schema";
 import { active, lastOpened } from "@/lib/selectors";
 
+const DAY_MS = 86400000;
+
 export type BootTarget =
   | { phase: "blocked" }
   | { phase: "first-splash"; step: string }
+  /** 7-30 days since state.savedAt: offer continue-or-start-over instead of resuming silently (PRD §4.1 / spec §4.2). */
+  | { phase: "first-choose"; step: string }
   | { phase: "returning-splash"; target: string };
 
-export function bootTarget(state: AllyState, blocked: boolean): BootTarget {
+export function bootTarget(state: AllyState, blocked: boolean, now: number): BootTarget {
   if (blocked) return { phase: "blocked" };
 
   // A stale round-two flow never survives to this decision; the caller
@@ -24,7 +28,14 @@ export function bootTarget(state: AllyState, blocked: boolean): BootTarget {
   const hasCompanionEver = state.companions.length > 0 || state.user.accountAt !== null;
 
   if (!hasCompanionEver && (!flow || flow.kind === "first")) {
-    return { phase: "first-splash", step: flow?.step ?? "consent" };
+    const step = flow?.step ?? "consent";
+    const ageDays = (now - state.savedAt) / DAY_MS;
+    // Beyond 30 days: discard silently, land at consent as if fresh.
+    if (ageDays > 30) return { phase: "first-splash", step: "consent" };
+    // 7-30 days: offer continue or start over, never resume silently.
+    if (ageDays >= 7) return { phase: "first-choose", step };
+    // Within 7 days: the user just lands where they left off.
+    return { phase: "first-splash", step };
   }
 
   const activeList = active(state);

@@ -9,6 +9,7 @@ import {
   assertHealthy,
   screenshotScreen,
   tabUntil,
+  assertMinFontSize,
 } from "./helpers";
 
 test.describe("E10 keyboard-only navigation", () => {
@@ -70,6 +71,7 @@ test.describe("E10 keyboard-only navigation", () => {
     await page.keyboard.press("Enter");
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e10-05-home-final");
+    await assertMinFontSize(page);
 
     assertHealthy(health);
   });

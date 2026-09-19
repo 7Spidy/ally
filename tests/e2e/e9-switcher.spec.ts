@@ -8,6 +8,7 @@ import {
   trackHealth,
   assertHealthy,
   screenshotScreen,
+  assertMinFontSize,
 } from "./helpers";
 
 test.describe("E9 switcher via long-press + overflow Home", () => {
@@ -53,6 +54,7 @@ test.describe("E9 switcher via long-press + overflow Home", () => {
     await page.getByRole("menuitem", { name: "Home" }).click();
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e9-03-home-via-overflow");
+    await assertMinFontSize(page);
 
     assertHealthy(health);
   });

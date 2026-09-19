@@ -34,7 +34,7 @@ const STEP_TO_PATH: Record<string, string> = {
 export default function BootPage() {
   const router = useRouter();
   const { state, dispatch, ready } = useAlly();
-  const [phase, setPhase] = useState<"deciding" | "first-splash" | "returning-splash">("deciding");
+  const [phase, setPhase] = useState<"deciding" | "first-splash" | "first-choose" | "returning-splash">("deciding");
   const ran = useRef(false);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ export default function BootPage() {
       dispatch({ type: "LEAVE_ROUND2" });
     }
 
-    const decision = bootTarget(state, isBlocked(window.localStorage, now()));
+    const decision = bootTarget(state, isBlocked(window.localStorage, now()), now());
 
     if (decision.phase === "blocked") {
       router.replace("/blocked");
@@ -58,7 +58,18 @@ export default function BootPage() {
     }
 
     if (decision.phase === "first-splash") {
+      if (decision.step === "consent" && state.flow?.step !== "consent") {
+        // Beyond 30 days: discard silently, reset the flow before landing
+        // at consent (not just visually — the stale answers/progress
+        // shouldn't linger in state either).
+        dispatch({ type: "RESET_FIRST_RUN_FLOW" });
+      }
       setPhase("first-splash");
+      return;
+    }
+
+    if (decision.phase === "first-choose") {
+      setPhase("first-choose");
       return;
     }
 
@@ -78,6 +89,20 @@ export default function BootPage() {
     );
   }
 
+  if (phase === "first-choose") {
+    const step = state.flow?.step ?? "consent";
+    const path = STEP_TO_PATH[step] ?? "/onboarding/consent";
+    return (
+      <FirstRunChoice
+        onContinue={() => router.replace(path)}
+        onStartOver={() => {
+          dispatch({ type: "RESET_FIRST_RUN_FLOW" });
+          router.replace("/onboarding/consent");
+        }}
+      />
+    );
+  }
+
   if (phase === "first-splash") {
     const step = state.flow?.step ?? "consent";
     const path = STEP_TO_PATH[step] ?? "/onboarding/consent";
@@ -85,6 +110,32 @@ export default function BootPage() {
   }
 
   return null;
+}
+
+/**
+ * 7-30 days since the user was last mid-onboarding (PRD §4.1 / spec
+ * §4.2's boot table): offer continue-or-start-over rather than resuming
+ * silently. Neither the v1.0 nor v3.0 spec gives exact copy for this
+ * screen (it's described only as a behavior, never in a copy table) — the
+ * strings below are a reasonable on-brand interpretation, not a spec
+ * string, flagged as such in the report.
+ */
+function FirstRunChoice({ onContinue, onStartOver }: { onContinue: () => void; onStartOver: () => void }) {
+  return (
+    <div className={styles.splash}>
+      <Image src="/assets/logo/ally-logo.png" alt="" width={64} height={64} className={styles.logoMark} priority />
+      <p className={`wordmark ${styles.wordmark}`}>Ally</p>
+      <h1 className={styles.headline}>Still there?</h1>
+      <div className={styles.actions}>
+        <button className="btn primary" onClick={onContinue}>
+          Continue where I left off
+        </button>
+        <button className="btn secondary" onClick={onStartOver}>
+          Start over
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function FirstRunSplash({ onDone }: { onDone: () => void }) {
@@ -95,7 +146,7 @@ function FirstRunSplash({ onDone }: { onDone: () => void }) {
   }, []);
   return (
     <div className={styles.splash}>
-      <Image src="/assets/logo/ally-logo.png" alt="" width={56} height={56} className={styles.logoMark} priority />
+      <Image src="/assets/logo/ally-logo.png" alt="" width={64} height={64} className={styles.logoMark} priority />
       <p className={`wordmark ${styles.wordmark}`}>Ally</p>
       <h1 className={styles.headline}>Someone to talk to. Not a chatbot pretending.</h1>
       <div className={styles.actions}>

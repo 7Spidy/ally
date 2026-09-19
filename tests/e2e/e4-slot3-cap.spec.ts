@@ -9,6 +9,7 @@ import {
   assertHealthy,
   screenshotScreen,
   answerSevenQuestions,
+  assertMinFontSize,
 } from "./helpers";
 
 test.describe("E4 third companion hits slot-3 unlock, then home shows cap card", () => {
@@ -65,6 +66,7 @@ test.describe("E4 third companion hits slot-3 unlock, then home shows cap card",
 
     await expect(page.getByText("That's three")).toBeVisible();
     await expect(page.getByText("Three companions is the most Ally keeps at once.")).toBeVisible();
+    await assertMinFontSize(page);
 
     assertHealthy(health);
   });

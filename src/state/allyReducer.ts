@@ -26,6 +26,7 @@ export type AllyAction =
   | { type: "REDRAW" }
   | { type: "START_ROUND2"; templates: { id: string; gender: Gender }[] }
   | { type: "LEAVE_ROUND2" }
+  | { type: "RESET_FIRST_RUN_FLOW" }
   | { type: "CONFIRM_LOCK"; templateId: string; now: number }
   | { type: "ROUTER_LOCK_CLEAR" }
   | { type: "SEND_MESSAGE"; companionId: string; text: string; now: number }
@@ -173,6 +174,9 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
 
     case "LEAVE_ROUND2":
       return { ...state, flow: null };
+
+    case "RESET_FIRST_RUN_FLOW":
+      return { ...state, flow: freshFlow("first", "consent") };
 
     case "CONFIRM_LOCK": {
       const flow = requireFlow(state);
