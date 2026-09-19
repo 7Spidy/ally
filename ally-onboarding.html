@@ -97,6 +97,7 @@ h1.big { font-size: 34px; }
 p { margin: 0; }
 .meta { font-size: 15.5px; color: var(--mut); line-height: 1.45; }
 .wordmark { font: 400 44px/1 var(--serif); letter-spacing: -0.02em; }
+.logo-mark { width: 56px; height: 56px; border-radius: 16px; object-fit: cover; }
 
 /* ---- controls ---- */
 .btn {
@@ -118,6 +119,7 @@ p { margin: 0; }
 .icon-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .back { position: absolute; top: calc(20px + var(--safe-t)); left: 12px; z-index: 3; background: transparent; }
 .topright { position: absolute; top: calc(20px + var(--safe-t)); right: 12px; z-index: 3; }
+.home.topleft { position: absolute; top: calc(20px + var(--safe-t)); left: 12px; z-index: 3; }
 
 .field {
   width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent;
@@ -282,8 +284,10 @@ html.rm .frag { animation: none; opacity: .22; }
                         0 0 calc(var(--yes, 0) * 48px) color-mix(in srgb, var(--k) 80%, transparent); }
 .card.top .ph img { filter: grayscale(var(--no, 0)); }
 #s-deck { filter: grayscale(var(--gray, 0)); }
-@property --yes  { syntax: '<number>'; inherits: false; initial-value: 0; }
-@property --no   { syntax: '<number>'; inherits: false; initial-value: 0; }
+/* inherits:true so the .mark and .ph img children (which read var(--yes)/var(--no)
+   for their own opacity/filter) pick up the value animated on the .card itself */
+@property --yes  { syntax: '<number>'; inherits: true;  initial-value: 0; }
+@property --no   { syntax: '<number>'; inherits: true;  initial-value: 0; }
 @property --gray { syntax: '<number>'; inherits: false; initial-value: 0; }
 /* first card: a full demonstration. Slides right and lights up as a like, returns, slides left and greys as a pass. */
 .card.hint { animation: hint 5200ms var(--ease) 450ms 1 both; }
@@ -339,6 +343,7 @@ html.rm .frame img.kb { animation: none; }
 html.locked #s-chat { background: color-mix(in srgb, var(--k) 9%, var(--surf)); }
 .chat-head { display: flex; align-items: center; gap: 12px; padding: calc(16px + var(--safe-t)) 20px 14px; border-bottom: 1px solid color-mix(in srgb, var(--k) 25%, var(--line)); }
 .chat-head .back { position: static; flex: none; margin-left: -6px; }
+.chat-head .home { flex: none; }
 .chat-head img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; background: var(--k); }
 .chat-head .cname { font: 400 24px/1.1 var(--serif); }
 .msgs { flex: 1; overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 10px; }
@@ -399,6 +404,7 @@ html.rm .toast { animation: none; }
     <div class="splash-bg" aria-hidden="true"></div>
     <button class="icon-btn topright" id="sound-toggle" aria-label="Sound on" aria-pressed="true"></button>
     <div class="splash-body">
+      <img class="logo-mark" src="assets/logo/ally-logo.png" alt="">
       <div class="wordmark">Ally</div>
       <h1 class="headline">Someone to talk to. Not a chatbot pretending.</h1>
       <button class="btn primary" id="splash-go">Get started</button>
@@ -568,6 +574,7 @@ html.rm .toast { animation: none; }
 
   <!-- 14 deck -->
   <section class="screen" id="s-deck" data-screen="14">
+    <button class="icon-btn topright home" aria-label="Home"></button>
     <div class="counter" id="counter" aria-live="polite"></div>
     <div class="stage" id="stage" tabindex="0" aria-label="Cards. Right arrow likes, left arrow passes, up arrow expands, Z undoes."></div>
     <div class="deckbar">
@@ -580,6 +587,7 @@ html.rm .toast { animation: none; }
   <!-- 15 proposal -->
   <section class="screen" id="s-proposal" data-screen="15">
     <button class="icon-btn back" data-back-to="deck" aria-label="Back"></button>
+    <button class="icon-btn topright home" aria-label="Home"></button>
     <div class="stack">
       <div class="frame" id="frame">
         <img id="p-still" alt="">
@@ -616,6 +624,7 @@ html.rm .toast { animation: none; }
       <div class="reveal-scrim"></div>
     </div>
     <button class="icon-btn topright" id="r-sound" aria-label="Mute" aria-pressed="false"></button>
+    <button class="icon-btn home topleft" id="r-home" aria-label="Home"></button>
     <div class="reveal-text">
       <h1 class="rname" id="r-name"></h1>
       <p class="rline" id="r-line"></p>
@@ -627,6 +636,7 @@ html.rm .toast { animation: none; }
     <div class="chat-head">
       <button class="icon-btn back" data-back-to="reveal" aria-label="Back"></button>
       <img id="c-avatar" alt=""><div class="cname" id="c-name"></div>
+      <button class="icon-btn home" id="chat-home" aria-label="Home" style="margin-left:auto"></button>
     </div>
     <div class="msgs" id="msgs" aria-live="polite"></div>
     <form class="composer" id="composer">
@@ -1227,8 +1237,10 @@ const ICONS = {
   back: '<svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>',
   soundOn: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M18.5 6.5a8 8 0 0 1 0 11"/></svg>',
   soundOff: '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>',
+  home: '<svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h5v-5h2v5h5v-9"/></svg>',
 };
 $$('.back').forEach(b => { b.innerHTML = ICONS.back; });
+$$('.home').forEach(b => { b.innerHTML = ICONS.home; b.addEventListener('click', () => go(S.splash)); });
 const pickN = (arr, n) => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
 const loadedImages = new Set();
 function preloadPortrait(t) {
@@ -1998,7 +2010,7 @@ function setupReveal() {
   const leave = () => { if (done) return; done = true; go(S.chat); };
   const paintSound = () => setSoundIcon(sound, !video.muted, ['Mute', 'Unmute']);
   sound.addEventListener('click', e => { e.stopPropagation(); video.muted = !video.muted; paintSound(); });
-  screen.addEventListener('click', e => { if (e.target.closest('#r-sound')) return; leave(); });
+  screen.addEventListener('click', e => { if (e.target.closest('#r-sound') || e.target.closest('#r-home')) return; leave(); });
   screen.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); leave(); } });
   video.addEventListener('ended', leave);
   video.addEventListener('error', () => { /* still frame holds; tap continues */ });
