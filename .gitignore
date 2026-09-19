@@ -2,3 +2,20 @@
 ally-assets-v1.3/
 ally-assets-v1.3.zip
 .claude/
+
+# Next.js
+/node_modules
+/.next/
+/out/
+npm-debug.log*
+
+# testing
+/coverage
+/playwright-report/
+/test-results/
+/tests/e2e/__screens__/
+*.tsbuildinfo
+
+# misc
+.DS_Store
+brag-output/

@@ -1,0 +1,60 @@
+.splash,
+.returning {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  gap: 16px;
+}
+
+.logoMark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(0.92);
+  animation: logoIn 600ms var(--ease) forwards;
+}
+
+.logoLarge {
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
+  object-fit: cover;
+}
+
+@keyframes logoIn {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.wordmark {
+  margin: 0;
+}
+
+.headline {
+  font: 400 32px/1.2 var(--serif);
+  max-width: 320px;
+  margin: 8px 0 0;
+}
+
+.actions {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: calc(32px + var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.footer {
+  text-align: center;
+}

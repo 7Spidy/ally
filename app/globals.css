@@ -1,0 +1,298 @@
+/* Tokens, resets, and shared primitives ported near-verbatim from the
+   vanilla build's <style> block. Screen-specific rules live in each
+   screen's own CSS Module. */
+
+:root {
+  --ink: #0a0910;
+  --surf: #151220;
+  --raised: #1d1929;
+  --line: #2c2638;
+  --fg: #f4efe6;
+  --mut: #9a92a6;
+  --dim: #6f6880;
+  --k: #f4efe6; /* the active companion's palette hex; set inline per spec §10.1 */
+  --accent: var(--fg);
+  --on-accent: var(--ink);
+  --sans: var(--font-instrument-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: var(--font-instrument-serif), Georgia, "Times New Roman", serif;
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--fg);
+  font: 400 17px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+  background: none;
+}
+img,
+video {
+  display: block;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ---- reduced motion: applied via [data-rm="1"] on <html>, set client-side ---- */
+html[data-rm="1"] *,
+html[data-rm="1"] *::before,
+html[data-rm="1"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ---- phone frame ---- */
+#app {
+  position: relative;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--surf);
+  isolation: isolate;
+}
+@media (min-width: 500px) {
+  body {
+    display: grid;
+    place-items: center;
+  }
+  #app {
+    width: 390px;
+    height: min(844px, calc(100dvh - 32px));
+    border-radius: 44px;
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.8);
+  }
+}
+
+/* ---- screen transitions ---- */
+@keyframes inFwd {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes outFwd {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-32px);
+    opacity: 0;
+  }
+}
+@keyframes inBack {
+  from {
+    transform: translateX(-32px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes outBack {
+  from {
+    transform: none;
+    opacity: 1;
+  }
+  to {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+}
+@keyframes sheetUp {
+  from {
+    transform: translateY(24px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---- type ---- */
+.q,
+h1,
+h2 {
+  font: 400 32px/1.2 var(--serif);
+  letter-spacing: -0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+h1.big {
+  font-size: 34px;
+}
+.sub {
+  color: var(--mut);
+  margin: 12px 0 0;
+}
+p {
+  margin: 0;
+}
+.meta {
+  font-size: 15.5px;
+  color: var(--mut);
+  line-height: 1.45;
+}
+.wordmark {
+  font: 400 44px/1 var(--serif);
+  letter-spacing: -0.02em;
+}
+.logo-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  object-fit: cover;
+}
+
+/* ---- controls ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  min-height: 56px;
+  width: 100%;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 18px;
+  background: var(--raised);
+  color: var(--fg);
+  transition: opacity 120ms, transform 80ms;
+}
+.btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.btn.secondary {
+  background: transparent;
+  border: 1px solid var(--line);
+}
+.btn.quiet {
+  background: transparent;
+  color: var(--mut);
+  min-height: 48px;
+}
+.btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.btn:not(:disabled):active {
+  transform: scale(0.985);
+}
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(21, 18, 32, 0.55);
+  color: var(--fg);
+  backdrop-filter: blur(8px);
+}
+.icon-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.back {
+  position: absolute;
+  top: calc(20px + var(--safe-t));
+  left: 12px;
+  z-index: 3;
+  background: transparent;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.grow {
+  flex: 1 1 auto;
+}
+.actions {
+  margin-top: auto;
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- sheet base, spec §9.2 ---- */
+.sheetScrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 9, 16, 0.58);
+  z-index: 40;
+  animation: fadeIn 240ms var(--ease) both;
+}
+.sheetPanel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 41;
+  background: var(--raised);
+  border-radius: 28px 28px 0 0;
+  padding: 28px 24px calc(32px + var(--safe-b));
+  box-shadow: 0 -1px 0 var(--line);
+  animation: sheetUp 240ms var(--ease) both;
+  max-width: 390px;
+  margin: 0 auto;
+}
