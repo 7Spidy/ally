@@ -33,12 +33,16 @@ const STEP_TO_PATH: Record<string, string> = {
 /** Boot decision, spec §4.2. Runs once on mount, after AllyProvider's migrate(). */
 export default function BootPage() {
   const router = useRouter();
-  const { state, dispatch } = useAlly();
+  const { state, dispatch, ready } = useAlly();
   const [phase, setPhase] = useState<"deciding" | "first-splash" | "returning-splash">("deciding");
   const ran = useRef(false);
 
   useEffect(() => {
-    if (ran.current) return;
+    // Wait for AllyProvider's post-mount hydration: this effect (a
+    // descendant's) would otherwise fire before AllyProvider's own mount
+    // effect and read the SSR-safe placeholder — always a fresh,
+    // companion-less state — making a one-shot decision from stale data.
+    if (!ready || ran.current) return;
     ran.current = true;
 
     // Discard a stale round-two flow before applying the boot table.
@@ -62,7 +66,7 @@ export default function BootPage() {
     const t = setTimeout(() => router.replace(decision.target), SPLASH_RETURN_MS);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   if (phase === "returning-splash") {
     return (
