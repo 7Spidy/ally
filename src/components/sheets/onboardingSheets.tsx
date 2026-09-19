@@ -5,5 +5,10 @@
  * this map.
  */
 import type { SheetName } from "@/state/SheetProvider";
+import { ConfirmSheet } from "./ConfirmSheet";
+import { AccountSheet } from "./AccountSheet";
 
-export const onboardingSheets: Partial<Record<SheetName, React.ComponentType<Record<string, unknown>>>> = {};
+export const onboardingSheets: Partial<Record<SheetName, React.ComponentType<Record<string, unknown>>>> = {
+  confirm: ConfirmSheet,
+  account: AccountSheet,
+};

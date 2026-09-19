@@ -1,0 +1,77 @@
+.dial {
+  position: relative;
+  width: 300px;
+  max-width: 100%;
+  margin: 24px auto 0;
+  aspect-ratio: 1;
+  touch-action: none;
+}
+
+.dial svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.arc {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.tick {
+  fill: var(--line);
+}
+
+.tickSel {
+  fill: var(--fg);
+}
+
+.thumbDot {
+  fill: var(--fg);
+  stroke: var(--surf);
+  stroke-width: 3;
+}
+
+.label {
+  position: absolute;
+  inset: 24% 14%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.row {
+  height: 26px;
+  line-height: 26px;
+  font: 400 15.5px/26px var(--sans);
+  opacity: 0.32;
+  white-space: nowrap;
+  transition: opacity 160ms;
+}
+
+.rowSel {
+  opacity: 1;
+  font: 400 20px/26px var(--serif);
+}
+
+.kb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 50%;
+  padding: 0;
+  opacity: 0;
+}
+
+.dial:has(.kb:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 6px;
+  border-radius: 50%;
+}

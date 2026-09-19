@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
-import { active, lastOpened } from "@/lib/selectors";
 import { now } from "@/lib/clock";
 import { SPLASH_RETURN_MS } from "@/lib/config";
 import { isBlocked } from "@/lib/migrate";
+import { bootTarget } from "@/lib/boot";
 import styles from "./page.module.css";
 
 const STEP_TO_PATH: Record<string, string> = {
@@ -41,33 +41,25 @@ export default function BootPage() {
     if (ran.current) return;
     ran.current = true;
 
-    if (isBlocked(window.localStorage, now())) {
-      router.replace("/blocked");
-      return;
-    }
-
     // Discard a stale round-two flow before applying the boot table.
     if (state.flow && state.flow.kind === "round2") {
       dispatch({ type: "LEAVE_ROUND2" });
     }
 
-    const activeList = active(state);
-    const hasCompanionEver = state.companions.length > 0 || state.user.accountAt !== null;
+    const decision = bootTarget(state, isBlocked(window.localStorage, now()));
 
-    if (!hasCompanionEver && (!state.flow || state.flow.kind === "first")) {
+    if (decision.phase === "blocked") {
+      router.replace("/blocked");
+      return;
+    }
+
+    if (decision.phase === "first-splash") {
       setPhase("first-splash");
       return;
     }
 
-    if (activeList.length > 0) {
-      setPhase("returning-splash");
-      const target = lastOpened(state);
-      const t = setTimeout(() => router.replace(target ? `/chat/${target.id}` : "/home"), SPLASH_RETURN_MS);
-      return () => clearTimeout(t);
-    }
-
     setPhase("returning-splash");
-    const t = setTimeout(() => router.replace("/home"), SPLASH_RETURN_MS);
+    const t = setTimeout(() => router.replace(decision.target), SPLASH_RETURN_MS);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

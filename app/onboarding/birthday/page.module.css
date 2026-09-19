@@ -1,0 +1,22 @@
+.drums {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 1.2fr;
+  gap: 8px;
+  margin-top: 28px;
+}
+
+.drum {
+  height: 56px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--fg);
+  font-size: 17px;
+  text-align: center;
+  padding: 0 6px;
+}
+
+.drum:focus {
+  outline: none;
+  border-color: var(--accent);
+}

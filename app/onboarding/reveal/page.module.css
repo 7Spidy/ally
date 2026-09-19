@@ -1,0 +1,58 @@
+.wrap {
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  cursor: pointer;
+}
+
+.media {
+  position: absolute;
+  inset: 0;
+}
+
+.still,
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video {
+  opacity: 0;
+  transition: opacity 240ms;
+}
+
+.video.playing {
+  opacity: 1;
+}
+
+.scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40%;
+  background: linear-gradient(to top, var(--k) 0%, color-mix(in srgb, var(--k) 70%, transparent) 45%, transparent 100%);
+}
+
+.text {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: calc(40px + var(--safe-b));
+}
+
+.name {
+  font: 400 54px/1.02 var(--serif);
+  letter-spacing: -0.015em;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.35);
+  margin: 0;
+}
+
+.line {
+  margin-top: 12px;
+  font-size: 17px;
+  opacity: 0.92;
+}

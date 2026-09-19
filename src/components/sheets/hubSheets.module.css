@@ -1,0 +1,76 @@
+.heading {
+  font: 400 26px/1.2 var(--serif);
+  margin: 0 0 10px;
+}
+
+.body {
+  font-size: 15.5px;
+  color: var(--mut);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  background: none;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  border-radius: 14px;
+}
+.listRow:hover {
+  background: var(--surf);
+}
+
+.listName {
+  font-size: 15.5px;
+  color: var(--fg);
+  flex: 1 1 auto;
+}
+
+.tag {
+  font-size: 15.5px;
+  color: var(--mut);
+}
+
+.homeRow {
+  padding: 14px 4px;
+  font-size: 15.5px;
+  color: var(--fg);
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 15.5px;
+  color: var(--mut);
+  margin: 4px 0 8px;
+}
+
+.field {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surf);
+  color: var(--fg);
+  padding: 0 16px;
+  font: inherit;
+  font-size: 15.5px;
+  margin-bottom: 20px;
+}

@@ -1,0 +1,49 @@
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.tile {
+  min-height: 84px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  padding: 16px;
+  text-align: left;
+  font-size: 15.5px;
+  line-height: 1.3;
+  transition: opacity 160ms, background 120ms;
+}
+
+.tile[aria-pressed="true"] {
+  background: var(--fg);
+  color: var(--ink);
+  border-color: var(--fg);
+}
+
+.full .tile[aria-pressed="false"] {
+  opacity: 0.4;
+}
+
+.shake {
+  animation: shake 260ms;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+html[data-rm="1"] .shake {
+  animation: none;
+}

@@ -1,0 +1,15 @@
+.field {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  padding: 14px 0;
+  font: 400 34px/1.2 var(--serif);
+  border-radius: 0;
+  color: var(--fg);
+}
+
+.field:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}

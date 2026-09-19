@@ -1,0 +1,49 @@
+.frame {
+  position: relative;
+  border-radius: 26px;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  background: var(--k);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--k) 45%, transparent), 0 22px 46px -26px var(--k);
+}
+
+.media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+video.media {
+  opacity: 0;
+  transition: opacity 200ms;
+}
+
+video.media.playing {
+  opacity: 1;
+}
+
+.kb {
+  animation: kb 8s ease-in-out infinite alternate;
+}
+
+@keyframes kb {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06) translate(-1.5%, -1%);
+  }
+}
+
+html[data-rm="1"] .kb {
+  animation: none;
+}
+
+.meta {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}

@@ -11,6 +11,7 @@ export const CHIP_THRESHOLD = 10;
 export const PART_PURGE_DAYS = 30;
 export const SPLASH_RETURN_MS = 900;
 export const LONG_PRESS_MS = 500;
+export const BLOCK_DAYS = 180; // under-18 gate: ally_blocked_until = now + BLOCK_DAYS
 
 if (PRICE_SLOT_3 <= PRICE_SLOT_2) {
   throw new Error("config guard: PRICE_SLOT_3 must exceed PRICE_SLOT_2");

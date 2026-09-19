@@ -1,0 +1,124 @@
+.counter {
+  text-align: center;
+  font-size: 15.5px;
+  color: var(--mut);
+  min-height: 24px;
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  margin: 12px 0;
+  min-height: 0;
+}
+
+.stage:focus-visible {
+  outline: none;
+}
+
+.card {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 100%;
+  max-height: 100%;
+  aspect-ratio: 3 / 4;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--k) 45%, transparent), 0 22px 46px -26px var(--k);
+  border-radius: 26px;
+  overflow: hidden;
+  background: var(--k);
+  touch-action: none;
+  user-select: none;
+  will-change: transform;
+}
+
+.card:not(.top) {
+  pointer-events: none;
+}
+
+.under1 {
+  transform: scale(0.96) translateY(10px);
+}
+
+.under2 {
+  transform: scale(0.92) translateY(20px);
+}
+
+.ph {
+  position: absolute;
+  inset: 0;
+  background: var(--k);
+}
+
+.ph::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--k) 0%, color-mix(in srgb, var(--k) 72%, transparent) 26%, transparent 62%);
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+}
+
+.info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 20px 20px;
+  z-index: 1;
+}
+
+.pname {
+  font: 400 30px/1.1 var(--serif);
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.line {
+  font-size: 17px;
+  line-height: 1.4;
+  margin: 2px 0 0;
+}
+
+.read {
+  margin-top: 12px;
+  display: flex;
+  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.card.expanded {
+  aspect-ratio: auto;
+  height: 100%;
+}
+
+.card.expanded .ph::after {
+  background: linear-gradient(to top, var(--k) 0%, color-mix(in srgb, var(--k) 80%, transparent) 40%, transparent 72%);
+}
+
+.collapse {
+  background: rgba(10, 9, 16, 0.35);
+  border: 0;
+  color: var(--fg);
+  border-radius: 999px;
+  padding: 8px 16px;
+  min-height: 40px;
+  font-size: 15.5px;
+}
+
+.deckbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+}
+
+.deckbar .btn {
+  width: auto;
+  min-width: 120px;
+}

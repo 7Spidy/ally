@@ -1,0 +1,36 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.overflowMenu {
+  position: absolute;
+  top: calc(64px + var(--safe-t));
+  right: 16px;
+  z-index: 20;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  min-width: 160px;
+}
+
+.overflowRow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  font-size: 15.5px;
+  background: none;
+  border: 0;
+  color: var(--fg);
+}
+.overflowRow + .overflowRow {
+  border-top: 1px solid var(--line);
+}
+
+.notFound {
+  padding: 24px;
+  color: var(--mut);
+}

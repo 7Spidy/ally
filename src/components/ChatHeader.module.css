@@ -1,0 +1,38 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(16px + var(--safe-t)) 16px 14px;
+  position: relative;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.textCol {
+  min-width: 0;
+}
+
+.name {
+  font: 400 24px/1.15 var(--serif);
+  margin: 0;
+}
+
+.presence {
+  font-size: 15.5px;
+  color: var(--mut);
+  margin: 2px 0 0;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}

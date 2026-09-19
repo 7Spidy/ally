@@ -5,5 +5,14 @@
  * not edit src/components/Sheet.tsx directly — it imports this map.
  */
 import type { SheetName } from "@/state/SheetProvider";
+import { IntroSheet } from "@/components/IntroSheet";
+import { UnlockSheet } from "@/components/UnlockSheet";
+import { LeaveSheet } from "@/components/LeaveSheet";
+import { PaywallSheet } from "@/components/PaywallSheet";
 
-export const ledgerSheets: Partial<Record<SheetName, React.ComponentType<Record<string, unknown>>>> = {};
+export const ledgerSheets: Partial<Record<SheetName, React.ComponentType<Record<string, unknown>>>> = {
+  intro: IntroSheet,
+  unlock: UnlockSheet as React.ComponentType<Record<string, unknown>>,
+  leave: LeaveSheet,
+  paywall: PaywallSheet,
+};

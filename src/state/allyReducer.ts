@@ -30,6 +30,7 @@ export type AllyAction =
   | { type: "ROUTER_LOCK_CLEAR" }
   | { type: "SEND_MESSAGE"; companionId: string; text: string; now: number }
   | { type: "RECEIVE_REPLY"; companionId: string; now: number }
+  | { type: "SEED_OPENER"; companionId: string; text: string; now: number }
   | { type: "OPEN_CHAT"; companionId: string; now: number }
   | { type: "ACCOUNT_SAVE"; contact: string; kind: "phone" | "email"; now: number }
   | { type: "ACCOUNT_DISMISS" }
@@ -215,6 +216,16 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
       return updateCompanion(state, action.companionId, (c) => ({
         ...c,
         messages: [...c.messages, { who: "them", text, at: action.now }],
+        unread: c.unread + 1,
+      }));
+    }
+
+    case "SEED_OPENER": {
+      const companion = state.companions.find((c) => c.id === action.companionId);
+      if (!companion || companion.messages.length > 0) return state;
+      return updateCompanion(state, action.companionId, (c) => ({
+        ...c,
+        messages: [...c.messages, { who: "them", text: action.text, at: action.now }],
         unread: c.unread + 1,
       }));
     }

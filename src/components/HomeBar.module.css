@@ -1,0 +1,39 @@
+.bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: calc(16px + var(--safe-t)) 20px 12px;
+  gap: 8px;
+}
+
+.chip {
+  justify-self: start;
+  font-size: 15.5px;
+  color: var(--mut);
+  background: var(--raised);
+  border-radius: 999px;
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+
+.logo {
+  justify-self: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.monogram {
+  justify-self: end;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--fg);
+  font: 500 15.5px/1 var(--sans);
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

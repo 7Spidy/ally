@@ -3,7 +3,9 @@ import { Instrument_Sans, Instrument_Serif } from "next/font/google";
 import { AllyProvider } from "@/state/AllyProvider";
 import { SheetProvider } from "@/state/SheetProvider";
 import { ManifestProvider } from "@/state/ManifestProvider";
+import { ToastProvider } from "@/state/ToastProvider";
 import { SheetHost } from "@/components/Sheet";
+import { ToastHost } from "@/components/Toast";
 import { DebugPanel } from "@/debug/DebugPanel";
 import "./globals.css";
 
@@ -38,11 +40,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AllyProvider>
           <ManifestProvider>
             <SheetProvider>
-              <div id="app">
-                {children}
-                <DebugPanel />
-              </div>
-              <SheetHost />
+              <ToastProvider>
+                <div id="app">
+                  {children}
+                  <DebugPanel />
+                </div>
+                <SheetHost />
+                <ToastHost />
+              </ToastProvider>
             </SheetProvider>
           </ManifestProvider>
         </AllyProvider>
