@@ -13,6 +13,13 @@ export const SPLASH_RETURN_MS = 900;
 export const LONG_PRESS_MS = 500;
 export const BLOCK_DAYS = 180; // under-18 gate: ally_blocked_until = now + BLOCK_DAYS
 
+// P1 accounts and auth
+export const CONSENT_VERSION = "2026-09-v1";
+export const OTP_LENGTH = 6;
+export const OTP_RESEND_SECONDS = 60;
+export const PASSWORD_MIN = 8;
+export const DELETE_REAUTH_MINUTES = 10;
+
 if (PRICE_SLOT_3 <= PRICE_SLOT_2) {
   throw new Error("config guard: PRICE_SLOT_3 must exceed PRICE_SLOT_2");
 }

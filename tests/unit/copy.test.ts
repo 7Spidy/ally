@@ -80,7 +80,6 @@ describe("copy", () => {
       "Plan",
       "Name",
       "Signed in with",
-      "Phone",
       "Email",
       "Free",
       "Day pass",
@@ -128,6 +127,65 @@ describe("copy", () => {
         expect(s.toUpperCase().includes(b.toUpperCase()), `REPLIES: "${s}" must not contain "${b}"`).toBe(false);
       }
     }
+  });
+
+  it("47. no COPY string contains an em dash (P1 D15), and phone copy is gone", () => {
+    const all = collectStrings(COPY);
+    for (const s of all) {
+      expect(s.includes("—"), `"${s}" must not contain an em dash`).toBe(false);
+      expect(/phone/i.test(s), `"${s}" must not mention a phone`).toBe(false);
+    }
+  });
+
+  it("48. every P1 auth string appears verbatim in COPY", () => {
+    const all = collectStrings(COPY);
+    const expected = [
+      "Couldn't reach Ally. Check your connection and try again.",
+      "Too many tries. Wait a minute and try again.",
+      "That code didn't work. Check it or ask for a new one.",
+      "That code has expired. Ask for a new one.",
+      "We couldn't confirm you're human. Try again.",
+      "Logging in will discard what you've set up on this device. Continue?",
+      "6-digit code",
+      "Resend in {s}s",
+      "Resend code",
+      "Already have an account? Log in",
+      "Send code",
+      "We've sent a 6-digit code to {email}. It's valid for 10 minutes.",
+      "This email already has an account. Log in instead? What you've set up here won't carry over.",
+      "Log in",
+      "Use another email",
+      "Want a password too?",
+      "You can always log in with a code instead.",
+      "Save password",
+      "Skip for now",
+      "Welcome back",
+      "Use password instead",
+      "Use a code instead",
+      "Password",
+      "Forgot password?",
+      "If an account exists for {email}, we've sent a code. It's valid for 10 minutes.",
+      "Email or password is incorrect.",
+      "That link didn't work. Ask for a new code instead.",
+      "Reset your password",
+      "New password",
+      "At least 8 characters",
+      "Update password",
+      "Password updated. You're logged in.",
+      "Account",
+      "Not saved yet",
+      "Save your account",
+      "Set password",
+      "Change password",
+      "Log out",
+      "Log out everywhere",
+      "This logs you out on every device, including this one.",
+      "Delete account",
+      "This permanently deletes your account and everything in it. Type DELETE to continue.",
+      "We've sent a code to {email} to confirm.",
+    ];
+    const missing = expected.filter((s) => !all.includes(s));
+    expect(missing, `missing strings: ${JSON.stringify(missing)}`).toEqual([]);
   });
 
   it("46. PRESENCE has 32 ids x 2 non-empty strings; each REPLIES pool has exactly 4 entries", () => {

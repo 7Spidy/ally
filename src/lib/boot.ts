@@ -17,8 +17,12 @@ export type BootTarget =
   | { phase: "first-choose"; step: string }
   | { phase: "returning-splash"; target: string };
 
-export function bootTarget(state: AllyState, blocked: boolean, now: number): BootTarget {
+export function bootTarget(state: AllyState, blocked: boolean, authed: boolean, now: number): BootTarget {
   if (blocked) return { phase: "blocked" };
+
+  // P1: no Supabase session (anonymous counts) means a fresh first run, whatever
+  // stale state is in memory. Consent is where the session is created.
+  if (!authed) return { phase: "first-splash", step: "consent" };
 
   // A stale round-two flow never survives to this decision; the caller
   // dispatches LEAVE_ROUND2 before calling this, but guard here too so the

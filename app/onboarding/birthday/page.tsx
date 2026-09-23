@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { now } from "@/lib/clock";
-import { BLOCK_KEY } from "@/lib/migrate";
+import { BLOCK_KEY, stateKeyFor } from "@/lib/migrate";
+import { getBrowserClient } from "@/lib/supabase/browser";
+import { useAuth } from "@/state/useAuth";
 import { COPY } from "@/lib/copy";
 import { applyGate } from "@/lib/gate";
 import { invalidationFor } from "../_lib/invalidate";
@@ -21,6 +23,7 @@ export default function BirthdayPage() {
   const router = useRouter();
   const { state, dispatch } = useAlly();
   const toast = useOnboardingToast();
+  const auth = useAuth();
   const thisYear = new Date(now()).getFullYear();
   const years = useMemo(() => {
     const arr: number[] = [];
@@ -44,7 +47,26 @@ export default function BirthdayPage() {
 
   if (!state.flow || state.flow.kind === "round2") return null;
 
-  function onContinue() {
+  async function purgeMinor(uid: string | null) {
+    // Spec §5.5, in order: purge the anonymous user server-side (errors are
+    // logged and ignored, the block must hold offline), drop the local
+    // session, and remove the per-user local state. No minor data is retained.
+    try {
+      const supabase = getBrowserClient();
+      const { error } = await supabase.rpc("purge_self");
+      if (error) console.warn("purge_self failed", error.code);
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (err) {
+      console.warn("purge_self failed", err);
+    }
+    try {
+      if (uid) window.localStorage.removeItem(stateKeyFor(uid));
+    } catch {
+      /* storage blocked */
+    }
+  }
+
+  async function onContinue() {
     if (!state.flow) return;
     const p = (n: number) => String(n).padStart(2, "0");
     const iso = `${year}-${p(month)}-${p(day)}`;
@@ -56,6 +78,7 @@ export default function BirthdayPage() {
       } catch {
         /* storage full or blocked; the block is best-effort */
       }
+      await purgeMinor(auth.user?.id ?? null);
       router.replace("/blocked");
       return;
     }
@@ -100,7 +123,7 @@ export default function BirthdayPage() {
         </div>
       </div>
       <div className="actions">
-        <button type="button" className="btn primary" onClick={onContinue}>
+        <button type="button" className="btn primary" onClick={() => void onContinue()}>
           {COPY.consent.action}
         </button>
       </div>

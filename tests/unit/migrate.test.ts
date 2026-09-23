@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { migrate, isBlocked, SESSION_KEY, STATE_KEY, BLOCK_KEY, type StorageLike } from "@/lib/migrate";
+import { migrate, isBlocked, stateKeyFor, wipeLegacy, SESSION_KEY, STATE_KEY, BLOCK_KEY, type StorageLike } from "@/lib/migrate";
 import { dayKey } from "@/lib/clock";
 
 function fakeStorage(init: Record<string, string> = {}): StorageLike & { setCalls: string[]; dump(): Record<string, string> } {
@@ -332,5 +332,65 @@ describe("migrate", () => {
     expect(isBlocked(future, now)).toBe(true);
     expect(isBlocked(past, now)).toBe(false);
     expect(isBlocked(none, now)).toBe(false);
+  });
+});
+
+describe("per-user keys and wipeLegacy (P1)", () => {
+  const now = 1_700_000_000_000;
+
+  it("stateKeyFor namespaces by uid", () => {
+    expect(stateKeyFor("abc-123")).toBe("ally_v2:abc-123");
+    expect(stateKeyFor("a")).not.toBe(stateKeyFor("b"));
+  });
+
+  it("migrate reads and writes the given key, leaving ally_v2 alone", () => {
+    const storage = fakeStorage();
+    const key = stateKeyFor("u1");
+    const first = migrate(storage, now, key);
+    expect(storage.dump()[key]).toBeDefined();
+    expect(storage.dump()[STATE_KEY]).toBeUndefined();
+    expect(first.flow?.step).toBe("consent");
+    // second call returns the stored value byte for byte
+    expect(migrate(storage, now, key)).toEqual(first);
+  });
+
+  it("two users on one device get separate state", () => {
+    const storage = fakeStorage();
+    const a = migrate(storage, now, stateKeyFor("a"));
+    storage.setItem(stateKeyFor("a"), JSON.stringify({ ...a, user: { ...a.user, displayName: "Alice" } }));
+    const b = migrate(storage, now, stateKeyFor("b"));
+    expect(b.user.displayName).toBe("");
+    expect(migrate(storage, now, stateKeyFor("a")).user.displayName).toBe("Alice");
+  });
+
+  it("a per-user key never inherits the device's v1 ally_session", () => {
+    const v1 = { savedAt: now, state: { screen: 3, displayName: "Legacy", answers: {}, core: {}, locked: null } };
+    const storage = fakeStorage({ [SESSION_KEY]: JSON.stringify(v1) });
+    const out = migrate(storage, now, stateKeyFor("u1"));
+    expect(out.user.displayName).toBe("");
+    expect(out.flow?.step).toBe("consent");
+    expect(storage.dump()[SESSION_KEY]).toBe(JSON.stringify(v1));
+  });
+
+  it("wipeLegacy deletes only the exact ally_v2 key", () => {
+    const m = new Map<string, string>([
+      [STATE_KEY, "legacy"],
+      [stateKeyFor("u1"), "keep"],
+      [BLOCK_KEY, "123"],
+      [SESSION_KEY, "v1"],
+      ["ally_v2x", "keep2"],
+    ]);
+    const removed: string[] = [];
+    wipeLegacy({
+      getItem: (k) => m.get(k) ?? null,
+      setItem: (k, v) => void m.set(k, v),
+      removeItem: (k) => {
+        removed.push(k);
+        m.delete(k);
+      },
+    });
+    expect(removed).toEqual([STATE_KEY]);
+    expect(m.has(STATE_KEY)).toBe(false);
+    expect([...m.keys()].sort()).toEqual([BLOCK_KEY, SESSION_KEY, "ally_v2x", stateKeyFor("u1")].sort());
   });
 });

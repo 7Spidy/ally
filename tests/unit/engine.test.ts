@@ -35,7 +35,7 @@ import { pool as selectorPool } from "@/lib/selectors";
 import { applyGate } from "@/lib/gate";
 import { BLOCK_DAYS, MAX_COMPANIONS } from "@/lib/config";
 import { isBlocked, BLOCK_KEY } from "@/lib/migrate";
-import { addCardState } from "@/lib/addCard";
+import { addCardState, genderPanelInert } from "@/lib/addCard";
 import { invalidationFor } from "../../app/onboarding/_lib/invalidate";
 import manifest from "../../public/assets/manifest.json";
 
@@ -440,14 +440,14 @@ describe("Round two", () => {
     }
   });
 
-  // 42 (a gender panel with an empty pool is inert and unselectable) is a
-  // DOM interaction assertion (a disabled control cannot be focused/clicked)
-  // on the (not-yet-complete) gender-panel component in app/onboarding/**,
-  // which this suite does not import. The underlying rule it renders from —
-  // pool(state, templates, gender).length === 0 — is exercised numerically
-  // by test 40 above; the DOM-level "inert" behavior itself is covered by
-  // Playwright E2E (E3's round-two gender screen).
-  it.skip("42. a gender panel with an empty pool is inert and unselectable (DOM-level; covered by Playwright E3)", () => {});
+  it("42. a gender panel with an empty pool is inert and unselectable", () => {
+    // genderPanelInert() (src/lib/addCard.ts) drives both the disabled attribute
+    // and choose()'s early return in app/onboarding/gender/page.tsx.
+    expect(genderPanelInert(true, 0)).toBe(true);
+    for (const size of [1, 2, 15, 16]) expect(genderPanelInert(true, size)).toBe(false);
+    // First run never disables a panel, whatever the pool.
+    expect(genderPanelInert(false, 0)).toBe(false);
+  });
 
   it("43. CONFIRM_LOCK is the only allyReducer case that appends to companions from flow state", () => {
     const src = require("fs").readFileSync(require("path").join(__dirname, "../../src/state/allyReducer.ts"), "utf8") as string;
