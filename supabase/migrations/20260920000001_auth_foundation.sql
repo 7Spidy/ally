@@ -1,3 +1,5 @@
+create extension if not exists pg_cron;
+
 create type public.user_role   as enum ('user', 'admin');
 create type public.user_status as enum ('active', 'suspended');
 
