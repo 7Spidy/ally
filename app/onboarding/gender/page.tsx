@@ -6,6 +6,7 @@ import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
 import { ManifestGate } from "@/components/ManifestGate";
 import { pool } from "@/lib/selectors";
+import { genderPanelInert } from "@/lib/addCard";
 import { COPY } from "@/lib/copy";
 import type { Gender } from "@/state/schema";
 import { invalidationFor } from "../_lib/invalidate";
@@ -35,7 +36,7 @@ function GenderScreen() {
 
   function choose(g: Gender) {
     if (!state.flow || committing) return;
-    if (isRound2 && ((g === "woman" && womanPool === 0) || (g === "man" && manPool === 0))) return;
+    if (genderPanelInert(isRound2, g === "woman" ? womanPool : manPool)) return;
     setCommitting(true);
     if (g !== state.flow.deckGender) {
       const { patch, changed } = invalidationFor("gender", state.flow);
@@ -50,8 +51,8 @@ function GenderScreen() {
     }, 200);
   }
 
-  const womanDisabled = isRound2 && womanPool === 0;
-  const manDisabled = isRound2 && manPool === 0;
+  const womanDisabled = genderPanelInert(isRound2, womanPool);
+  const manDisabled = genderPanelInert(isRound2, manPool);
 
   return (
     <div className={styles.wrap}>

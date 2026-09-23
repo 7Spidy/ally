@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
+import { useAuth } from "@/state/useAuth";
 import { COPY, fill } from "@/lib/copy";
 import { freeLeft, passActive } from "@/lib/ledger";
 import { formatTimeIST, now } from "@/lib/clock";
@@ -10,6 +11,7 @@ import styles from "./page.module.css";
 export default function SettingsPage() {
   const router = useRouter();
   const { state } = useAlly();
+  const auth = useAuth();
   const onPass = passActive(state.ledger, now());
   const n = freeLeft(state.ledger, now());
 
@@ -34,9 +36,12 @@ export default function SettingsPage() {
           <div className={styles.row}>
             <span className={styles.rowLabel}>{COPY.settings.signedInWith}</span>
             <span className={styles.rowValue}>
-              {state.user.accountKind === "email" ? COPY.settings.signedInEmail : COPY.settings.signedInPhone}
+              {auth.isAnonymous ? COPY.settings.notSaved : auth.email}
             </span>
           </div>
+          <button type="button" className={styles.row} onClick={() => router.push("/settings/account")}>
+            <span className={styles.rowLabel}>{COPY.settings.account}</span>
+          </button>
           <button type="button" className={styles.row} onClick={() => router.push("/settings/privacy")}>
             <span className={styles.rowLabel}>{COPY.settings.privacy}</span>
           </button>

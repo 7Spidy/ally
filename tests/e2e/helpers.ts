@@ -1,4 +1,6 @@
 import { Page, expect } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
 
 export const STATE_KEY = "ally_v2";
 
@@ -115,15 +117,39 @@ export function makeState(opts: MakeStateOpts = {}) {
   };
 }
 
-/** Seeds localStorage['ally_v2'] before any app script runs. */
-export async function seedState(page: Page, state: unknown) {
-  await page.addInitScript((json) => {
-    try {
-      window.localStorage.setItem("ally_v2", json as string);
-    } catch {
-      /* ignore */
-    }
-  }, JSON.stringify(state));
+/** P1: state is namespaced per Supabase user. */
+export function stateKeyFor(uid: string) {
+  return `${STATE_KEY}:${uid}`;
+}
+
+/**
+ * Bootstraps a real anonymous Supabase session for this browser context via
+ * the E2E-only route (it sets the session cookies) and returns the user id.
+ */
+export async function createTestSession(page: Page): Promise<string> {
+  const res = await page.request.get("/api/test/session");
+  expect(res.ok(), `/api/test/session failed: ${res.status()} ${await res.text()}`).toBe(true);
+  const body = (await res.json()) as { userId: string };
+  return body.userId;
+}
+
+/**
+ * Creates an anonymous session, then seeds localStorage['ally_v2:<userId>']
+ * before any app script runs. Returns the user id.
+ */
+export async function seedState(page: Page, state: unknown): Promise<string> {
+  const userId = await createTestSession(page);
+  await page.addInitScript(
+    ({ key, json }) => {
+      try {
+        window.localStorage.setItem(key, json);
+      } catch {
+        /* ignore */
+      }
+    },
+    { key: stateKeyFor(userId), json: JSON.stringify(state) }
+  );
+  return userId;
 }
 
 /** Wires window.__allyClock to a fixed ms value before app scripts run. */
@@ -331,4 +357,39 @@ export async function driveMatchingThroughChat(page: Page, { reducedMotion = fal
   await page.locator('[role="button"][aria-label="Continue"]').click();
 
   await page.waitForURL(/\/chat\//, { timeout: 15000 });
+}
+
+// ---- P1 auth helpers ----
+
+export function uniqueEmail(): string {
+  return `e2e+${randomUUID()}@redream.in`;
+}
+
+/** Service-role client for arranging and asserting server state. Test process only. */
+export function adminClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL as string, process.env.SUPABASE_SECRET_KEY as string, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** Creates a confirmed user (optionally with a password) without sending any mail. */
+export async function createUser(email: string, password?: string): Promise<string> {
+  const { data, error } = await adminClient().auth.admin.createUser({ email, password, email_confirm: true });
+  if (error || !data.user) throw error ?? new Error("createUser failed");
+  return data.user.id;
+}
+
+/** Types a 6-digit code into the CodeInput on screen. */
+export async function fillCode(page: Page, code: string) {
+  await page.getByLabel("6-digit code, digit 1").click();
+  await page.keyboard.type(code);
+}
+
+/** Password login through the real /login screen. Lands on /home for a user with no companions. */
+export async function loginWithPassword(page: Page, email: string, password: string) {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Use password instead" }).click();
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
 }

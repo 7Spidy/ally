@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Sans, Instrument_Serif } from "next/font/google";
+import { AuthProvider } from "@/state/AuthProvider";
 import { AllyProvider } from "@/state/AllyProvider";
 import { SheetProvider } from "@/state/SheetProvider";
 import { ManifestProvider } from "@/state/ManifestProvider";
@@ -37,20 +38,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${instrumentSans.variable} ${instrumentSerif.variable}`}>
       <body>
-        <AllyProvider>
-          <ManifestProvider>
-            <SheetProvider>
-              <ToastProvider>
-                <div id="app">
-                  {children}
-                  <DebugPanel />
-                </div>
-                <SheetHost />
-                <ToastHost />
-              </ToastProvider>
-            </SheetProvider>
-          </ManifestProvider>
-        </AllyProvider>
+        <AuthProvider>
+          <AllyProvider>
+            <ManifestProvider>
+              <SheetProvider>
+                <ToastProvider>
+                  <div id="app">
+                    {children}
+                    <DebugPanel />
+                  </div>
+                  <SheetHost />
+                  <ToastHost />
+                </ToastProvider>
+              </SheetProvider>
+            </ManifestProvider>
+          </AllyProvider>
+        </AuthProvider>
       </body>
     </html>
   );

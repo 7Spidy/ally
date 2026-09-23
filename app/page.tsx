@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
+import { useAuth } from "@/state/useAuth";
+import { COPY } from "@/lib/copy";
 import { now } from "@/lib/clock";
 import { SPLASH_RETURN_MS } from "@/lib/config";
-import { isBlocked } from "@/lib/migrate";
+import { isBlocked, wipeLegacy } from "@/lib/migrate";
 import { bootTarget } from "@/lib/boot";
 import styles from "./page.module.css";
 
@@ -34,6 +37,7 @@ const STEP_TO_PATH: Record<string, string> = {
 export default function BootPage() {
   const router = useRouter();
   const { state, dispatch, ready } = useAlly();
+  const auth = useAuth();
   const [phase, setPhase] = useState<"deciding" | "first-splash" | "first-choose" | "returning-splash">("deciding");
   const ran = useRef(false);
 
@@ -50,7 +54,15 @@ export default function BootPage() {
       dispatch({ type: "LEAVE_ROUND2" });
     }
 
-    const decision = bootTarget(state, isBlocked(window.localStorage, now()), now());
+    // P1 (spec D12): the un-namespaced legacy `ally_v2` key is deleted once, on
+    // first boot of this build. No import, and only that exact key.
+    try {
+      wipeLegacy(window.localStorage);
+    } catch {
+      /* storage blocked */
+    }
+
+    const decision = bootTarget(state, isBlocked(window.localStorage, now()), !!auth.user, now());
 
     if (decision.phase === "blocked") {
       router.replace("/blocked");
@@ -153,6 +165,9 @@ function FirstRunSplash({ onDone }: { onDone: () => void }) {
         <button className="btn primary" onClick={onDone}>
           Get started
         </button>
+        <Link href="/login" className={`meta ${styles.loginLink}`}>
+          {COPY.splash.login}
+        </Link>
         <p className={`meta ${styles.footer}`}>Ally is an AI. Every character here is fictional.</p>
       </div>
     </div>

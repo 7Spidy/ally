@@ -13,9 +13,27 @@ export interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
+export interface RemovableStorage extends StorageLike {
+  removeItem(key: string): void;
+}
+
 export const SESSION_KEY = "ally_session";
+/** The pre-P1, un-namespaced key. Per-user state lives under stateKeyFor(uid). */
 export const STATE_KEY = "ally_v2";
 export const BLOCK_KEY = "ally_blocked_until";
+
+/** P1 (spec §5.2): state is namespaced per Supabase user so two people on one device never share it. */
+export function stateKeyFor(uid: string): string {
+  return STATE_KEY + ":" + uid;
+}
+
+/**
+ * P1 (spec D12): delete the legacy un-namespaced `ally_v2` key. Removes that
+ * exact key only, never `ally_v2:*`, `ally_blocked_until` or `ally_session`.
+ */
+export function wipeLegacy(storage: RemovableStorage): void {
+  storage.removeItem(STATE_KEY);
+}
 
 /** True while a v1 under-18 block is still in force (ported from #ally-engine). */
 export function isBlocked(storage: StorageLike, now: number): boolean {
@@ -100,12 +118,14 @@ function inferAccountKind(contact: string | null): "phone" | "email" | null {
   return contact.includes("@") ? "email" : "phone";
 }
 
-export function migrate(storage: StorageLike, now: number): AllyState {
-  const v2 = tryParse<AllyState>(storage.getItem(STATE_KEY));
+export function migrate(storage: StorageLike, now: number, key: string = STATE_KEY): AllyState {
+  const v2 = tryParse<AllyState>(storage.getItem(key));
   if (v2) return v2;
 
   const day = dayKey(now);
-  const v1 = tryParse<V1Session>(storage.getItem(SESSION_KEY));
+  // The v1 `ally_session` only feeds the legacy un-namespaced key. A
+  // per-user key must never inherit another person's device-local v1 data.
+  const v1 = key === STATE_KEY ? tryParse<V1Session>(storage.getItem(SESSION_KEY)) : null;
 
   let next: AllyState;
 
@@ -204,6 +224,6 @@ export function migrate(storage: StorageLike, now: number): AllyState {
     };
   }
 
-  storage.setItem(STATE_KEY, JSON.stringify(next));
+  storage.setItem(key, JSON.stringify(next));
   return next;
 }

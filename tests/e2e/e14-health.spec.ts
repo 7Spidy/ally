@@ -87,6 +87,9 @@ test.describe("E14 no spinners, no console/network errors", () => {
 
     await page.goto("/home");
     await page.waitForURL("**/home");
+    // "Once loaded": let the auth check, manifest and card images finish before
+    // going offline, or images requested a beat after hydration count as offline failures.
+    await page.waitForLoadState("networkidle");
 
     const health = trackHealth(page);
     await context.setOffline(true);

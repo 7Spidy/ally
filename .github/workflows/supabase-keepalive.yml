@@ -1,0 +1,29 @@
+name: Supabase keep-alive
+
+# Free-tier Supabase projects pause after a week of inactivity. Calling the
+# public.ping() function every 3 days keeps prod and staging awake.
+on:
+  schedule:
+    - cron: "0 3 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping prod
+        env:
+          URL: ${{ secrets.PROD_SUPABASE_URL }}
+          KEY: ${{ secrets.PROD_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          curl -fsS -X POST "$URL/rest/v1/rpc/ping" \
+            -H "apikey: $KEY" \
+            -H "Authorization: Bearer $KEY"
+      - name: Ping staging
+        env:
+          URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          curl -fsS -X POST "$URL/rest/v1/rpc/ping" \
+            -H "apikey: $KEY" \
+            -H "Authorization: Bearer $KEY"

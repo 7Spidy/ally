@@ -12,12 +12,14 @@ import type { SheetName } from "@/state/SheetProvider";
 import { Sheet } from "@/components/Sheet";
 import { useSheet } from "@/state/useSheet";
 import { useAlly } from "@/state/useAlly";
+import { useAuth } from "@/state/useAuth";
+import { getBrowserClient } from "@/lib/supabase/browser";
 import { useManifest } from "@/state/useManifest";
 import { active, byId } from "@/lib/selectors";
 import { firstNameFromFull } from "@/lib/engine";
 import { COPY, fill } from "@/lib/copy";
 import { now } from "@/lib/clock";
-import { SESSION_KEY, BLOCK_KEY } from "@/lib/migrate";
+import { SESSION_KEY, BLOCK_KEY, stateKeyFor } from "@/lib/migrate";
 import styles from "./hubSheets.module.css";
 
 function SwitcherSheet({ currentId }: { currentId?: string }) {
@@ -119,12 +121,36 @@ function PartSheet({ companionId }: { companionId: string }) {
 }
 
 function DeleteSheet() {
-  const { closeSheet } = useSheet();
+  const router = useRouter();
+  const { closeSheet, dismissForNavigation } = useSheet();
   const { dispatch } = useAlly();
+  const auth = useAuth();
+  const [busy, setBusy] = useState(false);
 
-  function confirm() {
+  async function confirm() {
+    // A permanent account is never wiped silently: it goes through the
+    // fresh-code delete flow in Settings > Account instead.
+    if (auth.user && !auth.isAnonymous) {
+      dismissForNavigation();
+      router.replace("/settings/account");
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    const uid = auth.user?.id ?? null;
     dispatch({ type: "DELETE_ALL", now: now() });
+    if (uid) {
+      // Anonymous session: purge the server row, drop the session, then the local key.
+      try {
+        const supabase = getBrowserClient();
+        await supabase.rpc("purge_self");
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        // offline: the nightly job reaps the anonymous row
+      }
+    }
     try {
+      if (uid) window.localStorage.removeItem(stateKeyFor(uid));
       window.localStorage.removeItem(SESSION_KEY);
       window.localStorage.removeItem(BLOCK_KEY);
     } catch {
@@ -143,7 +169,7 @@ function DeleteSheet() {
         <button type="button" className="btn secondary" onClick={closeSheet}>
           {COPY.deleteSheet.keep}
         </button>
-        <button type="button" className="btn primary" onClick={confirm}>
+        <button type="button" className="btn primary" disabled={busy} onClick={() => void confirm()}>
           {COPY.deleteSheet.deleteAll}
         </button>
       </div>

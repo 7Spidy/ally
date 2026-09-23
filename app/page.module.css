@@ -58,3 +58,15 @@
 .footer {
   text-align: center;
 }
+
+.loginLink {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 8px 4px;
+}
+
+.loginLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

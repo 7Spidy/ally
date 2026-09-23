@@ -1,0 +1,34 @@
+.row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.box {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 56px;
+  text-align: center;
+  font-size: 24px;
+  font-family: var(--font-instrument-sans), system-ui, sans-serif;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0;
+}
+
+.box:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.box:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.box:disabled {
+  opacity: 0.5;
+}
