@@ -32,6 +32,11 @@ export interface AllyContextValue {
    * below has carried the in-memory flow across.
    */
   ownerId: string | null;
+  /**
+   * True while the latest get_my_state attempt has failed and a retry is
+   * pending. Cleared when a load succeeds. AllyGate shows it to the user.
+   */
+  loadFailed: boolean;
 }
 
 export const AllyContext = createContext<AllyContextValue | null>(null);
@@ -78,6 +83,7 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   // Bumped to retry a failed server load.
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   // Runs on mount (once auth is ready) and on every identity change. The
   // owner and the state land in one batched render, so the persist effect
@@ -160,10 +166,13 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
         }
         setOwner(uid);
         setHydrated(true);
+        setLoadFailed(false);
         prevAnonRef.current = isAnonymous;
       })
       .catch(() => {
         if (cancelled) return;
+        // Stays set through the retries (no flicker between attempts) until a load succeeds.
+        setLoadFailed(true);
         retry = setTimeout(() => setLoadAttempt((n) => n + 1), LOAD_RETRY_MS);
       });
     return () => {
@@ -186,7 +195,7 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
   }, [state, owner, hydrated]);
 
   const ready = auth.ready && hydrated && owner === uid;
-  const value = useMemo(() => ({ state, dispatch, ready, ownerId: owner }), [state, ready, owner]);
+  const value = useMemo(() => ({ state, dispatch, ready, ownerId: owner, loadFailed }), [state, ready, owner, loadFailed]);
 
   return <AllyContext.Provider value={value}>{children}</AllyContext.Provider>;
 }
