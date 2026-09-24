@@ -7,6 +7,7 @@ import { ManifestProvider } from "@/state/ManifestProvider";
 import { ToastProvider } from "@/state/ToastProvider";
 import { SheetHost } from "@/components/Sheet";
 import { ToastHost } from "@/components/Toast";
+import { AllyGate } from "@/components/AllyGate";
 import { DebugPanel } from "@/debug/DebugPanel";
 import "./globals.css";
 
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <SheetProvider>
                 <ToastProvider>
                   <div id="app">
-                    {children}
+                    <AllyGate>{children}</AllyGate>
                     <DebugPanel />
                   </div>
                   <SheetHost />

@@ -1,9 +1,17 @@
-import type { AllyState, Answers, Companion, Gender, OnboardingFlow } from "@/state/schema";
+import type { AllyState, Answers, Companion, Gender, Ledger, Message, OnboardingFlow } from "@/state/schema";
 import { emptyAnswers, emptyCore, freshFlow } from "@/state/schema";
 import { computeCore } from "@/lib/engine";
-import { rollDay, spend, buyPass as ledgerBuyPass, unlock as ledgerUnlock } from "@/lib/ledger";
-import { PART_PURGE_DAYS, MAX_COMPANIONS } from "@/lib/config";
-import { replyFor } from "@/lib/copy";
+import { MAX_COMPANIONS } from "@/lib/config";
+
+/*
+ * P2 (spec D6): companions, messages and the ledger are server-owned. The
+ * actions that change them (CONFIRM_LOCK, SEND_MESSAGE, RECEIVE_REPLY,
+ * SEED_OPENER, OPEN_CHAT, PART_COMPANION, UNLOCK_SLOT, BUY_PASS,
+ * LEDGER_SYNC, SET_NOTIFY, SET_SOUND) are dispatched only after the matching
+ * RPC in src/lib/supabase/queries.ts succeeds, and carry the server's
+ * confirmed values. Nothing here computes a new ledger or companion on its
+ * own. Onboarding flow and user preference actions stay purely local.
+ */
 
 export type AllyAction =
   | { type: "HYDRATE"; state: AllyState }
@@ -27,29 +35,25 @@ export type AllyAction =
   | { type: "START_ROUND2"; templates: { id: string; gender: Gender }[] }
   | { type: "LEAVE_ROUND2" }
   | { type: "RESET_FIRST_RUN_FLOW" }
-  | { type: "CONFIRM_LOCK"; templateId: string; now: number }
+  | { type: "CONFIRM_LOCK"; companion: Companion }
   | { type: "ROUTER_LOCK_CLEAR" }
-  | { type: "SEND_MESSAGE"; companionId: string; text: string; now: number }
-  | { type: "RECEIVE_REPLY"; companionId: string; now: number }
-  | { type: "SEED_OPENER"; companionId: string; text: string; now: number }
-  | { type: "OPEN_CHAT"; companionId: string; now: number }
+  | { type: "SEND_MESSAGE"; companionId: string; message: Message; exchanges: number; ledger: Ledger }
+  | { type: "RECEIVE_REPLY"; companionId: string; message: Message }
+  | { type: "SEED_OPENER"; companionId: string; message: Message }
+  | { type: "OPEN_CHAT"; companionId: string; lastOpenedAt: number }
   | { type: "ACCOUNT_SAVE"; contact: string; kind: "phone" | "email"; now: number }
   | { type: "ACCOUNT_DISMISS" }
-  | { type: "UNLOCK_SLOT"; amount: number; now: number }
-  | { type: "BUY_PASS"; now: number }
-  | { type: "SPEND_MESSAGE"; now: number }
-  | { type: "PART_COMPANION"; companionId: string; now: number }
+  | { type: "UNLOCK_SLOT"; ledger: Ledger }
+  | { type: "BUY_PASS"; ledger: Ledger }
+  | { type: "LEDGER_SYNC"; ledger: Ledger }
+  | { type: "PART_COMPANION"; companionId: string; partedAt: number; purgeAt: number; ledger: Ledger }
   | { type: "PURGE_PARTED"; now: number }
   | { type: "SET_NOTIFY"; companionId: string; notify: boolean }
   | { type: "SET_SOUND"; companionId: string; sound: boolean }
   | { type: "SET_SOUND_ON"; soundOn: boolean }
   | { type: "SET_UNMUTED"; unmuted: boolean }
   | { type: "DELETE_ALL"; now: number }
-  | { type: "DEBUG_SEED_COMPANION"; companion: Companion }
-  | { type: "DEBUG_FREE_LEFT"; n: number }
-  | { type: "DEBUG_PASS_USED"; n: number }
-  | { type: "DEBUG_START_PASS"; now: number }
-  | { type: "DEBUG_PART_ALL"; now: number };
+  | { type: "DEBUG_SEED_COMPANION"; companion: Companion };
 
 function updateCompanion(state: AllyState, id: string, fn: (c: Companion) => Companion): AllyState {
   return { ...state, companions: state.companions.map((c) => (c.id === id ? fn(c) : c)) };
@@ -179,63 +183,42 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
       return { ...state, flow: freshFlow("first", "consent") };
 
     case "CONFIRM_LOCK": {
+      // The companion row comes back from create_companion, which was sent
+      // the flow's template, gender, answers and core.
       const flow = requireFlow(state);
-      if (!action.templateId) throw new Error("confirmLock without a template");
-      const companion: Companion = {
-        id: "c_" + action.now.toString(36),
-        templateId: action.templateId,
-        deckGender: flow.deckGender as Gender,
-        answers: flow.answers,
-        core: flow.core,
-        createdAt: action.now,
-        lastOpenedAt: action.now,
-        status: "active",
-        partedAt: null,
-        purgeAt: null,
-        messages: [],
-        exchanges: 0,
-        unread: 0,
-        notify: true,
-        sound: true,
-      };
       const displayName = flow.displayName || state.user.displayName;
-      return { ...state, companions: [...state.companions, companion], flow: null, user: { ...state.user, displayName } };
+      return { ...state, companions: [...state.companions, action.companion], flow: null, user: { ...state.user, displayName } };
     }
 
-    case "SEND_MESSAGE": {
-      const now = action.now;
-      let next = updateCompanion(state, action.companionId, (c) => ({
-        ...c,
-        messages: [...c.messages, { who: "me", text: action.text, at: now }],
-        exchanges: c.exchanges + 1,
-      }));
-      next = { ...next, ledger: spend(rollDay(next.ledger, now), now) };
-      return next;
-    }
+    case "SEND_MESSAGE":
+      return {
+        ...updateCompanion(state, action.companionId, (c) => ({
+          ...c,
+          messages: [...c.messages, action.message],
+          exchanges: action.exchanges,
+        })),
+        ledger: action.ledger,
+      };
 
-    case "RECEIVE_REPLY": {
-      const companion = state.companions.find((c) => c.id === action.companionId);
-      if (!companion || !companion.core.primary) return state;
-      const text = replyFor(companion.core.primary, companion.exchanges);
+    case "RECEIVE_REPLY":
       return updateCompanion(state, action.companionId, (c) => ({
         ...c,
-        messages: [...c.messages, { who: "them", text, at: action.now }],
+        messages: [...c.messages, action.message],
         unread: c.unread + 1,
       }));
-    }
 
     case "SEED_OPENER": {
       const companion = state.companions.find((c) => c.id === action.companionId);
       if (!companion || companion.messages.length > 0) return state;
       return updateCompanion(state, action.companionId, (c) => ({
         ...c,
-        messages: [...c.messages, { who: "them", text: action.text, at: action.now }],
+        messages: [...c.messages, action.message],
         unread: c.unread + 1,
       }));
     }
 
     case "OPEN_CHAT":
-      return updateCompanion(state, action.companionId, (c) => ({ ...c, lastOpenedAt: action.now, unread: 0 }));
+      return updateCompanion(state, action.companionId, (c) => ({ ...c, lastOpenedAt: action.lastOpenedAt, unread: 0 }));
 
     case "ACCOUNT_SAVE":
       return { ...state, user: { ...state.user, accountAt: action.now, accountContact: action.contact, accountKind: action.kind } };
@@ -244,24 +227,19 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
       return { ...state, user: { ...state.user, accountDismissed: state.user.accountDismissed + 1 } };
 
     case "UNLOCK_SLOT":
-      return { ...state, ledger: ledgerUnlock(state.ledger, action.amount, action.now) };
-
     case "BUY_PASS":
-      return { ...state, ledger: ledgerBuyPass(rollDay(state.ledger, action.now), action.now) };
+    case "LEDGER_SYNC":
+      return { ...state, ledger: action.ledger };
 
-    case "SPEND_MESSAGE":
-      return { ...state, ledger: spend(rollDay(state.ledger, action.now), action.now) };
-
-    case "PART_COMPANION": {
-      const purgeAt = action.now + PART_PURGE_DAYS * 86400000;
-      const companion = state.companions.find((c) => c.id === action.companionId);
-      const parted = companion ? [...state.ledger.parted, companion.templateId] : state.ledger.parted;
+    case "PART_COMPANION":
       return {
-        ...updateCompanion(state, action.companionId, (c) => ({ ...c, status: "parted", partedAt: action.now, purgeAt })),
-        ledger: { ...state.ledger, parted },
+        ...updateCompanion(state, action.companionId, (c) => ({ ...c, status: "parted", partedAt: action.partedAt, purgeAt: action.purgeAt })),
+        ledger: action.ledger,
       };
-    }
 
+    // Client-side mirror of ally_private.purge_parted() in the P2 migration.
+    // The server purges before every get_my_state, so the provider no longer
+    // dispatches this; it stays as the reference behaviour the SQL ports.
     case "PURGE_PARTED":
       return {
         ...state,
@@ -294,25 +272,10 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
         flow: freshFlow("first", "consent"),
       };
 
+    // Debug panel only: a companion the panel already created via create_companion.
     case "DEBUG_SEED_COMPANION":
       if (state.companions.filter((c) => c.status === "active").length >= MAX_COMPANIONS) return state;
       return { ...state, companions: [...state.companions, action.companion] };
-
-    case "DEBUG_FREE_LEFT":
-      return { ...state, ledger: { ...state.ledger, freeUsed: Math.max(0, 100 - action.n) } };
-
-    case "DEBUG_PASS_USED":
-      return state.ledger.pass ? { ...state, ledger: { ...state.ledger, pass: { ...state.ledger.pass, used: action.n } } } : state;
-
-    case "DEBUG_START_PASS":
-      return { ...state, ledger: ledgerBuyPass(state.ledger, action.now) };
-
-    case "DEBUG_PART_ALL":
-      return {
-        ...state,
-        companions: state.companions.map((c) => (c.status === "active" ? { ...c, status: "parted", partedAt: action.now, purgeAt: action.now + PART_PURGE_DAYS * 86400000 } : c)),
-        ledger: { ...state.ledger, parted: [...new Set([...state.ledger.parted, ...state.companions.filter((c) => c.status === "active").map((c) => c.templateId)])] },
-      };
 
     default:
       return state;

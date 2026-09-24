@@ -35,6 +35,16 @@ export function wipeLegacy(storage: RemovableStorage): void {
   storage.removeItem(STATE_KEY);
 }
 
+/**
+ * P2 (spec D1, §6.4): companions and the ledger are server-owned. The local
+ * `ally_v2:<uid>` blob keeps only `flow` and `user`; whatever companions or
+ * ledger it holds (including pre-P2 data) are replaced by empty defaults,
+ * never read. Used on both hydrate and persist.
+ */
+export function localOnly(state: AllyState, day: string): AllyState {
+  return { ...state, companions: [], ledger: freshLedger(day) };
+}
+
 /** True while a v1 under-18 block is still in force (ported from #ally-engine). */
 export function isBlocked(storage: StorageLike, now: number): boolean {
   const until = Number(storage.getItem(BLOCK_KEY) || 0);

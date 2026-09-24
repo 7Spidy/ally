@@ -10,6 +10,7 @@ import {
   assertMinFontSize,
   screenshotScreen,
   answerSevenQuestions,
+  serverSnapshot,
 } from "./helpers";
 
 test.describe("E5 part with one companion", () => {
@@ -24,7 +25,7 @@ test.describe("E5 part with one companion", () => {
     });
 
     await setClock(page, FIXED_NOW);
-    await seedState(page, state);
+    const userId = await seedState(page, state);
     const health = trackHealth(page);
 
     await page.goto("/profile/c_e5b");
@@ -78,6 +79,13 @@ test.describe("E5 part with one companion", () => {
     // pool = 16 woman templates - F01 (still active) - F02 (parted, permanently excluded) = 14
     await expect(page.getByText(/^1 of 14$/)).toBeVisible();
     await screenshotScreen(page, "e5-03-deck-excludes-parted-face");
+
+    // P2: the part went through part_companion; the exclusion the deck just
+    // applied comes from the server's ledger_parted.
+    const snap = await serverSnapshot(userId);
+    expect(snap.companions.find((c) => c.id === "c_e5b")).toMatchObject({ status: "parted" });
+    expect(snap.companions.find((c) => c.id === "c_e5a")).toMatchObject({ status: "active" });
+    expect(snap.parted).toEqual(["F02"]);
 
     await assertMinFontSize(page);
     assertHealthy(health);

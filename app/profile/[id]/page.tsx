@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
 import { useManifest } from "@/state/useManifest";
+import { useCompanionPrefs } from "@/state/useCompanionPrefs";
 import { ManifestGate } from "@/components/ManifestGate";
 import { byId } from "@/lib/selectors";
 import { COPY, fill } from "@/lib/copy";
@@ -24,7 +25,8 @@ function ProfileContent() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const router = useRouter();
-  const { state, dispatch } = useAlly();
+  const { state } = useAlly();
+  const { setNotify, setSound } = useCompanionPrefs();
   const { openSheet } = useSheet();
   const { templates } = useManifest();
 
@@ -71,7 +73,7 @@ function ProfileContent() {
             role="switch"
             aria-checked={companion.notify}
             aria-label={COPY.profile.notifications}
-            onClick={() => dispatch({ type: "SET_NOTIFY", companionId: companion.id, notify: !companion.notify })}
+            onClick={() => setNotify(companion.id, !companion.notify)}
           >
             <span className={styles.toggleKnob} />
           </button>
@@ -85,7 +87,7 @@ function ProfileContent() {
             role="switch"
             aria-checked={companion.sound}
             aria-label={COPY.profile.messageSound}
-            onClick={() => dispatch({ type: "SET_SOUND", companionId: companion.id, sound: !companion.sound })}
+            onClick={() => setSound(companion.id, !companion.sound)}
           >
             <span className={styles.toggleKnob} />
           </button>

@@ -10,6 +10,7 @@ import {
   screenshotScreen,
   answerSevenQuestions,
   assertMinFontSize,
+  serverSnapshot,
 } from "./helpers";
 
 test.describe("E4 third companion hits slot-3 unlock, then home shows cap card", () => {
@@ -22,7 +23,7 @@ test.describe("E4 third companion hits slot-3 unlock, then home shows cap card",
     });
 
     await setClock(page, FIXED_NOW);
-    await seedState(page, state);
+    const userId = await seedState(page, state);
     const health = trackHealth(page);
 
     await page.goto("/home");
@@ -67,6 +68,15 @@ test.describe("E4 third companion hits slot-3 unlock, then home shows cap card",
     await expect(page.getByText("That's three")).toBeVisible();
     await expect(page.getByText("Three companions is the most Ally keeps at once.")).toBeVisible();
     await assertMinFontSize(page);
+
+    // P2: the unlock and the third companion are server rows.
+    const snap = await serverSnapshot(userId);
+    expect(snap.ledger).toMatchObject({ slots_unlocked: 3 });
+    expect(snap.unlocks.map((u) => [u.slot, u.amount])).toEqual([
+      [2, 199],
+      [3, 349],
+    ]);
+    expect(snap.companions.filter((c) => c.status === "active")).toHaveLength(3);
 
     assertHealthy(health);
   });

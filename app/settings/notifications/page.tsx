@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
+import { useCompanionPrefs } from "@/state/useCompanionPrefs";
 import { ManifestGate } from "@/components/ManifestGate";
 import { active } from "@/lib/selectors";
 import { COPY } from "@/lib/copy";
@@ -19,7 +20,8 @@ export default function NotificationsSettingsPage() {
 
 function NotificationsContent() {
   const router = useRouter();
-  const { state, dispatch } = useAlly();
+  const { state } = useAlly();
+  const { setNotify } = useCompanionPrefs();
   const { templates } = useManifest();
   const activeList = active(state);
 
@@ -46,7 +48,7 @@ function NotificationsContent() {
                 role="switch"
                 aria-checked={c.notify}
                 aria-label={name}
-                onClick={() => dispatch({ type: "SET_NOTIFY", companionId: c.id, notify: !c.notify })}
+                onClick={() => setNotify(c.id, !c.notify)}
               >
                 <span className={styles.toggleKnob} />
               </button>

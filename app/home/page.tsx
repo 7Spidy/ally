@@ -8,7 +8,7 @@ import { ManifestGate } from "@/components/ManifestGate";
 import { active, lastOpened } from "@/lib/selectors";
 import { deckTemplates } from "@/lib/engine";
 import { excludedFaces } from "@/lib/selectors";
-import { now } from "@/lib/clock";
+import { serverNow } from "@/lib/clock";
 import { addCardState } from "@/lib/addCard";
 import { HomeBar } from "@/components/HomeBar";
 import { CompanionCard } from "@/components/CompanionCard";
@@ -98,7 +98,7 @@ function HomeContent() {
 
   return (
     <div className={styles.page}>
-      <HomeBar ledger={state.ledger} now={now()} displayName={state.user.displayName} />
+      <HomeBar ledger={state.ledger} now={serverNow()} displayName={state.user.displayName} />
       <div className={styles.carouselWrap}>
         <div className={styles.carousel} ref={carouselRef} onScroll={handleScroll}>
           {items.map((item) => (

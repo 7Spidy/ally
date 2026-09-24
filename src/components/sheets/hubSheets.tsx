@@ -12,8 +12,10 @@ import type { SheetName } from "@/state/SheetProvider";
 import { Sheet } from "@/components/Sheet";
 import { useSheet } from "@/state/useSheet";
 import { useAlly } from "@/state/useAlly";
+import { useToast } from "@/state/useToast";
 import { useAuth } from "@/state/useAuth";
 import { getBrowserClient } from "@/lib/supabase/browser";
+import { partCompanion } from "@/lib/supabase/queries";
 import { useManifest } from "@/state/useManifest";
 import { active, byId } from "@/lib/selectors";
 import { firstNameFromFull } from "@/lib/engine";
@@ -73,7 +75,9 @@ function PartSheet({ companionId }: { companionId: string }) {
   const { closeSheet, dismissForNavigation } = useSheet();
   const { state, dispatch } = useAlly();
   const { templates } = useManifest();
+  const showToast = useToast();
   const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const companion = byId(state, companionId);
   const template = companion ? templates.find((t) => t.id === companion.templateId) : undefined;
@@ -83,8 +87,19 @@ function PartSheet({ companionId }: { companionId: string }) {
   const obj = template.gender === "woman" ? "her" : "him";
   const matches = typed.trim().toLowerCase() === firstName.toLowerCase();
 
-  function confirm() {
-    dispatch({ type: "PART_COMPANION", companionId, now: now() });
+  async function confirm() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      // P2: part_companion sets the purge date and adds the face to the
+      // permanent exclusion list server-side.
+      const res = await partCompanion(companionId);
+      dispatch({ type: "PART_COMPANION", companionId, partedAt: res.partedAt, purgeAt: res.purgeAt, ledger: res.ledger });
+    } catch {
+      showToast(COPY.auth.network);
+      setBusy(false);
+      return;
+    }
     // dismissForNavigation(), not closeSheet(): see SheetProvider.tsx's
     // dismissForNavigation doc comment — closeSheet()'s async history.back()
     // races this router.replace() and reverts it regardless of call order.
@@ -112,7 +127,7 @@ function PartSheet({ companionId }: { companionId: string }) {
         <button type="button" className="btn secondary" onClick={closeSheet}>
           {fill(COPY.partSheet.keep, { persona: firstName })}
         </button>
-        <button type="button" className="btn primary" disabled={!matches} onClick={confirm}>
+        <button type="button" className="btn primary" disabled={!matches || busy} onClick={() => void confirm()}>
           {COPY.partSheet.part}
         </button>
       </div>
@@ -140,7 +155,8 @@ function DeleteSheet() {
     const uid = auth.user?.id ?? null;
     dispatch({ type: "DELETE_ALL", now: now() });
     if (uid) {
-      // Anonymous session: purge the server row, drop the session, then the local key.
+      // Anonymous session: purge the server row (its companions, messages and
+      // ledger rows cascade with it), drop the session, then the local key.
       try {
         const supabase = getBrowserClient();
         await supabase.rpc("purge_self");
