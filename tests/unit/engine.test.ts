@@ -355,9 +355,28 @@ describe("Flow", () => {
       state = allyReducer(state, { type: "PROPOSE", result: { proposed: "F01", canRedraw: true, mode: "pool" } });
       expect(state.companions.length).toBe(0);
     }
-    const locked = allyReducer(state, { type: "CONFIRM_LOCK", templateId: "F01", now: Date.now() });
+    // P2: CONFIRM_LOCK carries the row create_companion returned.
+    const nowMs = Date.now();
+    const serverCompanion = {
+      id: "c_" + nowMs.toString(36),
+      templateId: "F01",
+      deckGender: state.flow!.deckGender as Gender,
+      answers: state.flow!.answers,
+      core: state.flow!.core,
+      createdAt: nowMs,
+      lastOpenedAt: nowMs,
+      status: "active" as const,
+      partedAt: null,
+      purgeAt: null,
+      messages: [],
+      exchanges: 0,
+      unread: 0,
+      notify: true,
+      sound: true,
+    };
+    const locked = allyReducer(state, { type: "CONFIRM_LOCK", companion: serverCompanion });
     expect(locked.companions.length).toBe(1);
-    expect(locked.companions[0].templateId).toBe("F01");
+    expect(locked.companions[0]).toEqual(serverCompanion);
     expect(locked.flow).toBeNull();
   });
 

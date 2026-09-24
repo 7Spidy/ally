@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { FIXED_NOW, setClock, seedState, makeState, makeCompanion, trackHealth, assertHealthy, screenshotScreen, assertMinFontSize } from "./helpers";
+import { FIXED_NOW, setClock, seedState, makeState, makeCompanion, trackHealth, assertHealthy, screenshotScreen, assertMinFontSize, stateKeyFor } from "./helpers";
 
 test.describe("E6 part with everyone -> zero state", () => {
   test("E6: reload after parting everyone shows returning splash then home zero state", async ({ page }) => {
@@ -18,7 +18,7 @@ test.describe("E6 part with everyone -> zero state", () => {
     });
 
     await setClock(page, FIXED_NOW);
-    await seedState(page, state);
+    const userId = await seedState(page, state);
     const health = trackHealth(page);
 
     await page.goto("/");
@@ -31,6 +31,13 @@ test.describe("E6 part with everyone -> zero state", () => {
     await expect(page.getByText("Meet someone new")).toBeVisible();
     await expect(page.getByText("A few questions, a new face.", { exact: false })).toBeVisible();
     await assertMinFontSize(page);
+
+    // P2: the parted companions exist only in the server tables; the local
+    // blob the app read holds no companions, so the zero state above was
+    // derived from get_my_state.
+    const local = JSON.parse((await page.evaluate((k) => window.localStorage.getItem(k), stateKeyFor(userId))) as string);
+    expect(local.companions).toEqual([]);
+    expect(local.ledger.parted).toEqual([]);
 
     assertHealthy(health);
   });

@@ -5,15 +5,16 @@ import { useAlly } from "@/state/useAlly";
 import { useAuth } from "@/state/useAuth";
 import { COPY, fill } from "@/lib/copy";
 import { freeLeft, passActive } from "@/lib/ledger";
-import { formatTimeIST, now } from "@/lib/clock";
+import { formatTimeIST, serverNow } from "@/lib/clock";
 import styles from "./page.module.css";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { state } = useAlly();
   const auth = useAuth();
-  const onPass = passActive(state.ledger, now());
-  const n = freeLeft(state.ledger, now());
+  // Ledger state is judged on the server's clock (spec D8), never the debug clock.
+  const onPass = passActive(state.ledger, serverNow());
+  const n = freeLeft(state.ledger, serverNow());
 
   return (
     <div className={styles.page}>

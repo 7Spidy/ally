@@ -5,11 +5,22 @@ import { usePathname } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
 import { useManifest } from "@/state/useManifest";
-import { excludedFaces } from "@/lib/selectors";
+import { active, excludedFaces } from "@/lib/selectors";
 import { computeCore } from "@/lib/engine";
-import { now } from "@/lib/clock";
-import type { Answers, Companion, Gender } from "@/state/schema";
+import { buyPass, createCompanion, partCompanion } from "@/lib/supabase/queries";
+import type { Answers, Gender } from "@/state/schema";
 import styles from "./DebugPanel.module.css";
+
+/*
+ * P2 (spec D8): the ledger and companions are server-owned. The clock skips
+ * below still move window.__allyClock, but that now only changes client-side
+ * date formatting; day rollover, pass expiry and purge dates use the
+ * database's now(), which the client cannot skew. The seed, pass and part
+ * actions go through the real RPCs. The old "free left" and "pass used"
+ * overrides are gone: they would only have desynced the cache from the
+ * server. Set those columns on `ledgers` directly (SQL editor or the admin
+ * API) when a test needs them.
+ */
 
 const CLOCK_OFFSET_KEY = "ally_debug_clock_offset_ms";
 
@@ -64,9 +75,12 @@ export function DebugPanel() {
 
   if (!open) return null;
 
-  const nowMs = now();
   const excluded = [...excludedFaces(state)];
   const offset = Number(window.localStorage.getItem(CLOCK_OFFSET_KEY) || "0");
+
+  function logRpcError(err: unknown) {
+    console.warn("debug panel RPC failed", err);
+  }
 
   function seedCompanion() {
     const allowed = templates.filter((t) => !excludedFaces(state).has(t.id));
@@ -74,24 +88,27 @@ export function DebugPanel() {
     const t = allowed[Math.floor(Math.random() * allowed.length)];
     const answers = randomAnswers();
     const core = computeCore(answers);
-    const companion: Companion = {
-      id: "c_" + now().toString(36) + Math.floor(Math.random() * 1e4).toString(36),
-      templateId: t.id,
-      deckGender: t.gender as Gender,
-      answers,
-      core,
-      createdAt: now(),
-      lastOpenedAt: now(),
-      status: "active",
-      partedAt: null,
-      purgeAt: null,
-      messages: [],
-      exchanges: 0,
-      unread: 0,
-      notify: true,
-      sound: true,
-    };
-    dispatch({ type: "DEBUG_SEED_COMPANION", companion });
+    // create_companion still enforces the slot limit.
+    createCompanion({ templateId: t.id, deckGender: t.gender as Gender, answers, core, displayName: "" })
+      .then((companion) => dispatch({ type: "DEBUG_SEED_COMPANION", companion }))
+      .catch(logRpcError);
+  }
+
+  function startPass() {
+    buyPass()
+      .then(({ ledger }) => dispatch({ type: "BUY_PASS", ledger }))
+      .catch(logRpcError);
+  }
+
+  async function partAll() {
+    for (const c of active(state)) {
+      try {
+        const res = await partCompanion(c.id);
+        dispatch({ type: "PART_COMPANION", companionId: c.id, partedAt: res.partedAt, purgeAt: res.purgeAt, ledger: res.ledger });
+      } catch (err) {
+        logRpcError(err);
+      }
+    }
   }
 
   function copyState() {
@@ -144,13 +161,10 @@ export function DebugPanel() {
       <div className={styles.section}>actions</div>
       <div className={styles.actions}>
         <button onClick={seedCompanion}>Seed companion</button>
-        <button onClick={() => dispatch({ type: "DEBUG_FREE_LEFT", n: 1 })}>Free left → 1</button>
-        <button onClick={() => dispatch({ type: "DEBUG_FREE_LEFT", n: 0 })}>Free left → 0</button>
-        <button onClick={() => dispatch({ type: "DEBUG_START_PASS", now: nowMs })}>Start pass</button>
-        <button onClick={() => dispatch({ type: "DEBUG_PASS_USED", n: 1999 })}>Pass used → 1999</button>
-        <button onClick={() => applyClockOffset(86400000)}>Clock +1 day</button>
-        <button onClick={() => applyClockOffset(31 * 86400000)}>Clock +31 days</button>
-        <button onClick={() => dispatch({ type: "DEBUG_PART_ALL", now: nowMs })}>Part all</button>
+        <button onClick={startPass}>Start pass</button>
+        <button onClick={() => applyClockOffset(86400000)}>Clock +1 day (display only)</button>
+        <button onClick={() => applyClockOffset(31 * 86400000)}>Clock +31 days (display only)</button>
+        <button onClick={() => void partAll()}>Part all</button>
         <button onClick={resetSession}>Reset session</button>
         <button onClick={copyState}>Copy state as JSON</button>
       </div>

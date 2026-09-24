@@ -1,4 +1,4 @@
-import { Page, expect } from "@playwright/test";
+import { BrowserContext, Page, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 
@@ -133,12 +133,110 @@ export async function createTestSession(page: Page): Promise<string> {
   return body.userId;
 }
 
+type SeedState = ReturnType<typeof makeState>;
+
+async function must<T extends { error: { message: string } | null }>(label: string, p: PromiseLike<T>): Promise<T> {
+  const res = await p;
+  if (res.error) throw new Error(`seed ${label}: ${res.error.message}`);
+  return res;
+}
+
 /**
- * Creates an anonymous session, then seeds localStorage['ally_v2:<userId>']
- * before any app script runs. Returns the user id.
+ * P2: companions, messages and the ledger are server-owned, so a seeded
+ * state's server part is written to the six tables with the service-role
+ * client (the only way to set arbitrary ledger values; clients have no
+ * write grants). Timestamps are shifted from the test's clock frame
+ * (`state.savedAt`, normally FIXED_NOW) into real time, because the server
+ * judges day rollover, pass expiry and purge dates with its own now(): a
+ * pass that "ends in 20h" or a purge "29 days out" stays exactly that far
+ * from the server's clock. A ledger day equal to the seed's "today" maps to
+ * the real IST today.
  */
-export async function seedState(page: Page, state: unknown): Promise<string> {
+export async function seedServerState(userId: string, state: SeedState): Promise<void> {
+  const admin = adminClient();
+  const shift = Date.now() - state.savedAt;
+  const ts = (ms: number | null | undefined) => (ms === null || ms === undefined ? null : new Date(ms + shift).toISOString());
+  const ledger = state.ledger as unknown as {
+    slotsUnlocked: number;
+    day: string;
+    freeUsed: number;
+    pass: { startedAt: number; endsAt: number; used: number } | null;
+    unlocks: { slot: number; at: number; amount: number }[];
+    passes: { startedAt: number; amount: number }[];
+    parted: string[];
+  };
+
+  if (state.user.displayName) {
+    await must("profile", admin.from("profiles").update({ display_name: state.user.displayName }).eq("id", userId));
+  }
+
+  // Companion ids are global primary keys and specs use fixed ids, so clear
+  // any row a previous run of the same spec left behind.
+  const ids = state.companions.map((c) => c.id);
+  if (ids.length) await must("clear companions", admin.from("companions").delete().in("id", ids));
+  for (const c of state.companions) {
+    await must(
+      "companion",
+      admin.from("companions").insert({
+        id: c.id,
+        user_id: userId,
+        template_id: c.templateId,
+        deck_gender: c.deckGender,
+        answers: c.answers,
+        core: c.core,
+        created_at: ts(c.createdAt),
+        last_opened_at: ts(c.lastOpenedAt),
+        status: c.status,
+        parted_at: ts(c.partedAt),
+        purge_at: ts(c.purgeAt),
+        exchanges: c.exchanges,
+        unread: c.unread,
+        notify: c.notify,
+        sound: c.sound,
+      })
+    );
+    if (c.messages.length) {
+      await must(
+        "messages",
+        admin.from("messages").insert(c.messages.map((m) => ({ companion_id: c.id, user_id: userId, who: m.who, text: m.text, created_at: ts(m.at) })))
+      );
+    }
+  }
+
+  const day = ledger.day === dayKeyIST(state.savedAt) ? dayKeyIST(Date.now()) : ledger.day;
+  await must(
+    "ledger",
+    admin.from("ledgers").upsert({
+      user_id: userId,
+      slots_unlocked: ledger.slotsUnlocked,
+      day,
+      free_used: ledger.freeUsed,
+      pass_started_at: ts(ledger.pass?.startedAt),
+      pass_ends_at: ts(ledger.pass?.endsAt),
+      pass_used: ledger.pass ? ledger.pass.used : null,
+    })
+  );
+  if (ledger.unlocks.length) {
+    await must("unlocks", admin.from("ledger_unlocks").insert(ledger.unlocks.map((u) => ({ user_id: userId, slot: u.slot, at: ts(u.at), amount: u.amount }))));
+  }
+  if (ledger.passes.length) {
+    await must("passes", admin.from("ledger_passes").insert(ledger.passes.map((p) => ({ user_id: userId, started_at: ts(p.startedAt), amount: p.amount }))));
+  }
+  if (ledger.parted.length) {
+    await must("parted", admin.from("ledger_parted").insert(ledger.parted.map((t) => ({ user_id: userId, template_id: t }))));
+  }
+}
+
+/**
+ * Creates an anonymous session, writes the state's companions/messages/
+ * ledger to the server (seedServerState), then seeds the local part (flow
+ * and user) into localStorage['ally_v2:<userId>'] before any app script
+ * runs. Returns the user id.
+ */
+export async function seedState(page: Page, state: SeedState): Promise<string> {
   const userId = await createTestSession(page);
+  await seedServerState(userId, state);
+  const local = { ...state, companions: [], ledger: { ...state.ledger, unlocks: [], parted: [], passes: [], pass: null, freeUsed: 0, slotsUnlocked: 1 } };
   await page.addInitScript(
     ({ key, json }) => {
       try {
@@ -147,7 +245,7 @@ export async function seedState(page: Page, state: unknown): Promise<string> {
         /* ignore */
       }
     },
-    { key: stateKeyFor(userId), json: JSON.stringify(state) }
+    { key: stateKeyFor(userId), json: JSON.stringify(local) }
   );
   return userId;
 }
@@ -392,4 +490,46 @@ export async function loginWithPassword(page: Page, email: string, password: str
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Log in", exact: true }).click();
+}
+
+// ---- P2 server-state helpers ----
+
+/** The server-side rows for one user, read with the service-role client. */
+export async function serverSnapshot(userId: string) {
+  const admin = adminClient();
+  const [companions, messages, ledger, parted, passes, unlocks] = await Promise.all([
+    admin.from("companions").select("*").eq("user_id", userId).order("created_at"),
+    admin.from("messages").select("*").eq("user_id", userId).order("id"),
+    admin.from("ledgers").select("*").eq("user_id", userId).maybeSingle(),
+    admin.from("ledger_parted").select("template_id").eq("user_id", userId),
+    admin.from("ledger_passes").select("*").eq("user_id", userId),
+    admin.from("ledger_unlocks").select("*").eq("user_id", userId),
+  ]);
+  return {
+    companions: (companions.data ?? []) as Record<string, unknown>[],
+    messages: (messages.data ?? []) as { companion_id: string; who: string; text: string }[],
+    ledger: ledger.data as Record<string, unknown> | null,
+    parted: (parted.data ?? []).map((r) => r.template_id as string),
+    passes: passes.data ?? [],
+    unlocks: unlocks.data ?? [],
+  };
+}
+
+/** The access token of a browser context's Supabase session, from its (possibly chunked) cookie. */
+export async function accessTokenFromCookies(context: BrowserContext): Promise<string> {
+  const cookies = (await context.cookies()).filter((c) => /^sb-.*-auth-token(\.\d+)?$/.test(c.name));
+  cookies.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  let raw = cookies.map((c) => c.value).join("");
+  if (raw.startsWith("base64-")) raw = Buffer.from(raw.slice("base64-".length), "base64url").toString("utf8");
+  const session = JSON.parse(raw) as { access_token: string };
+  return session.access_token;
+}
+
+/** A Supabase client acting as the browser context's signed-in user, for calling RPCs directly. */
+export async function userClientFor(context: BrowserContext) {
+  const token = await accessTokenFromCookies(context);
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL as string, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as string, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
 }

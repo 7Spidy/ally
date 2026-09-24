@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
@@ -8,7 +9,7 @@ import { useToast } from "@/state/useToast";
 import { Sheet } from "@/components/Sheet";
 import { COPY, fill } from "@/lib/copy";
 import { PRICE_SLOT_2, PRICE_SLOT_3 } from "@/lib/config";
-import { now } from "@/lib/clock";
+import { unlockSlot } from "@/lib/supabase/queries";
 import styles from "./UnlockSheet.module.css";
 
 /**
@@ -22,13 +23,24 @@ export function UnlockSheet({ slot }: { slot: number }) {
   const { templates } = useManifest();
   const showToast = useToast();
   const router = useRouter();
+  const [busy, setBusy] = useState(false);
 
   const price = slot === 2 ? PRICE_SLOT_2 : PRICE_SLOT_3;
   const body = slot === 2 ? COPY.unlockSheet.bodySlot2 : COPY.unlockSheet.bodySlot3;
 
-  function handleUnlock() {
-    // Mocked payment (spec §2): any tap succeeds locally.
-    dispatch({ type: "UNLOCK_SLOT", amount: price, now: now() });
+  async function handleUnlock() {
+    // Mocked payment (spec §2): any tap succeeds. P2: unlock_slot records the
+    // unlock server-side and returns the ledger it now holds.
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { ledger } = await unlockSlot(price);
+      dispatch({ type: "UNLOCK_SLOT", ledger });
+    } catch {
+      showToast(COPY.auth.network);
+      setBusy(false);
+      return;
+    }
     showToast(COPY.unlockSheet.toast);
     // Continue the round-two sequence deferred from IntroSheet (§8.2 step 4).
     dispatch({ type: "START_ROUND2", templates });
@@ -58,7 +70,7 @@ export function UnlockSheet({ slot }: { slot: number }) {
         <span>{fill(COPY.unlockSheet.priceValue, { price })}</span>
       </div>
       <div className="actions">
-        <button type="button" className="btn primary" onClick={handleUnlock}>
+        <button type="button" className="btn primary" disabled={busy} onClick={() => void handleUnlock()}>
           {COPY.unlockSheet.unlock}
         </button>
         <button type="button" className="btn quiet" onClick={handleNotNow}>

@@ -9,6 +9,7 @@ import {
   assertHealthy,
   assertMinFontSize,
   screenshotScreen,
+  serverSnapshot,
 } from "./helpers";
 
 test.describe("E8 pass cap -> done for the night", () => {
@@ -22,7 +23,7 @@ test.describe("E8 pass cap -> done for the night", () => {
     });
 
     await setClock(page, FIXED_NOW);
-    await seedState(page, state);
+    const userId = await seedState(page, state);
     const health = trackHealth(page);
 
     await page.goto("/chat/c_e8");
@@ -35,6 +36,11 @@ test.describe("E8 pass cap -> done for the night", () => {
     await expect(page.getByLabel("Message")).toHaveCount(0);
     await screenshotScreen(page, "e8-01-done-for-the-night");
     await assertMinFontSize(page);
+
+    // P2: the cap was reached server-side (send_message debited the pass).
+    const snap = await serverSnapshot(userId);
+    expect(snap.ledger).toMatchObject({ pass_used: 2000 });
+    expect(snap.messages.filter((m) => m.who === "me").map((m) => m.text)).toEqual(["One more before the cap"]);
 
     assertHealthy(health);
   });

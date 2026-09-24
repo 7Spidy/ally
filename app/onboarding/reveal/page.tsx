@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
+import { useToast } from "@/state/useToast";
 import { ManifestGate } from "@/components/ManifestGate";
-import { now } from "@/lib/clock";
+import { createCompanion } from "@/lib/supabase/queries";
+import { COPY } from "@/lib/copy";
+import type { Gender } from "@/state/schema";
 import styles from "./page.module.css";
 
 const REDUCED_MOTION_MIN_HOLD_MS = 1600;
@@ -37,6 +40,7 @@ function RevealScreen() {
   const router = useRouter();
   const { state, dispatch } = useAlly();
   const { templates } = useManifest();
+  const showToast = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(!state.user.soundOn);
   const [playing, setPlaying] = useState(false);
@@ -46,13 +50,26 @@ function RevealScreen() {
   const flow = state.flow;
   const template = flow?.proposed ? templates.find((t) => t.id === flow.proposed) : undefined;
 
-  const leave = () => {
+  // P2: the companion is created server-side in one call (spec D5); the chat
+  // route uses the id create_companion generated. On failure the user stays
+  // here and can tap again.
+  const leave = async () => {
     if (done.current || !flow?.proposed || !canLeave.current) return;
     done.current = true;
-    const nowMs = now();
-    const id = "c_" + nowMs.toString(36);
-    dispatch({ type: "CONFIRM_LOCK", templateId: flow.proposed, now: nowMs });
-    router.replace("/chat/" + id);
+    try {
+      const companion = await createCompanion({
+        templateId: flow.proposed,
+        deckGender: flow.deckGender as Gender,
+        answers: flow.answers,
+        core: flow.core,
+        displayName: flow.displayName,
+      });
+      dispatch({ type: "CONFIRM_LOCK", companion });
+      router.replace("/chat/" + companion.id);
+    } catch {
+      done.current = false;
+      showToast(COPY.auth.network);
+    }
   };
 
   useEffect(() => {
@@ -94,12 +111,12 @@ function RevealScreen() {
       style={{ ["--k" as string]: template.palette }}
       onClick={(e) => {
         if ((e.target as Element).closest("button")) return;
-        leave();
+        void leave();
       }}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          leave();
+          void leave();
         }
       }}
       role="button"
@@ -108,7 +125,7 @@ function RevealScreen() {
     >
       <div className={styles.media} aria-hidden="true">
         <Image src={"/" + template.reveal} alt="" fill sizes="390px" className={styles.still} style={{ objectFit: "cover" }} priority />
-        <video ref={videoRef} playsInline className={`${styles.video} ${playing ? styles.playing : ""}`} onEnded={leave} />
+        <video ref={videoRef} playsInline className={`${styles.video} ${playing ? styles.playing : ""}`} onEnded={() => void leave()} />
       </div>
       <div className={styles.scrim} />
       <button

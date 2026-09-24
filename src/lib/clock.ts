@@ -20,6 +20,22 @@ export function now(): number {
   return Date.now();
 }
 
+// P2 (spec D8): the ledger's day rollover and pass expiry run on the
+// database's clock. Ledger reads in the UI use serverNow(), which ignores
+// window.__allyClock and only corrects for device clock drift, so the chips
+// and composer agree with what send_message will actually allow.
+let serverOffsetMs = 0;
+
+/** Records the server's current time (epoch ms) from an RPC response. */
+export function setServerTime(serverMs: number): void {
+  serverOffsetMs = serverMs - Date.now();
+}
+
+/** Best estimate of the database's now(), in ms. Never debug-skewed. */
+export function serverNow(): number {
+  return Date.now() + serverOffsetMs;
+}
+
 const KOLKATA_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 /** YYYY-MM-DD for the given instant, in Asia/Kolkata, independent of device timezone. */
