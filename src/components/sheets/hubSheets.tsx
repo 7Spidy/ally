@@ -15,7 +15,7 @@ import { useAlly } from "@/state/useAlly";
 import { useToast } from "@/state/useToast";
 import { useAuth } from "@/state/useAuth";
 import { getBrowserClient } from "@/lib/supabase/browser";
-import { partCompanion } from "@/lib/supabase/queries";
+import { partCompanion, rpcErrorMessage } from "@/lib/supabase/queries";
 import { useManifest } from "@/state/useManifest";
 import { active, byId } from "@/lib/selectors";
 import { firstNameFromFull } from "@/lib/engine";
@@ -95,8 +95,8 @@ function PartSheet({ companionId }: { companionId: string }) {
       // permanent exclusion list server-side.
       const res = await partCompanion(companionId);
       dispatch({ type: "PART_COMPANION", companionId, partedAt: res.partedAt, purgeAt: res.purgeAt, ledger: res.ledger });
-    } catch {
-      showToast(COPY.auth.network);
+    } catch (e) {
+      showToast(rpcErrorMessage(e));
       setBusy(false);
       return;
     }

@@ -8,7 +8,7 @@ import { Sheet } from "@/components/Sheet";
 import { COPY, fill } from "@/lib/copy";
 import { PRICE_DAY_PASS } from "@/lib/config";
 import { formatTimeIST } from "@/lib/clock";
-import { buyPass } from "@/lib/supabase/queries";
+import { buyPass, rpcErrorMessage } from "@/lib/supabase/queries";
 import styles from "./PaywallSheet.module.css";
 
 /**
@@ -33,8 +33,8 @@ export function PaywallSheet() {
       closeSheet();
       // Chat's own re-render picks up passActive() on its next read of
       // state.ledger — nothing else to do here.
-    } catch {
-      showToast(COPY.auth.network);
+    } catch (e) {
+      showToast(rpcErrorMessage(e));
       setBusy(false);
     }
   }

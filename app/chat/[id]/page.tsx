@@ -12,7 +12,7 @@ import { canSend, freeLeft, passActive } from "@/lib/ledger";
 import { openerFor, replyFor, COPY } from "@/lib/copy";
 import { firstNameFromFull } from "@/lib/engine";
 import { serverNow } from "@/lib/clock";
-import { openChat, receiveReply, seedOpener, sendMessage } from "@/lib/supabase/queries";
+import { openChat, receiveReply, rpcErrorMessage, seedOpener, sendMessage } from "@/lib/supabase/queries";
 import type { Pressure } from "@/state/schema";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
@@ -59,7 +59,7 @@ function ChatContent() {
     const companionId = companion.id;
     openChat(companionId)
       .then(({ lastOpenedAt }) => dispatch({ type: "OPEN_CHAT", companionId, lastOpenedAt }))
-      .catch(() => showToast(COPY.auth.network));
+      .catch((e) => showToast(rpcErrorMessage(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companion?.id]);
 
@@ -78,9 +78,9 @@ function ChatContent() {
       .then(({ message }) => {
         if (message) dispatch({ type: "SEED_OPENER", companionId, message });
       })
-      .catch(() => {
+      .catch((e) => {
         seededRef.current = false;
-        showToast(COPY.auth.network);
+        showToast(rpcErrorMessage(e));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companion?.id, companion?.messages.length]);
@@ -120,8 +120,8 @@ function ChatContent() {
     let res;
     try {
       res = await sendMessage(companionId, text);
-    } catch {
-      showToast(COPY.auth.network);
+    } catch (e) {
+      showToast(rpcErrorMessage(e));
       return;
     }
     if (res.blocked || !res.message) {
@@ -137,7 +137,7 @@ function ChatContent() {
     setTimeout(() => {
       receiveReply(companionId, reply)
         .then(({ message }) => dispatch({ type: "RECEIVE_REPLY", companionId, message }))
-        .catch(() => showToast(COPY.auth.network))
+        .catch((e) => showToast(rpcErrorMessage(e)))
         .finally(() => setTyping(false));
     }, delay);
   }

@@ -4,8 +4,10 @@ import { routeAccess } from "@/lib/authRoutes";
 
 /**
  * Session refresh (the standard @supabase/ssr pattern) plus the route
- * guard: a `session` route with no user redirects to `/`. Anonymous
- * sessions count as sessions.
+ * guard: a `session` or `admin` route with no user redirects to `/`.
+ * Anonymous sessions count as sessions. An `admin` route with a user who
+ * isn't an admin redirects to `/home` (a valid account, just not allowed
+ * here). This is UX only; the admin RPCs enforce is_admin() themselves.
  */
 export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -45,14 +47,23 @@ export async function middleware(request: NextRequest) {
     await supabase.auth.signOut({ scope: "local" });
   }
 
-  if (!hasUser && routeAccess(request.nextUrl.pathname) === "session") {
+  const redirectTo = (pathname: string) => {
     const redirect = request.nextUrl.clone();
-    redirect.pathname = "/";
+    redirect.pathname = pathname;
     redirect.search = "";
     const redirectResponse = NextResponse.redirect(redirect);
     // Carry any cookies the refresh just set (e.g. a cleared session).
     for (const c of response.cookies.getAll()) redirectResponse.cookies.set(c);
     return redirectResponse;
+  };
+
+  const access = routeAccess(request.nextUrl.pathname);
+  if (!hasUser && access !== "public") return redirectTo("/");
+
+  if (access === "admin") {
+    // RLS lets a user read their own profile row.
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user!.id).maybeSingle();
+    if (profile?.role !== "admin") return redirectTo("/home");
   }
 
   return response;

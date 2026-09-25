@@ -126,4 +126,17 @@ describe("ledger", () => {
     const l = buyPass(freshLedger(dayKey(NOW)), NOW);
     expect(l.passes[0].amount).toBe(PRICE_DAY_PASS);
   });
+
+  it("P3: a server-sent freeDaily / passCap (admin override) replaces the defaults", () => {
+    const free = { ...freshLedger(dayKey(NOW)), freeDaily: 5, freeUsed: 4 };
+    expect(freeLeft(free, NOW)).toBe(1);
+    expect(canSend(free, NOW)).toBe("ok");
+    expect(canSend({ ...free, freeUsed: 5 }, NOW)).toBe("empty");
+    // A raised cap lets a user past the global default.
+    expect(canSend({ ...free, freeDaily: FREE_DAILY + 10, freeUsed: FREE_DAILY }, NOW)).toBe("ok");
+
+    const onPass = { ...buyPass(freshLedger(dayKey(NOW)), NOW), passCap: 3 };
+    expect(canSend({ ...onPass, pass: { ...onPass.pass!, used: 2 } }, NOW)).toBe("ok");
+    expect(canSend({ ...onPass, pass: { ...onPass.pass!, used: 3 } }, NOW)).toBe("capped");
+  });
 });

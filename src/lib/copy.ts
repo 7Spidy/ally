@@ -115,6 +115,7 @@ export const COPY = {
   },
   auth: {
     network: "Couldn't reach Ally. Check your connection and try again.",
+    suspended: "Your account is paused, so this can't go through right now.",
     rateLimited: "Too many tries. Wait a minute and try again.",
     wrongCode: "That code didn't work. Check it or ask for a new one.",
     expiredCode: "That code has expired. Ask for a new one.",

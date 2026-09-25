@@ -3,8 +3,7 @@
 import { useCallback } from "react";
 import { useAlly } from "@/state/useAlly";
 import { useToast } from "@/state/useToast";
-import { setCompanionPrefs } from "@/lib/supabase/queries";
-import { COPY } from "@/lib/copy";
+import { rpcErrorMessage, setCompanionPrefs } from "@/lib/supabase/queries";
 
 /**
  * P2: a companion's notify/sound switches live on its server row, so they
@@ -19,7 +18,7 @@ export function useCompanionPrefs() {
     (companionId: string, notify: boolean) => {
       setCompanionPrefs(companionId, { notify })
         .then((res) => dispatch({ type: "SET_NOTIFY", companionId, notify: res.notify }))
-        .catch(() => showToast(COPY.auth.network));
+        .catch((e) => showToast(rpcErrorMessage(e)));
     },
     [dispatch, showToast]
   );
@@ -28,7 +27,7 @@ export function useCompanionPrefs() {
     (companionId: string, sound: boolean) => {
       setCompanionPrefs(companionId, { sound })
         .then((res) => dispatch({ type: "SET_SOUND", companionId, sound: res.sound }))
-        .catch(() => showToast(COPY.auth.network));
+        .catch((e) => showToast(rpcErrorMessage(e)));
     },
     [dispatch, showToast]
   );
