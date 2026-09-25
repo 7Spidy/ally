@@ -9,7 +9,7 @@ import { useToast } from "@/state/useToast";
 import { Sheet } from "@/components/Sheet";
 import { COPY, fill } from "@/lib/copy";
 import { PRICE_SLOT_2, PRICE_SLOT_3 } from "@/lib/config";
-import { unlockSlot } from "@/lib/supabase/queries";
+import { rpcErrorMessage, unlockSlot } from "@/lib/supabase/queries";
 import styles from "./UnlockSheet.module.css";
 
 /**
@@ -36,8 +36,8 @@ export function UnlockSheet({ slot }: { slot: number }) {
     try {
       const { ledger } = await unlockSlot(price);
       dispatch({ type: "UNLOCK_SLOT", ledger });
-    } catch {
-      showToast(COPY.auth.network);
+    } catch (e) {
+      showToast(rpcErrorMessage(e));
       setBusy(false);
       return;
     }

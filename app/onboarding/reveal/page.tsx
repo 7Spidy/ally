@@ -7,8 +7,7 @@ import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
 import { useToast } from "@/state/useToast";
 import { ManifestGate } from "@/components/ManifestGate";
-import { createCompanion } from "@/lib/supabase/queries";
-import { COPY } from "@/lib/copy";
+import { createCompanion, rpcErrorMessage } from "@/lib/supabase/queries";
 import type { Gender } from "@/state/schema";
 import styles from "./page.module.css";
 
@@ -66,9 +65,9 @@ function RevealScreen() {
       });
       dispatch({ type: "CONFIRM_LOCK", companion });
       router.replace("/chat/" + companion.id);
-    } catch {
+    } catch (e) {
       done.current = false;
-      showToast(COPY.auth.network);
+      showToast(rpcErrorMessage(e));
     }
   };
 

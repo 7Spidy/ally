@@ -9,11 +9,22 @@
 import type { Answers, Companion, Core, Gender, Ledger, Message } from "@/state/schema";
 import type { SendStatus } from "@/lib/ledger";
 import { getBrowserClient } from "@/lib/supabase/browser";
+import { COPY } from "@/lib/copy";
 
 async function call<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
   const { data, error } = await getBrowserClient().rpc(fn, args);
   if (error) throw error;
   return data as T;
+}
+
+/** P3: raised by every mutating RPC while an admin has suspended the account. */
+export function isSuspendedError(err: unknown): boolean {
+  return (err as { message?: string } | null)?.message === "account_suspended";
+}
+
+/** The toast for a failed RPC: the suspension line, or the network line. */
+export function rpcErrorMessage(err: unknown): string {
+  return isSuspendedError(err) ? COPY.auth.suspended : COPY.auth.network;
 }
 
 export interface ServerState {

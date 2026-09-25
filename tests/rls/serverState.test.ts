@@ -374,7 +374,9 @@ describe("purge and get_my_state", () => {
       ["answers", "core", "createdAt", "deckGender", "exchanges", "id", "lastOpenedAt", "messages", "notify", "partedAt", "purgeAt", "sound", "status", "templateId", "unread"].sort()
     );
     expect(companions[0]).toMatchObject({ id: c.id, templateId: "M03", deckGender: "man", status: "active", answers: ANSWERS, core: CORE });
-    expect(Object.keys(state.ledger as object).sort()).toEqual(["day", "freeUsed", "parted", "pass", "passes", "slotsUnlocked", "unlocks"]);
+    // freeDaily/passCap: P3's effective limits (admin override or default).
+    expect(Object.keys(state.ledger as object).sort()).toEqual(["day", "freeDaily", "freeUsed", "parted", "pass", "passCap", "passes", "slotsUnlocked", "unlocks"]);
+    expect(state.ledger).toMatchObject({ freeDaily: FREE_DAILY, passCap: PASS_CAP });
     expect(state).toHaveProperty("unlocks");
     expect(state).toHaveProperty("passes");
     expect(state).toHaveProperty("parted");

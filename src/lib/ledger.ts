@@ -20,14 +20,14 @@ export function passActive(l: Ledger, now: number): boolean {
 }
 
 export function freeLeft(l: Ledger, now: number): number {
-  return FREE_DAILY - rollDay(l, now).freeUsed;
+  return (l.freeDaily ?? FREE_DAILY) - rollDay(l, now).freeUsed;
 }
 
 export type SendStatus = "ok" | "capped" | "empty";
 
 export function canSend(l: Ledger, now: number): SendStatus {
   if (passActive(l, now)) {
-    return (l.pass as NonNullable<Ledger["pass"]>).used < PASS_CAP ? "ok" : "capped";
+    return (l.pass as NonNullable<Ledger["pass"]>).used < (l.passCap ?? PASS_CAP) ? "ok" : "capped";
   }
   return freeLeft(l, now) > 0 ? "ok" : "empty";
 }

@@ -29,6 +29,15 @@ describe("routeAccess (spec §5.1.6)", () => {
     }
   });
 
+  it("P3: /admin and everything under it is the admin tier", () => {
+    for (const p of ["/admin", "/admin/", "/admin?q=riya", "/admin/users/5b1c", "/admin/users/5b1c#audit"]) {
+      expect(routeAccess(p), p).toBe("admin");
+    }
+    // Lookalikes and the force-logout API (which checks the role itself) are not.
+    expect(routeAccess("/administrator")).toBe("session");
+    expect(routeAccess("/api/admin/force-logout")).toBe("session");
+  });
+
   it("ignores query strings, hashes and a trailing slash", () => {
     expect(routeAccess("/login?email=a%40b.co")).toBe("public");
     expect(routeAccess("/login/reset?step=new")).toBe("public");

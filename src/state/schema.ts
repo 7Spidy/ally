@@ -66,6 +66,11 @@ export interface Ledger {
   parted: string[]; // templateIds, permanent
   day: string; // Asia/Kolkata YYYY-MM-DD
   freeUsed: number;
+  /** P3: this user's effective limits, sent by the server (an admin override,
+   * else the global default). Absent in a locally built ledger, where
+   * FREE_DAILY / PASS_CAP apply. */
+  freeDaily?: number;
+  passCap?: number;
   pass: LedgerPass | null;
   passes: LedgerPassHistory[];
 }
