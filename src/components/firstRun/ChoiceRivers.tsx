@@ -162,7 +162,11 @@ export function ChoiceRivers({ womanIds, manIds, disabled, selected, isRound2, o
     }, HINT_DELAY_MS);
 
     function render() {
-      const th = s.headerP === null ? s.topH : s.topH * Math.pow(1 - s.headerP, 3);
+      // On unmount React detaches the refs during commit, but this passive
+      // effect's cleanup (alive = false) runs later; a frame landing in
+      // between (routing on, under load) must not write to them.
+      if (!rwRef.current) return;
+      const th =s.headerP === null ? s.topH : s.topH * Math.pow(1 - s.headerP, 3);
       if (!s.dirty && s.b === s.lastB && th === s.lastTh) return;
       s.dirty = false;
       s.lastB = s.b;
