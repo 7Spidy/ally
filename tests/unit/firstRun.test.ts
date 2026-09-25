@@ -14,6 +14,7 @@ import {
   RUBBER_START,
   RUBBER_FACTOR,
 } from "@/lib/firstRun/gesture";
+import { fallbackOpacities, DIP_OUT_MS, DIP_TOTAL_MS } from "@/lib/firstRun/fallbackDip";
 
 const ROOT = path.resolve(__dirname, "../..");
 const manifest = JSON.parse(readFileSync(path.join(ROOT, "public/assets/manifest.json"), "utf8")) as {
@@ -163,6 +164,45 @@ describe("gesture helpers", () => {
     expect(hintBalance(0)).toBeCloseTo(0);
     expect(hintBalance(1)).toBeCloseTo(0);
     for (let p = 0; p <= 1; p += 0.05) expect(Math.abs(hintBalance(p))).toBeLessThanOrEqual(0.1);
+  });
+});
+
+describe("fallbackOpacities (splash fallback dip)", () => {
+  const partly = (x: number) => x > 0 && x < 1;
+
+  it("never has both images partly visible at once, 0 to 740 ms", () => {
+    for (let t = 0; t <= 740; t += 0.5) {
+      const { outgoing, incoming } = fallbackOpacities(t);
+      expect(partly(outgoing) && partly(incoming), `t=${t}: out ${outgoing}, in ${incoming}`).toBe(false);
+      expect(outgoing > 0 && incoming > 0, `t=${t}: both visible`).toBe(false);
+    }
+  });
+
+  it("starts on the outgoing face alone", () => {
+    expect(fallbackOpacities(0)).toEqual({ outgoing: 1, incoming: 0 });
+  });
+
+  it("the outgoing face reaches 0 at 320 ms", () => {
+    expect(DIP_OUT_MS).toBe(320);
+    expect(fallbackOpacities(320).outgoing).toBe(0);
+    expect(fallbackOpacities(319).outgoing).toBeGreaterThan(0);
+  });
+
+  it("the incoming face reaches 1 at 740 ms", () => {
+    expect(DIP_TOTAL_MS).toBe(740);
+    expect(fallbackOpacities(740).incoming).toBe(1);
+    expect(fallbackOpacities(739).incoming).toBeLessThan(1);
+    expect(fallbackOpacities(1000)).toEqual({ outgoing: 0, incoming: 1 });
+  });
+
+  it("is monotonic: out only falls, in only rises", () => {
+    let prev = fallbackOpacities(0);
+    for (let t = 1; t <= 740; t++) {
+      const cur = fallbackOpacities(t);
+      expect(cur.outgoing).toBeLessThanOrEqual(prev.outgoing);
+      expect(cur.incoming).toBeGreaterThanOrEqual(prev.incoming);
+      prev = cur;
+    }
   });
 });
 

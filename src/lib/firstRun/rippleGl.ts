@@ -1,9 +1,11 @@
 /**
  * Raw WebGL1 helper and ripple shaders for the first-run splash (first-run
  * visuals spec §4.3). Shaders are verbatim from the approved prototype
- * (docs/specs/first-run-visuals-prototype.html). Do not raise the
- * displacement constants (.014, .004): a stronger version visibly warped a
- * face in testing.
+ * (docs/specs/first-run-visuals-prototype.html), except the splash
+ * fragment: images are sampled with no UV offset, so no face is ever
+ * displaced, and the transition dips the outgoing face fully into a colour
+ * wash before the incoming one appears, so two faces never overlap. The
+ * ripple rings are light only (glint over the wash), never distortion.
  */
 
 export const VERT = `attribute vec2 p;varying vec2 vUv;void main(){vUv=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}`;
@@ -30,18 +32,16 @@ void main(){
   vec2 uv=vUv; float asp=uRes.x/uRes.y;
   vec2 d2=(uv-uC)*vec2(asp,1.); float d=length(d2);
   float R=uP*uMax; float x=d-R;
-  float band=exp(-x*x*240.);
-  float w=sin(x*70.);
-  vec2 dir=d2/max(d,1e-4);
-  float fade=1.-uP*.75;
-  float inner=step(x,0.)*exp(x*9.);
-  vec2 off=dir*(w*band*.014+sin(x*46.)*inner*.004)*uAmp*fade*vec2(1./asp,1.);
-  vec3 a=texture2D(uA,coverBox(uv+off,vec2(0.),vec2(1.),uZa)).rgb;
-  vec3 b=texture2D(uB,coverBox(uv+off,vec2(0.),vec2(1.),uZb)).rgb;
-  float m=smoothstep(.012,-.03,x);
-  vec3 col=mix(a,b,m);
-  float glint=band*(.5+.5*w)*fade*uAmp;
-  col+=uTint*glint*.28+vec3(glint*.15);
+  vec3 a=texture2D(uA,coverBox(uv,vec2(0.),vec2(1.),uZa)).rgb;
+  vec3 b=texture2D(uB,coverBox(uv,vec2(0.),vec2(1.),uZb)).rgb;
+  vec3 k=mix(vec3(.039,.035,.063),uTint,.38);
+  float o=smoothstep(.06,.46,uP), i=smoothstep(.5,.9,uP);
+  vec3 col = uP<.48 ? mix(a,k,o*.94) : mix(k,b,i);
+  float fade=1.-smoothstep(.55,1.,uP);
+  float band=exp(-x*x*160.)*(.55+.45*sin(x*64.));
+  float trail=step(x,0.)*exp(x*4.)*(.5+.5*sin(x*38.));
+  float g=(band+trail*.45)*fade*uAmp;
+  col+=uTint*g*.45+vec3(g*.22);
   gl_FragColor=vec4(col,1.);
 }`;
 

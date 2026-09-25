@@ -38,21 +38,24 @@
   opacity: 1;
 }
 
+.fb {
+  /* the wash between two faces in the fallback dip */
+  background: color-mix(in oklab, var(--k) 38%, #0a0910);
+}
+/* Opacity is driven per frame by fallbackOpacities(); only the Ken Burns
+   zoom is a CSS transition, restarted on the incoming image. */
 .fb img {
   opacity: 0;
   transform: scale(1.07);
-  transition:
-    opacity 0.7s var(--ease),
-    transform 3.2s linear;
+  transition: transform 3.2s linear;
 }
 .fb img.on {
-  opacity: 1;
   transform: scale(1);
 }
 .fb.still img,
 .fb.still img.on {
   transform: none;
-  transition: opacity 0.7s var(--ease);
+  transition: none;
 }
 
 .shade {

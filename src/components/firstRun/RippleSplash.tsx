@@ -8,14 +8,17 @@ import { COPY } from "@/lib/copy";
 import { firstNameFromFull } from "@/lib/engine";
 import { SPLASH_ORDER, revealUrl } from "@/lib/firstRun/order";
 import { A_WELCOME_FRAG, glInit, hexRgb } from "@/lib/firstRun/rippleGl";
+import { DIP_OUT_MS, DIP_TOTAL_MS, fallbackOpacities } from "@/lib/firstRun/fallbackDip";
 import styles from "./RippleSplash.module.css";
 
 /**
  * First-run splash, "Option A, Ripple" (first-run visuals spec §4.3), ported
  * from `A_welcome` in docs/specs/first-run-visuals-prototype.html. One face
- * at a time from all 32 templates; each new face surfaces through a WebGL1
- * water ripple, and a tap on the photo drops a ripple at the finger. Falls
- * back to a crossfade with no WebGL, a lost context, or reduced motion.
+ * at a time from all 32 templates; each face dips into a palette wash under
+ * rising WebGL1 ripple rings before the next surfaces (never overlapping,
+ * never displaced), and a tap on the photo drops a ripple at the finger.
+ * Falls back to the same sequential dip in plain <img> with no WebGL, a lost
+ * context, or reduced motion.
  *
  * Never blocks on the manifest (D9): file names derive from SPLASH_ORDER,
  * and only the caption and scrim tint wait for `templates`.
@@ -25,7 +28,6 @@ const ORDER: readonly string[] = SPLASH_ORDER;
 const N = ORDER.length;
 const DWELL = 1.0; // s, D2
 const T = 0.95; // s, ripple transition, D2
-const FADE_MS = 700; // fallback crossfade
 const CAPTION_DELAY_MS = 140;
 const CAPTION_SWAP_MS = 180;
 const RING_MS = 700;
@@ -200,7 +202,7 @@ export function RippleSplash({ onDone }: { onDone: () => void }) {
       let p = 0;
       if (phase === "dwell") {
         if (queued && start(t, queued)) queued = null;
-        else if (t - t0 >= DWELL) start(t, [0.3 + Math.random() * 0.4, 0.22 + Math.random() * 0.26]);
+        else if (t - t0 >= DWELL) start(t, [0.2 + Math.random() * 0.6, 0.72 + Math.random() * 0.2]);
       }
       if (phase === "trans") {
         p = Math.min(1, (t - t0) / T);
@@ -276,7 +278,7 @@ export function RippleSplash({ onDone }: { onDone: () => void }) {
     };
   }, [mode]);
 
-  // ---- Fallback path: two stacked <img> crossfading ----
+  // ---- Fallback path: two stacked <img>, a sequential dip through the palette wash ----
   useEffect(() => {
     if (mode !== "fallback") return;
     const fb = fbRef.current;
@@ -288,11 +290,13 @@ export function RippleSplash({ onDone }: { onDone: () => void }) {
     let idx = curRef.current;
     let busy = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const dwellMs = (rm ? Math.max(2.4, 2 * DWELL) : DWELL) * 1000 + FADE_MS;
+    let raf = 0;
+    const dwellMs = (rm ? Math.max(2.4, 2 * DWELL) : DWELL) * 1000;
 
-    const show = (el: HTMLImageElement) => {
+    // Ken Burns: restart the zoom on the image that is about to appear.
+    const zoomIn = (el: HTMLImageElement) => {
       el.classList.remove(styles.on);
-      void el.offsetWidth; // restart the Ken Burns transition
+      void el.offsetWidth;
       el.classList.add(styles.on);
     };
     const prefetch = (i: number) => {
@@ -300,29 +304,56 @@ export function RippleSplash({ onDone }: { onDone: () => void }) {
       im.src = revealUrl(ORDER[i % N]);
     };
     imgs[0].src = revealUrl(ORDER[idx]);
-    requestAnimationFrame(() => alive && show(imgs[0]));
+    imgs[0].style.opacity = "1";
+    imgs[1].style.opacity = "0";
+    requestAnimationFrame(() => alive && zoomIn(imgs[0]));
     prefetch(idx + 1);
+
+    function dip(out: HTMLImageElement, inc: HTMLImageElement) {
+      let t0 = 0;
+      let entered = false;
+      const frame = (now: number) => {
+        raf = 0;
+        if (!alive) return;
+        if (!t0) t0 = now;
+        const t = now - t0;
+        const { outgoing, incoming } = fallbackOpacities(t);
+        out.style.opacity = String(outgoing);
+        inc.style.opacity = String(incoming);
+        if (!entered && t > DIP_OUT_MS) {
+          entered = true;
+          out.classList.remove(styles.on);
+          zoomIn(inc);
+        }
+        if (t < DIP_TOTAL_MS) {
+          raf = requestAnimationFrame(frame);
+          return;
+        }
+        busy = false;
+        timer = setTimeout(advance, dwellMs);
+      };
+      raf = requestAnimationFrame(frame);
+    }
 
     function advance() {
       if (!alive || busy) return;
       busy = true;
       clearTimeout(timer);
       const next = (idx + 1) % N;
-      const el = imgs[slot ^ 1];
-      el.src = revealUrl(ORDER[next]);
-      (el.decode ? el.decode() : Promise.resolve())
+      const out = imgs[slot];
+      const inc = imgs[slot ^ 1];
+      inc.style.opacity = "0";
+      inc.src = revealUrl(ORDER[next]);
+      (inc.decode ? inc.decode() : Promise.resolve())
         .catch(() => {})
         .then(() => {
           if (!alive) return;
           idx = next;
           curRef.current = idx;
           slot ^= 1;
-          show(el);
-          imgs[slot ^ 1].classList.remove(styles.on);
-          showFaceRef.current(ORDER[idx], 0);
+          showFaceRef.current(ORDER[idx], 0); // --k switches first, so the wash is the incoming palette
           prefetch(idx + 1);
-          busy = false;
-          timer = setTimeout(advance, dwellMs);
+          dip(out, inc);
         });
     }
     timer = setTimeout(advance, dwellMs);
@@ -331,6 +362,7 @@ export function RippleSplash({ onDone }: { onDone: () => void }) {
     return () => {
       alive = false;
       clearTimeout(timer);
+      cancelAnimationFrame(raf);
       tapRef.current = null;
     };
   }, [mode, rm]);
