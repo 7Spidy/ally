@@ -1,112 +1,335 @@
-# claude_change_spec.md — P2: Server-Side State (Companions, Messages, Ledger)
+# claude_change_spec.md: First-run visuals (Ripple splash + River choice)
 
-Phase 2 of 3. P1 (accounts and auth) is merged and live. P3 (admin console) comes after this. Repo baseline: `main` at `85d7300` plus the `pg_cron` follow-up (`af22fc3`).
+Repo baseline: `main` at `972efac` (P1 and P2 merged). Work on a new branch `first-run-visuals`. Do not merge to `main`.
 
----
-
-## 0. Workflow for this phase (read first)
-
-This phase runs differently from P1. You have full authority to test and ship without waiting for manual confirmation, within the boundaries below.
-
-1. Implement the spec.
-2. Run the full verification suite yourself, in your own sandboxed environment: `npm run lint`, `npm test`, `npm run build` with no env vars, `npm run db:start` + `npm run e2e:env` + `npm run test:rls` + `npm run e2e`. Do not skip the Docker-dependent steps and do not ask the user to run them, spin up local Supabase yourself the same way the P1 session did.
-3. If everything passes: create a new branch `p2-server-state` off current `main`, commit, and push it. **Do not merge to `main` and do not open against any other branch.** Report the branch, the commit hash, and the full verification results.
-4. If anything fails and you cannot fix it after reasonable attempts: do not push anything. Report exactly what failed, the actual error output, and what you tried.
-5. If you find the working tree is not clean `main`, or `claude_change_spec.md` in the repo root is not this document, stop before writing any code and report it, don't guess which spec is correct.
-6. There is no data to preserve. Wipe is intentional and specified below, don't add migration or backward-compatibility logic for existing local data.
+The previous spec in this file (P2: Server-Side State) is archived first: move it to `docs/specs/p2-server-state.md` before replacing this file's contents.
 
 ---
 
-## 1. Context & Goal
+## 1. Context and goal
 
-Right now, after P1, every user has a real identity (anonymous or linked), but their actual data, companions, chat messages, the ledger, onboarding answers, still lives in `localStorage` under `ally_v2:<uid>`. That means logging in on a second device shows an empty app. P2 moves that data to Supabase, so identity and data both travel with the account.
+Two first-run screens get a visual redesign. Logic, routing, state and copy stay as they are; only presentation and interaction change.
 
-**What P2 does NOT change:** chat replies stay mocked (`replyFor` in `src/lib/copy.ts`), no LLM. The onboarding UI, matching engine (`src/lib/engine.ts`), and all screens stay as they are, only where their data lives changes. Payments stay mocked, `PRICE_SLOT_2/3`, `PRICE_DAY_PASS` in `config.ts` remain placeholders, `buyPass`/`unlock` are still triggered by mock purchase flows, not a real gateway.
+1. **First screen** (`FirstRunSplash` in `app/page.tsx`): full-bleed, one face at a time from all 32 templates. Each new face surfaces through a WebGL water ripple; a tap on the photo drops a ripple at the finger and advances. The bottom scrim takes the current face's palette hex. Approved as "Option A, Ripple".
+2. **Choice screen** (`/onboarding/gender`, first run and round two): two horizontal "rivers" of face tiles, women above, men below, split by a draggable line. Drag down to pull the women river in, up for men, or tap a river. Approved as "Option C, Rivers".
+
+The approved interactive prototype is committed alongside this spec at `docs/specs/first-run-visuals-prototype.html`. It is the source of truth for motion, timings and layout. Port `A_welcome`, `C_choose`, `verticalChoice`, `glInit` and the shader strings from it. Ignore options B, `A_choose`, `B_*` and `C_welcome`.
 
 ## 2. Locked decisions
 
 | # | Decision |
 |---|---|
-| D1 | Clean wipe. No migration of existing `ally_v2:<uid>` data, no backward-compat reads of the old local shape. On first load after this ships, every user (including Avi and Babu) starts fresh: no companions, ledger reset to `freshLedger`. |
-| D2 | The ledger is exactly the model in `src/lib/ledger.ts`/`config.ts`: a rolling daily free allowance (`FREE_DAILY`, Asia/Kolkata day via `dayKey`), an optional day pass (`PASS_HOURS`/`PASS_CAP`), slot unlocks (`MAX_COMPANIONS`), and a list of parted (permanently removed) template ids. This is not rebuilt as a generic credits system, it moves as-is onto server tables. |
-| D3 | All mutations that touch the ledger or create/modify a companion or message go through `SECURITY DEFINER` Postgres functions (RPCs), never a direct table write from the client. This is what makes the ledger and any future blocked/suspended checks trustworthy, a client can't just `UPDATE` its own row to grant itself credits. |
-| D4 | `Message` content is stored server-side. There's no LLM yet, but message history is real user data (their side of a mocked conversation) and needs to survive a device switch. |
-| D5 | Onboarding **in-progress** state (deck order, dwell times, likes, redraws, the mid-flow draft) stays in `localStorage`, unnamespaced-per-user is fine since it's pre-account, ephemeral, and abandoning it costs nothing. Only the **committed** result, a created companion at `CONFIRM_LOCK`, is written to the server, atomically, via one RPC. This mirrors D11 from the P1 spec (draft local, atomic commit) and avoids a chatty round trip on every deck swipe. |
-| D6 | The reducer and its unit tests survive. `AllyProvider` keeps a client-side cache (`useReducer`) but every mutating action that touches server-owned state now calls an RPC first, then dispatches the server's confirmed result, it does not optimistically compute the new state and hope the server agrees. Pure local-only actions (deck browsing, toasts, sound toggles pre-account) still dispatch directly. |
-| D7 | `state.user` (display name, consent, account linkage) is already covered by P1's `profiles`/`consents` tables and the `ACCOUNT_SAVE` flow; P2 does not duplicate it. `AllyState.user` in the client cache is populated from the auth session and `profiles`, not persisted separately. |
-| D8 | The debug clock (`window.__allyClock`, `src/debug/DebugPanel.tsx`) only affects client-side date formatting after P2. Server-side day-rollover and pass-expiry math use the database's own `now()`, which cannot be skewed from the client. This is a deliberate behavior change from pre-P2 (where the debug panel could fast-forward the ledger) — call it out in the final report, don't silently degrade the debug panel without saying so. |
-| D9 | Realtime/cross-tab sync is out of scope. A second open tab or device shows stale data until it re-fetches (on navigation or a manual action), no websocket subscription in this phase. |
-| D10 | RLS pattern matches P1: policies plus explicit `GRANT`s on every table (P1 shipped without the grants once already, don't repeat that; write the grants in the same migration as the policies and double check every new table has both). |
+| D1 | Only `FirstRunSplash` changes. The returning splash (`phase === "returning-splash"`) and `FirstRunChoice` ("Still there?") are untouched. |
+| D2 | Timings: 1000 ms dwell per face, 950 ms ripple transition. Names on (first name and city shown on the splash). |
+| D3 | Copy unchanged: headline, Get started, login link, and the disclosure footer at its current size. One new string: `COPY.gender.hint = "Drag the line, or tap one."` |
+| D4 | No video anywhere on these screens. Living portraits stay reserved for the reveal. |
+| D5 | Images are pre-compressed WebP committed to the repo, generated by a script with `sharp` (devDependency only). No `next/image` optimisation for these assets. |
+| D6 | Round two, a gender with zero faces left: that river renders empty and dimmed with the label plus `COPY.round2.genderPoolEmpty` ("No new faces left here"). Its button is `disabled`, a drag toward it cannot commit, a tap does nothing. |
+| D7 | Reduced motion uses the existing pattern: `window.matchMedia("(prefers-reduced-motion: reduce)")`, read on mount. (`html[data-rm]` is never set anywhere in the app; do not rely on it.) |
+| D8 | No new runtime dependencies. WebGL is raw WebGL1, no three.js. |
+| D9 | The splash never blocks on the manifest. Get started must render and work even if `/assets/manifest.json` is loading or failed. |
 
-## 3. Schema
+## 3. Scope
 
-New migration: `supabase/migrations/<next-timestamp>_server_state.sql`. Do not touch `20260920000001_auth_foundation.sql` or its later `pg_cron` fix.
+### Create
 
-| Table | Columns | Notes |
-|---|---|---|
-| `companions` | `id text primary key` (reuse the client's `c_<base36>` format, generated server-side in the create RPC), `user_id uuid references auth.users on delete cascade`, `template_id text`, `deck_gender text`, `answers jsonb`, `core jsonb`, `created_at timestamptz`, `last_opened_at timestamptz`, `status text check (status in ('active','parted'))`, `parted_at timestamptz`, `purge_at timestamptz`, `exchanges int default 0`, `unread int default 0`, `notify boolean default true`, `sound boolean default true` | One row per `Companion` minus `messages` (own table) |
-| `messages` | `id bigint generated always as identity primary key`, `companion_id text references companions(id) on delete cascade`, `user_id uuid references auth.users on delete cascade`, `who text check (who in ('them','me'))`, `text text`, `created_at timestamptz default now()` | `user_id` is denormalized onto the row for a simple RLS check without a join; index on `(companion_id, created_at)` |
-| `ledgers` | `user_id uuid primary key references auth.users on delete cascade`, `slots_unlocked int default 1`, `day text`, `free_used int default 0`, `pass_started_at timestamptz`, `pass_ends_at timestamptz`, `pass_used int`, `updated_at timestamptz default now()` | One row per user, mirrors `Ledger` minus the two history arrays |
-| `ledger_unlocks` | `id bigint generated always as identity primary key`, `user_id uuid references auth.users on delete cascade`, `slot int`, `at timestamptz`, `amount int` | Append-only history of `LedgerUnlock` |
-| `ledger_passes` | `id bigint generated always as identity primary key`, `user_id uuid references auth.users on delete cascade`, `started_at timestamptz`, `amount int` | Append-only history of `LedgerPassHistory` |
-| `ledger_parted` | `user_id uuid references auth.users on delete cascade`, `template_id text`, primary key `(user_id, template_id)` | The `parted: string[]` set, as rows instead of an array so `unlock`/`part` don't need read-modify-write races |
+| Path | Purpose |
+|---|---|
+| `scripts/build-first-run-assets.mjs` | Generates the WebP set and the cropped mark (section 4.1) |
+| `public/assets/first-run/reveal/{ID}.webp` × 32 | Splash images |
+| `public/assets/first-run/tile/{ID}.webp` × 32 | River tiles |
+| `public/assets/first-run/mark.png` | Logo glyph cropped to its bounding box |
+| `src/lib/firstRun/order.ts` | `SPLASH_ORDER` and `riverRows()` |
+| `src/lib/firstRun/gesture.ts` | Pure gesture maths: `applyDrag`, `decideRelease`, spring constants |
+| `src/lib/firstRun/rippleGl.ts` | `glInit` helper and the shader strings |
+| `src/components/firstRun/RippleSplash.tsx` + `.module.css` | First screen visual layer |
+| `src/components/firstRun/ChoiceRivers.tsx` + `.module.css` | Choice screen |
+| `tests/unit/firstRun.test.ts` | Unit tests (section 6) |
+| `tests/e2e/e26-first-run-visuals.spec.ts` | E2E tests (section 6) |
+| `docs/specs/first-run-visuals-prototype.html` | Prototype reference, provided with this spec |
+| `docs/specs/p2-server-state.md` | Archived P2 spec |
 
-RLS on every table: owner-only `select` (`user_id = auth.uid()` or, for `messages`, its own `user_id` column). **No client-side `insert`/`update`/`delete` grants on any of these tables at all** — every write goes through an RPC (D3). Grant `execute` on each RPC to `authenticated` only (not `anon`, since only a real, even if anonymous, Supabase session can call these; anonymous sessions are `authenticated`, this is fine).
+### Modify
 
-## 4. RPCs (all `SECURITY DEFINER`, `set search_path = ''`, schema-qualified inside)
+| Path | Change |
+|---|---|
+| `app/page.tsx` | `FirstRunSplash` renders `RippleSplash`. Boot logic untouched. |
+| `app/page.module.css` | Splash styles move to the new module; keep `.returning` and the `FirstRunChoice` styles. |
+| `app/onboarding/gender/page.tsx` | UI becomes `ChoiceRivers`; the `choose(g)` logic is preserved (section 5.2). |
+| `app/onboarding/gender/page.module.css` | Replace panel styles. |
+| `app/globals.css` | Add `@property --k { syntax: '<color>'; inherits: true; initial-value: #151220; }` |
+| `src/lib/copy.ts` | Add `gender.hint`. |
+| `package.json` | Add `sharp` to devDependencies and script `"assets:first-run": "node scripts/build-first-run-assets.mjs"`. |
 
-| Function | Signature | Behavior |
-|---|---|---|
-| `create_companion` | `(template_id text, deck_gender text, answers jsonb, core jsonb, display_name text)` returns the new companion row | Checks active companion count is within the caller's `slots_unlocked` (from `ledgers`, defaulting to 1 via an upsert if no ledger row exists yet). Generates the id, inserts the companion, updates `profiles.display_name` if `display_name` is non-empty and not already set. Mirrors `CONFIRM_LOCK` in the reducer. |
-| `send_message` | `(companion_id text, body text)` returns `{ message: messages, ledger: ledgers, blocked: boolean }` | One transaction: verify the companion belongs to the caller and is `active`; call the same day-roll/`canSend` logic as `src/lib/ledger.ts` (port it to SQL, see §5); if capped/empty, return `blocked: true` and insert nothing; otherwise insert the `who:'me'` message, increment `exchanges`, debit the ledger (free or pass, matching `spend()`), return the new ledger state. This replaces `SEND_MESSAGE` + `SPEND_MESSAGE`. |
-| `receive_reply` | `(companion_id text, body text)` returns the new message row | Inserts a `who:'them'` message, increments `unread`. Called by the client right after `send_message` succeeds, passing the text `replyFor()` already computed locally (the reply content itself is still generated client-side from `core.primary`/`exchanges`, since there's no LLM; only the persistence moves server-side). |
-| `open_chat` | `(companion_id text)` | Sets `last_opened_at = now()`, `unread = 0`. Mirrors `OPEN_CHAT`. |
-| `part_companion` | `(companion_id text)` | Sets `status='parted'`, `parted_at = now()`, `purge_at = now() + 30 days` (reuse `PART_PURGE_DAYS`, defined as a SQL constant matching `config.ts`, see §5 for the single-source-of-truth approach), inserts into `ledger_parted`. Mirrors `PART_COMPANION`. |
-| `unlock_slot` | `(amount int)` | Increments `ledgers.slots_unlocked` by 1, capped at `MAX_COMPANIONS`, inserts a `ledger_unlocks` row. Mirrors `UNLOCK_SLOT`. This is the mock-purchase hook; the amount is trusted from the client for now since there's no real payment gateway, same trust level as the pre-P2 client-only version had. |
-| `buy_pass` | `()` | No-op if a pass is already active (`pass_ends_at > now()`); otherwise sets `pass_started_at = now()`, `pass_ends_at = now() + PASS_HOURS hours`, `pass_used = 0`, inserts a `ledger_passes` row with `amount = PRICE_DAY_PASS`. Mirrors `BUY_PASS`. |
-| `get_my_state` | `()` returns `{ companions, messages_by_companion, ledger, unlocks, passes, parted }` | One read RPC (or a plain `select` from the client, RLS-protected, is equally fine here since it's read-only, use whichever is simpler to implement correctly) that returns everything needed to hydrate the client cache on boot. Runs the purge-parted logic first (see next row). |
-| `purge_parted_now` | `()` | Server-side equivalent of the `PURGE_PARTED` reducer case: for this user's companions where `status='parted'` and `purge_at <= now()`, clear `messages` (delete the rows) and reset `answers`/`core` to empty, `unread` to 0. Called at the start of `get_my_state` so a stale client always sees purged data, and also runnable by the existing `pg_cron` job (extend the nightly job from P1's migration to call this for every user, or add a second `cron.schedule` entry, either is fine, document which you chose). |
+## 4. Implementation
 
-Port `rollDay`/`canSend`/`spend`/`passActive`/`freeLeft` from `src/lib/ledger.ts` into SQL faithfully, same free/pass/day logic, not a reinterpretation. `dayKey`'s Asia/Kolkata boundary should use `(now() AT TIME ZONE 'Asia/Kolkata')::date` or equivalent, verify this actually matches `Intl.DateTimeFormat` output at the boundary (midnight IST) with a test case in §7.
+### 4.1 Asset script
 
-## 5. Single source of truth for constants
+`scripts/build-first-run-assets.mjs` reads the ids from `public/assets/manifest.json` (`templates[].id`) and for each id writes:
 
-`FREE_DAILY`, `PASS_HOURS`, `PASS_CAP`, `MAX_COMPANIONS`, `PART_PURGE_DAYS` currently live only in `src/lib/config.ts`. SQL functions need the same numbers. Don't hardcode them twice where they can silently drift:
-- Simplest correct option: the migration hardcodes the current values as SQL constants (via a small `create function ally_config_free_daily() returns int language sql immutable as $$ select 100 $$;` per constant, or just inline literals with a prominent comment `-- keep in sync with src/lib/config.ts`), and a new unit test (§7) asserts the TypeScript constants still match a hardcoded expectation, so a change to one side without the other fails CI rather than silently diverging.
-- Pick this or a cleaner mechanism if one is obviously better once you're in the code, but don't leave the two sides with no test tying them together.
+- **reveal**: `public/assets/reveal/{ID}.jpg` (1080×1920) → resize to 540×960, `fit: "cover"`, WebP quality 66, effort 6 → `public/assets/first-run/reveal/{ID}.webp`
+- **tile**: `public/assets/portraits/{ID}.jpg` (720×900) → 432×540, WebP quality 68, effort 6 → `public/assets/first-run/tile/{ID}.webp`
+- **mark**: `public/assets/logo/ally-logo.png` → `extract({ left: 196, top: 145, width: 389, height: 478 })` → resize to height 172 → PNG → `public/assets/first-run/mark.png`
 
-## 6. Client changes
+Expected output is about 33 KB per reveal and 20 KB per tile, roughly 1.7 MB total. The script is idempotent and exits non-zero if any source is missing. Run it once and commit the output. The original JPGs and the video folder are untouched.
 
-### 6.1 Data layer
-- New `src/lib/supabase/queries.ts` (or similar): thin wrappers around the RPC calls above, typed to match `schema.ts`'s shapes so the reducer's action payloads don't need to change shape.
-- `AllyProvider` boot sequence: after auth is ready and a user id exists, call `get_my_state` (or the equivalent selects) instead of (or in addition to, per D5) reading `ally_v2:<uid>` for companions/ledger. `flow` (in-progress onboarding) still hydrates from localStorage per D5.
-- `HYDRATE` dispatch now assembles `AllyState` from two sources: server (`companions`, `ledger`) and local (`flow`, and `user` from the auth/profile data already available via `useAuth`).
+### 4.2 `src/lib/firstRun/order.ts`
 
-### 6.2 Reducer/action changes
-Actions that become "fire the RPC, then dispatch the confirmed result" instead of pure local computation: `CONFIRM_LOCK`, `SEND_MESSAGE`, `RECEIVE_REPLY`, `OPEN_CHAT`, `PART_COMPANION`, `UNLOCK_SLOT`, `BUY_PASS`. Each call site (in `app/chat/[id]/page.tsx`, `app/onboarding/reveal/page.tsx`, `src/components/sheets/ledgerSheets.tsx`, etc.) becomes `async`, calls the query wrapper, then dispatches with the server's returned values rather than ones computed inline. Handle the RPC failure case (network error, blocked) with the existing `Toast`/`Sheet` patterns already in the codebase, don't invent a new error UI pattern.
+```ts
+export const SPLASH_ORDER = [
+  "F04","M04","F09","M11","F07","M09","F12","M02","F14","M06","F05","M01","F06","M14","F15","M15",
+  "F03","M10","F10","M16","F08","M08","F16","M07","F01","M05","F13","M12","F11","M03","F02","M13",
+] as const;
+```
 
-Actions that stay pure local dispatch, no RPC: everything under onboarding flow (`SET_LOCATION` through `LEAVE_ROUND2`, `DECK_*`, `PROPOSE`, `REDRAW`), `SET_NOTIFY`/`SET_SOUND`/`SET_SOUND_ON`/`SET_UNMUTED` (these are lightweight preferences; move them server-side only if trivial to add as one more column update, otherwise leave local for this phase and note it as a later candidate rather than silently dropping the idea), the `DEBUG_*` actions (client-only, dev-mode as today, but see D8, they should now warn or no-op against the server-derived ledger fields rather than desyncing silently, decide the simplest correct behavior and document it).
+- The first 8 are curated, because most users tap Get started within about eight seconds. The rest alternate women and men for maximum palette contrast. Keep the array as written.
+- `riverRows(ids: string[]): [string[], string[]]` splits by index parity: row 0 takes even indices, row 1 takes odd. Each row is repeated until it holds at least 6 tiles, so the marquee never shows a gap when the pool is small. The track then renders that sequence twice for the seamless loop. An empty input returns `[[], []]`.
+- River order is `SPLASH_ORDER` filtered to the pool ids, so the strongest faces lead.
 
-### 6.3 Account/companion deletion
-`hubSheets.tsx`'s delete-everything and `app/settings/account/page.tsx`'s delete-account flow (P1) both need to also clear server-side companions/messages/ledger rows for the anonymous-user case (P1's `purge_self()` already cascades via `on delete cascade` from `auth.users`, since every new table above has `on delete cascade` to `auth.users`, this should already work for free once the FKs are in place, verify it in a test rather than assuming).
+### 4.3 `RippleSplash`
 
-### 6.4 Migrate.ts / storage key
-`stateKeyFor`, `migrate()` keep working for the `flow`-only local piece. `wipeLegacy` behavior is unaffected. No new local storage key is introduced; `flow` still lives inside the same `ally_v2:<uid>` blob for simplicity, just with `companions`/`ledger` inside it now always reset to empty/fresh on every hydrate rather than read from storage (or restructure to a smaller local-only shape if that's cleaner, your call, but keep `migrate.ts`'s existing tests meaningful rather than gutting them).
+Port `A_welcome` from the prototype into a client component. The static layout, top to bottom:
 
-## 7. Tests
+- Top: `mark.png` at 30 px height plus "Ally" in the serif at 30 px, as a centred row at `top: calc(22px + var(--safe-t))`.
+- Bottom block (`left/right: 24px`, `bottom: calc(20px + var(--safe-b))`), left-aligned:
+  - caption: first name in 500 `--fg`, city in `rgb(244 239 230 / .72)`, 15.5 px
+  - headline `<h1>`: serif 36px/1.06, letter-spacing −0.012em, `text-wrap: balance`, 12 px above
+  - actions, 22 px above: existing `btn primary` Get started, login `Link` (15.5 px, underlined, centred), footer (15 px, `--mut`, centred), gap 12 px
+- Name helper is `firstNameFromFull(name)`. City is `city.split(",")[0]`. Palette, name and city come from `useManifest().templates`; while not ready, hide the caption and keep `--k` at its initial value.
 
-Everything from P1's suite must still pass, e1-e21, `test:rls`, unit, build. New additions:
+Two scrim layers sit over the image, `pointer-events: none`:
 
-- **Unit:** a SQL-constants-match test per §5; reducer tests updated wherever an action's shape changed to accept a server-confirmed payload instead of computing one.
-- **RLS:** for every new table, prove user A cannot read or write user B's rows, and that no `authenticated` role has direct `insert`/`update`/`delete` on any of the six new tables (only `execute` on the RPCs).
-- **New Playwright specs** (name them e22+): create a companion end to end and confirm it's visible after a simulated "new device" (a fresh browser context, same authenticated user); send messages until the free daily cap via `send_message` and confirm the existing e7/e8-style cap behavior still holds now that it's server-enforced; part a companion and confirm the purge-at-30-days path still works with `purge_at` now server-side (fast-forward via inserting a row with a past `purge_at` directly, not trying to time-travel the server's own clock).
-- Re-verify e7 (`free-messages`), e8 (`pass-cap`), e4 (`slot3-cap`), e5/e6 (`part`/`part-all`) specifically, since these are the exact behaviors moving from client-reducer to server-RPC, don't just trust they pass, read their assertions and confirm they're actually exercising the new server path, not silently short-circuiting because a mock still returns the old local shape somewhere.
+```css
+background:
+  linear-gradient(to bottom, rgba(10,9,16,.6) 0%, rgba(10,9,16,0) 17%),
+  linear-gradient(to top,
+    color-mix(in oklab, var(--k) 30%, #0a0910) 0%,
+    color-mix(in oklab, var(--k) 24%, rgb(10 9 16 / .9)) 30%,
+    rgb(10 9 16 / 0) 60%);
+```
 
-## 8. Acceptance criteria
-1. `npm run lint`, `npm test`, `npm run test:rls`, `npm run e2e`, and `npm run build` with no env vars all pass, run by you, not deferred to the user.
-2. No table among the six new ones grants `insert`/`update`/`delete` to `anon` or `authenticated` directly, only RPC `execute`.
-3. A fresh anonymous user with no prior data can complete onboarding, send messages up to the free cap, get capped, and the behavior matches what e7 already asserts.
-4. Deleting an account (P1's flow) leaves no rows behind in any of the six new tables for that user id.
-5. The old `ally_v2:<uid>` companions/ledger data, if any exists from before this ships, is never read or migrated, confirm by grep that no code path reads companion/ledger fields out of the local blob anymore except via the fresh-empty defaults.
+`--k` is set on the screen root to the incoming face's palette at transition start, with `transition: --k .8s var(--ease)`.
 
-Report the branch name, commit hash, and full verification output when done. Do not merge to `main`.
+**Image layer.**
+
+- Always render a poster `<img src="/assets/first-run/reveal/F04.webp" fetchPriority="high">` (object-fit cover, `object-position: 50% 34%`) under the canvas, so first paint and LCP never wait for WebGL.
+- Call `ReactDOM.preload()` for the first two reveal URLs.
+- The canvas fades in over 300 ms once its first frame has drawn.
+
+**WebGL path.** Used when WebGL1 is available and reduced motion is off.
+
+- Shaders are verbatim from the prototype:
+
+```glsl
+// VERT
+attribute vec2 p;varying vec2 vUv;void main(){vUv=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}
+```
+```glsl
+// FRAG = RIPPLE_FN + A_WELCOME_FRAG
+precision highp float;
+varying vec2 vUv;
+uniform vec2 uRes;
+const vec2 IMG = vec2(540.,960.);
+vec2 coverBox(vec2 uv, vec2 b0, vec2 b1, float z){
+  vec2 bs = (b1-b0)*uRes; float ca = bs.x/max(bs.y,1.), ia = IMG.x/IMG.y;
+  vec2 s = ca>ia ? vec2(1., ia/ca) : vec2(ca/ia, 1.);
+  vec2 f = vec2(.5,.33);
+  vec2 l = (uv-b0)/(b1-b0); l = (l-f)/z+f;
+  return (1.-s)*f + l*s;
+}
+uniform sampler2D uA,uB; uniform float uP,uZa,uZb,uMax,uAmp; uniform vec2 uC; uniform vec3 uTint;
+void main(){
+  vec2 uv=vUv; float asp=uRes.x/uRes.y;
+  vec2 d2=(uv-uC)*vec2(asp,1.); float d=length(d2);
+  float R=uP*uMax; float x=d-R;
+  float band=exp(-x*x*240.);
+  float w=sin(x*70.);
+  vec2 dir=d2/max(d,1e-4);
+  float fade=1.-uP*.75;
+  float inner=step(x,0.)*exp(x*9.);
+  vec2 off=dir*(w*band*.014+sin(x*46.)*inner*.004)*uAmp*fade*vec2(1./asp,1.);
+  vec3 a=texture2D(uA,coverBox(uv+off,vec2(0.),vec2(1.),uZa)).rgb;
+  vec3 b=texture2D(uB,coverBox(uv+off,vec2(0.),vec2(1.),uZb)).rgb;
+  float m=smoothstep(.012,-.03,x);
+  vec3 col=mix(a,b,m);
+  float glint=band*(.5+.5*w)*fade*uAmp;
+  col+=uTint*glint*.28+vec3(glint*.15);
+  gl_FragColor=vec4(col,1.);
+}
+```
+
+- Do not raise the displacement constants (`.014`, `.004`). A stronger version visibly warped a face in testing.
+- Timeline, using rAF time in seconds:
+  - **dwell** 1.0 s, then **transition** 0.95 s with eased progress `1 - (1 - p)^2.1`. At `p >= 1`, advance `cur`.
+  - **Ripple centre** for automatic transitions: random, x in [0.3, 0.7] and y in [0.22, 0.48].
+  - **`uMax`**: the largest distance from the centre to any corner in aspect space, plus 0.25.
+  - **Ken Burns zoom** per image: `1 + 0.075 * (1 - min(1, age / (dwell + T + 1.2)) ^ 0.8)`, where `age` is measured from that image's transition start. The first image's age starts at the first frame.
+  - **`uTint`**: the incoming palette as RGB 0..1.
+  - **Caption swap**: starts 140 ms after transition start as a 180 ms fade and slide.
+- **Tap:** `pointerdown` anywhere on the screen except inside the actions block.
+  - Start a transition centred on the finger. If a transition is running or the next texture isn't ready, queue the centre and start it at the next dwell.
+  - Add a DOM ring at the finger: 10 px circle, 1.5 px cream border at 0.7, scaled ×9 and faded over 700 ms, then removed.
+- **Textures:**
+  - Load via `new Image()` plus `decode()`, from `/assets/first-run/reveal/{id}.webp`.
+  - Keep `cur` through `cur + 3` resident, fetching 2 ahead at every transition start. Delete the texture for `cur - 2`.
+  - Settings: `CLAMP_TO_EDGE`, `LINEAR`, no mipmaps.
+  - Never start a transition whose target texture isn't uploaded.
+- **Canvas:** size is client size × `min(devicePixelRatio, 2)`, resized with a `ResizeObserver`.
+- **Lifecycle:**
+  - Pause the rAF loop while `document.hidden`.
+  - On unmount: cancel rAF, delete textures, and call `WEBGL_lose_context.loseContext()`.
+  - On `webglcontextlost`, switch to the fallback path without remounting the page.
+
+**Fallback path.** Used with no WebGL, a lost context, or reduced motion.
+
+- Two stacked `<img>` elements crossfade over 700 ms.
+- Without reduced motion, add a Ken Burns effect: `scale(1.07) → scale(1)` over 3.2 s linear.
+- With reduced motion: no scale, no tap ring, and dwell `max(2.4 s, 2 × dwell)`.
+- Same order, captions and `--k` behaviour as the WebGL path.
+
+**Accessibility:** the canvas and poster are `aria-hidden`, and the `<h1>` stays the headline. The existing `FirstRunSplash` props (`onDone`) and the login `Link` are unchanged.
+
+### 4.4 `ChoiceRivers` (`/onboarding/gender`)
+
+The page stays wrapped in `ManifestGate`. The component root is `position: absolute; inset: 0; z-index: 1` inside the onboarding layout's `.screen`, so it is full-bleed. The layout's back button (z-index 3) stays on top and keeps its current behaviour, including the round-two X and leave sheet.
+
+**Header (`.top`).**
+
+- `background: var(--surf)`, padding `calc(76px + var(--safe-t)) 24px 16px`.
+- Contains `COPY.gender.question` in the existing `.q` style, then `COPY.gender.hint` in 15.5 px `--mut` with 8 px above.
+- The round-two `COPY.round2.subLine` moves under the hint when `isRound2`.
+- Header height is measured with a `ResizeObserver`.
+
+**Arena.** Absolutely positioned below the header to the bottom, with `touch-action: none` and `overflow: hidden`. Let `A` = arena height, `base = A / 2`, `gap = 10`, `rowH = (base - 3 * gap) / 2`.
+
+**Rivers.**
+
+- The women river is anchored to the top and the men river to the bottom. Each contains an inner block of height `base` holding two rows at `top = gap + i * (rowH + gap)`.
+- Tiles are `/assets/first-run/tile/{id}.webp`: height `rowH`, `aspect-ratio: 4/5`, `border-radius: 16px`, `margin-right: 10px`, `object-position: 50% 30%`. The first 8 tiles per river load eagerly; the rest use `loading="lazy"` and `decoding="async"`.
+- Each row track renders its `riverRows` sequence twice and animates `translateX(0 → -50%)` linearly on loop:
+  - women: row 0 right-to-left at 46 s, row 1 left-to-right at 58 s
+  - men: row 0 left-to-right at 46 s, row 1 right-to-left at 58 s
+- Each river has a dim overlay (`#0a0910`).
+
+**Balance `b` ∈ [-1, 1].** Positive means dragged down, which pulls the women river in. Every frame:
+
+- `sw = (A / 2) * (1 + b)` is the women river height; the men river height is `A - sw`.
+- Inner scale is `max(1, riverHeight / base)`. The origin is bottom-centre for women and top-centre for men.
+- Dim overlay opacity: women `max(-b, 0) * 0.6`, men `max(b, 0) * 0.6`.
+- **Seam line** at `sw`: 1 px, `linear-gradient(90deg, transparent, rgb(244 239 230 / .75) 18% 82%, transparent)`, opacity `1 - |b| * 0.9`.
+- **Grip** at `sw`, horizontally centred:
+  - 62×40 pill, radius 20, `1px solid rgb(244 239 230 / .28)`
+  - `background: rgb(21 18 32 / .52)`, `backdrop-filter: blur(12px)`
+  - up and down chevron SVG, stroke 1.8
+- **Labels** (serif 36px/1, `text-shadow: 0 2px 18px rgb(10 9 16 / .55)`, left 24 px):
+  - "A woman" with its bottom at `sw - 18`; "A man" with its top at `sw + 18`.
+  - Own scale `1 + 0.22 * own - 0.15 * other`, where own/other are `max(±b, 0)`, with `transform-origin: left center`. Opacity `1 - 0.75 * other`.
+  - Label height is cached after first layout; do not read `offsetHeight` every frame.
+- **Label scrims:** 120 px gradients to `rgb(10 9 16 / .7)`, one ending at the seam from above and one starting at the seam downward.
+
+**Gesture.** The pure maths lives in `gesture.ts` and is ported from `verticalChoice` in the prototype.
+
+- `applyDrag(b0, dy, A, disabled)`:
+  - `nb = b0 + dy / (A * 0.5)`.
+  - Beyond ±0.85, add only `(|nb| - 0.85) * 0.35`.
+  - Clamp to [-1, 1]. If a side is disabled, clamp that side to ±0.12 instead.
+- `decideRelease(b, vyPxPerMs, disabled)`:
+  - Return `"woman"` if `b > 0.42 || vy > 0.9`.
+  - Return `"man"` if `b < -0.42 || vy < -0.9`.
+  - Otherwise, or if the resulting side is disabled, return `null`.
+- Velocity: exponential smoothing `vy = 0.7 * vy + 0.3 * instantaneous`.
+- Spring back to 0 (or to ±1 on commit): stiffness 170, damping `2 * sqrt(170) * 0.78`, and on release hand off velocity as `v = vy * 2`.
+- Drag starts on `pointerdown` on the arena, with pointer capture. It counts as a drag after 7 px of movement.
+- **Hint:** 900 ms after mount, if the user hasn't touched the arena and reduced motion is off, animate `b = sin(2πp) * 0.1 * (1 - 0.3p)` over 1.7 s, where `p` runs 0 to 1.
+
+**Buttons and taps.**
+
+- Two real `<button type="button">` elements cover the river regions, sized and positioned every frame to match. They keep accessible names "A woman" and "A man" (from `COPY.gender`), because e2e helpers click them by role and name.
+- Buttons have `aria-pressed={state.flow.deckGender === g}`. A previously chosen side shows a 6 px cream dot before its label.
+- **Taps are handled only by the button `onClick`.** The drag hook does not treat pointer-up as a tap. If a drag happened (moved > 7 px), suppress the click that follows with a capture-phase handler, so a drag never double-commits.
+- Keyboard: Tab reaches both buttons, and Enter or Space commits. Focus ring: `outline: 2px solid var(--fg); outline-offset: -6px; border-radius: 24px`.
+
+**Commit.**
+
+1. The `committing` guard applies as today.
+2. Set the spring target to ±1.
+3. Fade the grip over 300 ms.
+4. Translate the header up and fade it over 500 ms (ease-out cubic), with the arena top following, so the chosen river fills the screen.
+5. Call `navigator.vibrate?.(8)` inside a try.
+6. Run the existing `choose(g)` body at commit start: invalidation, recompute toast, `SET_GENDER`.
+7. Route after 620 ms, or 150 ms under reduced motion, instead of the current 200 ms. The route targets stay `isRound2 ? "/onboarding/questions/disclosure" : "/onboarding/name"`.
+
+**Round two and empty pools (D6).**
+
+- Pools come from `pool(state, templates, g)`, which already excludes active and parted faces. River tiles show only pool faces, ordered per 4.2.
+- A gender whose pool is empty:
+  - Its river renders with no rows and `background: var(--raised)`.
+  - Its label gets a sub-line with `COPY.round2.genderPoolEmpty` (15.5 px, `rgb(244 239 230 / .8)`).
+  - Its button is `disabled`, and `applyDrag` and `decideRelease` receive it as disabled.
+  - The hint animation only nudges toward the enabled side.
+- If both are empty (theoretical), both are disabled and nothing commits, matching today's behaviour.
+
+**Reduced motion.**
+
+- Row tracks use `animation-play-state: paused`.
+- No hint animation.
+- `b` follows its target with `b += (target - b) * min(1, dt * 12)` instead of the spring.
+- The commit delay is 150 ms.
+
+## 5. Edge cases
+
+1. **Manifest loading or error on the splash (D9):** the splash still renders the poster and Get started. The caption stays hidden, `--k` keeps its default, and WebGL still runs, because file names derive from `SPLASH_ORDER`.
+2. **Slow network:** a transition never starts until its target texture is uploaded, so the current face simply holds longer.
+3. **Tab hidden:** the rAF loop pauses. Resuming must not fire a burst of queued transitions.
+4. **Navigating away mid-transition:** the unmount cleans up everything (rAF, textures, context, timers, listeners).
+5. **Back from `/onboarding/name` to gender:** the rivers remount at `b = 0` with the previous pick marked by `aria-pressed` and the dot.
+6. **Changing gender after questions were answered:** the existing invalidation and toast path still runs. Test it.
+7. **Pointer cancel** (scroll hijack or system gesture): spring back to 0 with no commit.
+8. **Round two X** during a drag: the layout's leave sheet opens, and the drag is cancelled.
+9. **Very short viewports** (under 640 px tall): the header may wrap to three lines. Measure it rather than hardcoding.
+10. **Low-end GPU or `webglcontextlost`:** fall back to the crossfade path with no error surfaced.
+
+## 6. Tests
+
+**Unit (`tests/unit/firstRun.test.ts`):**
+- `SPLASH_ORDER` has exactly the 32 manifest ids, each once, and its first 8 match the curated list. Genders strictly alternate.
+- `riverRows`:
+  - parity split
+  - each row has at least 6 entries for pool sizes 1, 2, 3, 15 and 16
+  - empty input returns `[[], []]`
+- `applyDrag`: linear inside ±0.85, rubber band outside, clamp at ±1, and a disabled side clamps at ±0.12.
+- `decideRelease`:
+  - threshold cases at 0.41 and 0.43
+  - velocity-only commits
+  - a disabled side returns `null`
+  - both disabled returns `null`
+- **Asset guard:**
+  - All 64 WebP files and `mark.png` exist.
+  - Every reveal is 540×960 and ≤ 60 KB; every tile is 432×540 and ≤ 35 KB. Read the dimensions from WebP headers; do not use `sharp` at test time.
+
+**E2E (`tests/e2e/e26-first-run-visuals.spec.ts`):**
+1. **Splash:** Get started is visible, and either the canvas or the fallback image renders. Tapping the photo does not navigate. Get started still reaches `/onboarding/consent`. Screenshot `e26-01-splash`.
+2. **Gender by tap:** `getByRole("button", { name: "A woman" }).click()` lands on `/onboarding/name` with `deckGender = "woman"`. Screenshot `e26-02-rivers`.
+3. **Gender by drag:**
+   - Mouse drag down by 45% of arena height commits woman; a drag up commits man.
+   - A 20% drag springs back with no navigation.
+4. **Round two, empty women pool:** seed all 16 women as parted or active, which requires a valid state (check `slotsUnlocked` and the companion caps).
+   - "No new faces left here" is visible and the women button is disabled.
+   - A drag down does not commit; tapping men commits.
+5. **Reduced motion:** with `page.emulateMedia({ reducedMotion: "reduce" })`, there is no canvas on the splash and the gender tap commits.
+6. **Unchanged behaviour:** existing E1 through E25 pass as they are. They use role-based selectors, so none should need edits. If one does, change only its selector and report why.
+
+**Full suite (P2 style, all run by you):** `npm run lint`, `npm test`, `npm run build` with no env vars, `npm run test:rls` against the local Docker Supabase stack, and `npm run e2e`.
+
+## 7. Performance budget
+
+- Added client JS is at most 10 KB gzipped, with no new runtime dependencies.
+- First screen network before interaction: poster plus two preloaded reveals, about 100 KB. The rest streams 2 ahead.
+- No layout reads inside rAF loops except cached values. Animate `transform` and `opacity` only, apart from the two river heights, which are single-element layout writes.
+- Report splash LCP from a Playwright trace, before and after the change, on the Pixel 7 device preset.
+
+## 8. Out of scope
+
+- Returning splash, "Still there?", consent, location, and every screen after gender.
+- The Option B carousel and the Option A choice screen from the prototype.
+- Any change to matching, the deck, the ledger or server state.

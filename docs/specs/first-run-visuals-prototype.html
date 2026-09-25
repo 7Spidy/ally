@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ally first-run visuals: approved prototype (code reference, do not ship)</title>
+<!-- Code reference for claude_change_spec.md. Approved: first screen = A_welcome (Ripple), choice screen = C_choose (Rivers). Options B and the other screens are kept for context only. Serve from public/ after running npm run assets:first-run to view it. Do not ship. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+@property --k { syntax: '<color>'; inherits: true; initial-value: #151220; }
+@property --fk { syntax: '<color>'; inherits: true; initial-value: #151220; }
+
+/* ---------- review shell: white / gold / sage ---------- */
+:root{
+  color-scheme: light;
+  --s-bg:#FFFFFF; --s-ink:#1C231F; --s-mut:#58635C; --s-line:#E3E7E0;
+  --s-sage:#6F8F74; --s-sage-deep:#3E5A46; --s-sage-wash:#EEF3EC;
+  --s-gold:#A9832C; --s-gold-wash:#F6EEDB;
+  --s-serif:'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --s-sans:'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--s-bg);color:var(--s-ink);font:400 17px/1.55 var(--s-sans);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:inherit}
+
+.intro{max-width:1180px;margin:0 auto;padding:28px 20px 10px}
+.intro h1{font:400 clamp(34px,6vw,50px)/1.04 var(--s-serif);letter-spacing:-.015em;margin:0;max-width:18ch}
+.intro p{margin:12px 0 0;color:var(--s-mut);max-width:62ch;font-size:17px}
+
+.bar{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--s-line)}
+.bar-in{max-width:1180px;margin:0 auto;padding:10px 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.opts{display:flex;gap:6px;flex:1 1 auto}
+.opt{flex:1 1 0;min-width:0;border:1px solid var(--s-line);background:#fff;border-radius:14px;padding:8px 12px;text-align:left;line-height:1.2;transition:border-color .2s,background .2s}
+.opt b{display:block;font:400 22px/1.1 var(--s-serif)}
+.opt span{font-size:15px;color:var(--s-mut)}
+.opt[aria-pressed="true"]{border-color:var(--s-gold);background:var(--s-gold-wash)}
+.opt[aria-pressed="true"] span{color:var(--s-ink)}
+.seg{display:flex;border:1px solid var(--s-line);border-radius:14px;padding:3px;background:#fff}
+.seg button{border:0;background:transparent;border-radius:11px;padding:9px 14px;font-size:15.5px;color:var(--s-mut)}
+.seg button[aria-pressed="true"]{background:var(--s-sage-deep);color:#fff}
+@media (max-width:600px){.opt{display:flex;align-items:baseline;gap:7px;padding:9px 10px}.opt b{font-size:21px}.seg{flex:1}.seg button{flex:1}}
+.bar .fsbtn{border:1px solid var(--s-sage);background:var(--s-sage-wash);color:var(--s-sage-deep);border-radius:14px;padding:10px 14px;font-size:15.5px;font-weight:500}
+:where(.bar,.notes,.pick) :is(button,select):focus-visible{outline:2px solid var(--s-gold);outline-offset:2px}
+
+.layout{max-width:1180px;margin:0 auto;padding:16px 20px 40px;display:grid;gap:28px;grid-template-columns:1fr}
+@media (min-width:900px){.layout{grid-template-columns:auto 1fr;align-items:start}.stage{position:sticky;top:84px}}
+.stage{display:flex;flex-direction:column;align-items:center;gap:10px}
+.stage-note{font-size:15px;color:var(--s-mut);text-align:center;max-width:var(--pw);margin:0}
+
+.notes h2{font:400 34px/1.08 var(--s-serif);margin:0 0 6px;letter-spacing:-.01em}
+.notes .lede{font-size:18px;margin:0 0 18px;max-width:60ch}
+.notes h3{font:600 15.5px/1.3 var(--s-sans);color:var(--s-sage-deep);margin:22px 0 6px}
+.notes p,.notes li{max-width:64ch}
+.notes p{margin:0 0 8px}
+.notes ul{margin:0;padding-left:20px}
+.notes li{margin:5px 0}
+.verdict{border-left:3px solid var(--s-gold);background:var(--s-gold-wash);padding:12px 16px;border-radius:0 12px 12px 0;margin:18px 0 0}
+.verdict p{margin:0}
+
+.tune{margin-top:26px;border:1px solid var(--s-line);border-radius:18px;padding:16px 18px;display:grid;gap:14px}
+.tune h3{margin:0}
+.row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.row label{min-width:150px;font-size:16px}
+.row output{font-variant-numeric:tabular-nums;min-width:48px;font-weight:500}
+input[type=range]{flex:1;min-width:160px;accent-color:var(--s-sage-deep);height:28px}
+.sw{position:relative;width:52px;height:30px;border-radius:99px;border:1px solid var(--s-line);background:#E9ECE6;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:transform .2s}
+.sw[aria-checked="true"]{background:var(--s-sage)}
+.sw[aria-checked="true"]::after{transform:translateX(22px)}
+
+.pick{max-width:1180px;margin:0 auto;padding:8px 20px 56px}
+.pick-in{border-top:1px solid var(--s-line);padding-top:26px;display:grid;gap:14px}
+.pick h2{font:400 34px/1.08 var(--s-serif);margin:0}
+.pick p{margin:0;color:var(--s-mut);max-width:64ch}
+.pick-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.pick select{width:100%;font:inherit;font-size:16px;padding:12px;border-radius:12px;border:1px solid var(--s-line);background:#fff;color:var(--s-ink)}
+.pick label{display:grid;gap:6px;font-size:15.5px;color:var(--s-mut)}
+.summary{font:500 17px/1.5 var(--s-sans);background:var(--s-sage-wash);border:1px solid #D6E2D3;border-radius:14px;padding:14px 16px;color:var(--s-ink);width:100%;resize:vertical;min-height:132px}
+.copybtn{justify-self:start;border:0;background:var(--s-sage-deep);color:#fff;border-radius:14px;padding:12px 18px;font-weight:500}
+
+/* ---------- phone frame ---------- */
+.phone{
+  --ink:#0a0910; --surf:#151220; --raised:#1d1929; --line:#2c2638;
+  --fg:#f4efe6; --mut:#9a92a6; --dim:#6f6880;
+  --serif:'Instrument Serif', Georgia, 'Times New Roman', serif;
+  --sans:'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --st:env(safe-area-inset-top,0px); --sb:env(safe-area-inset-bottom,0px);
+  position:relative;width:var(--pw,360px);height:calc(var(--pw,360px) * 844 / 390);
+  border-radius:40px;overflow:hidden;background:var(--surf);color:var(--fg);
+  font:400 17px/1.55 var(--sans);isolation:isolate;
+  box-shadow:0 0 0 1px #1d1929,0 0 0 7px #0e0d14,0 30px 70px -24px rgba(20,24,20,.55);
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+}
+.phone:not(.fs){--st:0px;--sb:0px}
+.phone.fs{position:fixed;inset:0;width:100vw;height:100dvh;border-radius:0;box-shadow:none;z-index:1000}
+.fsclose{position:fixed;z-index:1001;top:calc(10px + env(safe-area-inset-top,0px));right:12px;width:44px;height:44px;border-radius:22px;border:1px solid rgba(244,239,230,.25);background:rgba(21,18,32,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#f4efe6;display:none;align-items:center;justify-content:center}
+.fsclose svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round}
+body.is-fs .fsclose{display:flex}
+body.is-fs{overflow:hidden}
+
+.scr{position:absolute;inset:0;overflow:hidden;transition:--k .8s var(--ease);animation:scrIn .42s var(--ease) both}
+@keyframes scrIn{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+.scr.back-in{animation-name:scrBack}
+@keyframes scrBack{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+.phone h1,.phone p{margin:0}
+.btn{display:flex;align-items:center;justify-content:center;min-height:56px;width:100%;padding:0 22px;border:0;border-radius:18px;font:500 17px/1 var(--sans);background:var(--raised);color:var(--fg);transition:transform .08s,opacity .12s}
+.btn.primary{background:var(--fg);color:var(--ink)}
+.btn.ghost{background:transparent;border:1px solid rgba(244,239,230,.22)}
+.btn:active{transform:scale(.985)}
+.phone :focus-visible{outline:2px solid var(--fg);outline-offset:3px;border-radius:8px}
+.acts{display:flex;flex-direction:column;gap:12px;margin-top:22px}
+.login{align-self:center;color:var(--fg);text-decoration:underline;text-underline-offset:3px;font-size:15.5px;padding:6px 4px}
+.foot{text-align:center;font-size:15px;color:var(--mut);line-height:1.4}
+.wm{display:flex;align-items:center;gap:9px}
+.wm img{height:30px;width:auto}
+.wm span{font:400 30px/1 var(--serif);letter-spacing:-.02em}
+.hl{font:400 36px/1.06 var(--serif);letter-spacing:-.012em;text-wrap:balance}
+.cap{display:flex;gap:8px;align-items:baseline;font-size:15.5px;line-height:1.2;min-height:19px;transition:opacity .35s var(--ease),transform .35s var(--ease)}
+.cap b{font-weight:500;color:var(--fg)}
+.cap span{color:rgba(244,239,230,.72)}
+.cap.swap{opacity:0;transform:translateY(5px)}
+.nonames .cap,.nonames .bl{display:none}
+.iconb{position:absolute;z-index:6;top:calc(18px + var(--st));left:12px;width:44px;height:44px;border-radius:22px;border:0;background:rgba(21,18,32,.45);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);color:var(--fg);display:flex;align-items:center;justify-content:center}
+.iconb svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.q{font:400 32px/1.14 var(--serif);letter-spacing:-.01em;text-wrap:balance}
+.hint{font-size:15.5px;color:var(--mut);margin-top:8px}
+.toast{position:absolute;left:50%;bottom:calc(22px + var(--sb));transform:translateX(-50%);z-index:30;background:var(--raised);border:1px solid var(--line);border-radius:14px;padding:12px 16px;font-size:15.5px;white-space:nowrap;animation:scrIn .3s var(--ease) both}
+
+/* shared choice chrome */
+.grip{position:absolute;left:50%;z-index:8;width:62px;height:40px;margin:-20px 0 0 -31px;border-radius:20px;border:1px solid rgba(244,239,230,.28);background:rgba(21,18,32,.52);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;pointer-events:none;box-shadow:0 8px 24px -8px rgba(0,0,0,.6)}
+.grip svg{width:22px;height:22px;fill:none;stroke:var(--fg);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.zone{position:absolute;left:0;right:0;border:0;background:transparent;pointer-events:none;z-index:3;border-radius:0}
+.zone:focus-visible{outline:2px solid var(--fg);outline-offset:-6px;border-radius:24px}
+.glab{position:absolute;left:24px;z-index:7;font:400 36px/1 var(--serif);letter-spacing:-.01em;pointer-events:none;text-shadow:0 2px 18px rgba(10,9,16,.55);transform-origin:left center;will-change:transform}
+.gsub{display:block;font:400 15.5px/1.3 var(--sans);color:rgba(244,239,230,.8);margin-top:6px;text-shadow:0 1px 10px rgba(10,9,16,.7)}
+.end{position:absolute;left:0;right:0;bottom:0;z-index:40;background:var(--raised);border-radius:28px 28px 0 0;padding:26px 24px calc(26px + var(--sb));box-shadow:0 -1px 0 var(--line);animation:sheetUp .36s var(--ease) both}
+@keyframes sheetUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.end h2{font:400 30px/1.1 var(--serif);margin:0}
+.end p{color:var(--mut);margin-top:8px;font-size:16px}
+.end .acts{margin-top:18px}
+
+/* ---------- A: ripple ---------- */
+.a-w canvas,.a-c canvas,.a-w .fb{position:absolute;inset:0;width:100%;height:100%;display:block}
+.fb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 34%;opacity:0;transition:opacity .7s var(--ease),transform 3.2s linear;transform:scale(1.07)}
+.fb img.on{opacity:1;transform:scale(1)}
+.a-w .shade{position:absolute;inset:0;pointer-events:none;background:
+  linear-gradient(to bottom,rgba(10,9,16,.6) 0%,rgba(10,9,16,0) 17%),
+  linear-gradient(to top,color-mix(in oklab,var(--k) 30%,#0a0910) 0%,color-mix(in oklab,var(--k) 24%,rgb(10 9 16 / .9)) 30%,rgb(10 9 16 / 0) 60%)}
+.a-w .wm{position:absolute;top:calc(22px + var(--st));left:0;right:0;justify-content:center;z-index:4}
+.a-w .low,.c-w .low{position:absolute;left:24px;right:24px;bottom:calc(20px + var(--sb));z-index:4}
+.a-w .hl,.c-w .hl{margin-top:12px}
+.tapripple{position:absolute;z-index:3;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;border:1.5px solid rgba(244,239,230,.7);pointer-events:none;animation:tr .7s var(--ease) forwards}
+@keyframes tr{to{transform:scale(9);opacity:0}}
+.a-c .top{position:absolute;left:0;right:0;top:0;z-index:5;padding:calc(76px + var(--st)) 24px 16px;background:var(--surf)}
+.a-c .top::after{content:"";position:absolute;left:0;right:0;top:100%;height:36px;background:linear-gradient(var(--surf),rgb(21 18 32 / 0));pointer-events:none}
+.a-c .arena{position:absolute;inset:0;touch-action:none;z-index:2}
+
+/* ---------- B: carousel ---------- */
+.b-w{display:flex;flex-direction:column;padding:calc(22px + var(--st)) 24px calc(20px + var(--sb))}
+.amb{position:absolute;inset:-18%;z-index:0}
+.amb i{position:absolute;inset:0;background-size:cover;background-position:50% 30%;filter:blur(34px) saturate(1.35) brightness(.5);opacity:0;transition:opacity 1s var(--ease)}
+.amb i.on{opacity:1}
+.wash{position:absolute;inset:0;z-index:0;pointer-events:none;background:
+  radial-gradient(120% 60% at 50% 36%,color-mix(in oklab,var(--k) 34%,transparent),transparent 70%),
+  linear-gradient(to bottom,rgb(10 9 16 / .3),rgb(10 9 16 / .12) 36%,rgb(10 9 16 / .86) 74%,rgb(10 9 16 / .94))}
+.b-w .wm{position:relative;z-index:2;justify-content:center}
+.deck{position:relative;z-index:2;flex:1 1 auto;min-height:0;margin:10px -24px 0;touch-action:none}
+.card{position:absolute;left:50%;top:50%;width:var(--cw);height:var(--ch);margin:calc(var(--ch) / -2) 0 0 calc(var(--cw) / -2);border-radius:24px;overflow:hidden;background:#1d1929;will-change:transform;box-shadow:0 26px 50px -22px rgba(0,0,0,.8),inset 0 0 0 1px rgba(244,239,230,.08)}
+.card img{width:100%;height:100%;object-fit:cover;object-position:50% 30%;pointer-events:none;display:block}
+.card::after{content:"";position:absolute;inset:0;background:#0a0910;opacity:var(--dim,0);pointer-events:none}
+.bl{position:absolute;left:0;right:0;bottom:0;padding:54px 16px 14px;background:linear-gradient(to top,color-mix(in oklab,var(--pk) 86%,#0a0910) 0%,color-mix(in oklab,var(--pk) 50%,transparent) 48%,transparent)}
+.bl b{display:block;font:400 28px/1.02 var(--serif);letter-spacing:-.01em}
+.bl span{font-size:15px;color:rgba(244,239,230,.86)}
+.sm .bl{padding:40px 12px 10px}.sm .bl b{font-size:22px}
+.b-w .copy{position:relative;z-index:2;text-align:center;margin-top:12px}
+.b-w .hl{font-size:33px;max-width:310px;margin:0 auto}
+.b-c{display:flex;flex-direction:column;padding:calc(76px + var(--st)) 24px calc(18px + var(--sb))}
+.b-c .arena{position:relative;flex:1 1 auto;min-height:0;margin:6px -24px 0;touch-action:none}
+.fan{position:absolute;left:0;right:0;height:50%;will-change:transform,opacity;transition:--fk .8s var(--ease)}
+.fan.w{top:0}.fan.m{top:50%}
+.fan .glow{position:absolute;inset:6% 10%;border-radius:50%;background:radial-gradient(closest-side,color-mix(in oklab,var(--fk,#151220) 55%,transparent),transparent);filter:blur(18px);opacity:.9;transition:background .8s var(--ease)}
+.fan .deck{position:absolute;left:0;right:0;top:0;bottom:0;margin:0}
+.fan.w .deck{top:50px}.fan.m .deck{bottom:50px}
+.b-c .glab.bw{top:4px}
+.b-c .glab.bm{bottom:4px}
+
+/* ---------- C: wall ---------- */
+.wall{position:absolute;left:50%;top:50%;width:150%;height:136%;transform:translate(-50%,-50%) rotate(-8deg);display:flex;gap:12px;z-index:0}
+.col{flex:1 1 0;min-width:0;position:relative}
+.track{will-change:transform;animation:up var(--dur,52s) linear infinite}
+.col.dn .track{animation-name:dn}
+@keyframes up{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-50%,0)}}
+@keyframes dn{from{transform:translate3d(0,-50%,0)}to{transform:translate3d(0,0,0)}}
+.rm .track,.rm .rtrack{animation-play-state:paused}
+.tile{position:relative;aspect-ratio:4/5;border-radius:18px;overflow:hidden;margin-bottom:12px;background:#1d1929;transition:transform .7s var(--ease),box-shadow .7s var(--ease)}
+.tile img{width:100%;height:100%;object-fit:cover;object-position:50% 30%;display:block}
+.tile::after{content:"";position:absolute;inset:0;background:#0a0910;opacity:.56;transition:opacity .7s var(--ease)}
+.tile.on{transform:scale(1.07);z-index:2;box-shadow:0 0 0 2px var(--fg),0 26px 60px -12px color-mix(in oklab,var(--k) 75%,transparent)}
+.tile.on::after{opacity:0}
+.c-w .shade{position:absolute;inset:0;pointer-events:none;z-index:1;background:
+  linear-gradient(to bottom,rgb(10 9 16 / .82) 0%,rgb(10 9 16 / 0) 22%),
+  linear-gradient(to top,color-mix(in oklab,var(--k) 30%,#0a0910) 0%,color-mix(in oklab,var(--k) 22%,rgb(10 9 16 / .94)) 34%,rgb(10 9 16 / 0) 62%)}
+.c-w .wm{position:absolute;z-index:4;top:calc(22px + var(--st));left:24px}
+.c-c .top{position:absolute;left:0;right:0;top:0;z-index:5;padding:calc(76px + var(--st)) 24px 16px;background:var(--surf)}
+.c-c .arena{position:absolute;left:0;right:0;bottom:0;touch-action:none;overflow:hidden}
+.river{position:absolute;left:0;right:0;overflow:hidden}
+.river.w{top:0}.river.m{bottom:0}
+.rin{position:absolute;left:0;right:0;height:var(--base);will-change:transform}
+.river.w .rin{bottom:0;transform-origin:50% 100%}
+.river.m .rin{top:0;transform-origin:50% 0}
+.rrow{position:absolute;left:0;height:var(--rh);white-space:nowrap}
+.rtrack{display:flex;height:100%;will-change:transform;animation:rl var(--dur,48s) linear infinite}
+.rrow.rt .rtrack{animation-name:rr}
+@keyframes rl{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
+@keyframes rr{from{transform:translate3d(-50%,0,0)}to{transform:translate3d(0,0,0)}}
+.rtile{flex:none;height:100%;aspect-ratio:4/5;margin-right:10px;border-radius:16px;overflow:hidden;background:#1d1929}
+.rtile img{width:100%;height:100%;object-fit:cover;object-position:50% 30%;display:block}
+.rdim{position:absolute;inset:0;background:#0a0910;pointer-events:none;opacity:0}
+.seamline{position:absolute;left:0;right:0;height:1px;z-index:6;background:linear-gradient(90deg,transparent,rgba(244,239,230,.75) 18%,rgba(244,239,230,.75) 82%,transparent);pointer-events:none}
+.labscrim{position:absolute;left:0;right:0;height:120px;z-index:5;pointer-events:none}
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <h1>Ally's first two screens, three ways</h1>
+  <p>Every option runs live with all 32 faces from the repo. Tap Get started to reach the choice screen, then drag or tap to choose. Consent and location are skipped in this preview only.</p>
+</header>
+
+<div class="bar">
+  <div class="bar-in">
+    <div class="opts" role="group" aria-label="Option">
+      <button class="opt" data-opt="A" aria-pressed="true"><b>A</b><span>Ripple</span></button>
+      <button class="opt" data-opt="B" aria-pressed="false"><b>B</b><span>Carousel</span></button>
+      <button class="opt" data-opt="C" aria-pressed="false"><b>C</b><span>Wall</span></button>
+    </div>
+    <div class="seg" role="group" aria-label="Screen">
+      <button data-scr="welcome" aria-pressed="true">First screen</button>
+      <button data-scr="choose" aria-pressed="false">Choice</button>
+    </div>
+    <button class="fsbtn" id="fsBtn">Full screen</button>
+  </div>
+</div>
+
+<main class="layout">
+  <section class="stage">
+    <div class="phone" id="phone"></div>
+    <p class="stage-note" id="stageNote"></p>
+  </section>
+  <section class="notes" id="notes" aria-live="polite"></section>
+</main>
+
+<section class="pick">
+  <div class="pick-in">
+    <h2>Your call</h2>
+    <p>Mix and match is fine: one option's first screen with another's choice screen. Copy the line below and paste it back to me with any edits.</p>
+    <div class="pick-grid">
+      <label>First screen<select id="pW"><option value="A">A, Ripple</option><option value="B">B, Carousel</option><option value="C">C, Wall</option></select></label>
+      <label>Choice screen<select id="pC"><option value="A">A, Ripple</option><option value="B">B, Carousel</option><option value="C">C, Wall</option></select></label>
+    </div>
+    <textarea class="summary" id="summary" readonly rows="5"></textarea>
+    <button class="copybtn" id="copyBtn">Copy</button>
+  </div>
+</section>
+
+<button class="fsclose" id="fsClose" aria-label="Exit full screen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+
+<script>
+const ASSETS = (() => { const ids = ["F01", "F02", "F03", "F04", "F05", "F06", "F07", "F08", "F09", "F10", "F11", "F12", "F13", "F14", "F15", "F16", "M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08", "M09", "M10", "M11", "M12", "M13", "M14", "M15", "M16"]; const A = { reveal: {}, portrait: {}, logo: '/assets/first-run/mark.png' };
+  ids.forEach(id => { A.reveal[id] = '/assets/first-run/reveal/' + id + '.webp'; A.portrait[id] = '/assets/first-run/tile/' + id + '.webp'; }); return A; })();
+const META = [{"id": "F01", "name": "Ira Malhotra", "gender": "woman", "city": "Delhi", "age": 25, "palette": "#B03A48", "palette_name": "Crimson Clay", "occupation": "Junior architect at a small practice"}, {"id": "F02", "name": "Noor Qureshi", "gender": "woman", "city": "Srinagar", "age": 23, "palette": "#7E5A9B", "palette_name": "Mulberry", "occupation": "Ceramicist, runs a two-wheel studio"}, {"id": "F03", "name": "Simran Sethi", "gender": "woman", "city": "Chandigarh", "age": 19, "palette": "#2E7D6B", "palette_name": "Sea Green", "occupation": "Second-year dental student"}, {"id": "F04", "name": "Aditi Deshpande", "gender": "woman", "city": "Pune", "age": 27, "palette": "#C4702A", "palette_name": "Ochre", "occupation": "Clinical psychologist in private practice"}, {"id": "F05", "name": "Zoya Merchant", "gender": "woman", "city": "Mumbai", "age": 22, "palette": "#3A5FA8", "palette_name": "Cobalt", "occupation": "Live sound engineer"}, {"id": "F06", "name": "Kavya Rane", "gender": "woman", "city": "Panaji, Goa", "age": 24, "palette": "#1F6F8B", "palette_name": "Deep Cyan", "occupation": "Marine biology field researcher"}, {"id": "F07", "name": "Ritwika Sen", "gender": "woman", "city": "Kolkata", "age": 26, "palette": "#8C3F6D", "palette_name": "Plum", "occupation": "Documentary film editor"}, {"id": "F08", "name": "Ipsita Mohanty", "gender": "woman", "city": "Bhubaneswar", "age": 21, "palette": "#C0562F", "palette_name": "Terracotta", "occupation": "Odissi dancer, physiotherapy student"}, {"id": "F09", "name": "Mawii Ralte", "gender": "woman", "city": "Aizawl, Mizoram", "age": 23, "palette": "#4E8C3A", "palette_name": "Moss", "occupation": "Indie musician and guitar teacher"}, {"id": "F10", "name": "Shreya Tiwari", "gender": "woman", "city": "Bhopal", "age": 28, "palette": "#6B7F3E", "palette_name": "Olive", "occupation": "Conservation biologist, tiger reserve monitoring"}, {"id": "F11", "name": "Meena Iyer", "gender": "woman", "city": "Chennai", "age": 30, "palette": "#2B4F7D", "palette_name": "Navy Slate", "occupation": "Data analyst, rated chess player"}, {"id": "F12", "name": "Ann Mariya Joseph", "gender": "woman", "city": "Kochi", "age": 22, "palette": "#D4894A", "palette_name": "Apricot", "occupation": "Pastry chef at a hotel patisserie"}, {"id": "F13", "name": "Deepa Gowda", "gender": "woman", "city": "Bengaluru", "age": 26, "palette": "#9A4E9E", "palette_name": "Orchid", "occupation": "Product designer at an early-stage startup"}, {"id": "F14", "name": "Yuki Nakamura", "gender": "woman", "city": "Osaka, Japan", "age": 25, "palette": "#556B8D", "palette_name": "Dusk Blue", "occupation": "Analogue camera repair technician"}, {"id": "F15", "name": "Bea Villanueva", "gender": "woman", "city": "Cebu, Philippines", "age": 24, "palette": "#0F8A80", "palette_name": "Sea", "occupation": "Freediving instructor"}, {"id": "F16", "name": "Luana Ferreira", "gender": "woman", "city": "S\u00e3o Paulo, Brazil", "age": 27, "palette": "#D2483F", "palette_name": "Vermilion", "occupation": "Muralist and screen printer"}, {"id": "M01", "name": "Arjun Bhalla", "gender": "man", "city": "Delhi", "age": 27, "palette": "#7A4B2A", "palette_name": "Walnut", "occupation": "Runs a small restaurant in Hauz Khas"}, {"id": "M02", "name": "Vikram Rathore", "gender": "man", "city": "Jaipur", "age": 29, "palette": "#B5852F", "palette_name": "Brass", "occupation": "Manages his family&#x27;s heritage hotel"}, {"id": "M03", "name": "Kabir Bhatnagar", "gender": "man", "city": "Noida", "age": 21, "palette": "#3E6F9E", "palette_name": "Steel Blue", "occupation": "Computer science undergraduate, competitive programmer"}, {"id": "M04", "name": "Rehan Contractor", "gender": "man", "city": "Mumbai", "age": 26, "palette": "#5C4B8A", "palette_name": "Indigo Violet", "occupation": "Film composer and music producer"}, {"id": "M05", "name": "Omkar Joshi", "gender": "man", "city": "Pune", "age": 23, "palette": "#2F7A55", "palette_name": "Forest", "occupation": "Mechanical engineer, restores old motorcycles"}, {"id": "M06", "name": "Jaydev Zala", "gender": "man", "city": "Ahmedabad", "age": 28, "palette": "#8A6E2F", "palette_name": "Bronze Olive", "occupation": "Third-generation textile business, moving it to handloom"}, {"id": "M07", "name": "Anirban Dutta", "gender": "man", "city": "Kolkata", "age": 25, "palette": "#26557A", "palette_name": "Petrol", "occupation": "Astrophysics doctoral student"}, {"id": "M08", "name": "Rohan Oraon", "gender": "man", "city": "Ranchi", "age": 22, "palette": "#4A7C7E", "palette_name": "Glacier Teal", "occupation": "Jharkhand state archer"}, {"id": "M09", "name": "Tenzing Bhutia", "gender": "man", "city": "Gangtok, Sikkim", "age": 26, "palette": "#C25E22", "palette_name": "Burnt Orange", "occupation": "High-altitude trek leader"}, {"id": "M10", "name": "Yash Chourasia", "gender": "man", "city": "Indore", "age": 19, "palette": "#6E3B6E", "palette_name": "Aubergine", "occupation": "First-year culinary student, family runs a chaat stall"}, {"id": "M11", "name": "Karthik Subramanian", "gender": "man", "city": "Chennai", "age": 28, "palette": "#1E7FA0", "palette_name": "Lagoon", "occupation": "Carnatic violinist and film sound designer"}, {"id": "M12", "name": "Nikhil Menon", "gender": "man", "city": "Varkala, Kerala", "age": 24, "palette": "#5A6B2E", "palette_name": "Khaki Green", "occupation": "Runs a small surf school"}, {"id": "M13", "name": "Pranav Hegde", "gender": "man", "city": "Chikmagalur", "age": 30, "palette": "#34495E", "palette_name": "Graphite Blue", "occupation": "Runs the family coffee estate and a small roastery"}, {"id": "M14", "name": "Han Jae-won", "gender": "man", "city": "Seoul, South Korea", "age": 27, "palette": "#B3452C", "palette_name": "Rust", "occupation": "Industrial designer, footwear"}, {"id": "M15", "name": "Chidi Okonkwo", "gender": "man", "city": "Lagos, Nigeria", "age": 25, "palette": "#A63A5B", "palette_name": "Garnet", "occupation": "Drummer and record producer"}, {"id": "M16", "name": "Matteo Bandini", "gender": "man", "city": "Milan, Italy", "age": 29, "palette": "#4F5D75", "palette_name": "Slate", "occupation": "Cutter at a bespoke tailoring atelier"}];
+const ORDER = ["F04", "M04", "F09", "M11", "F07", "M09", "F12", "M02", "F14", "M06", "F05", "M01", "F06", "M14", "F15", "M15", "F03", "M10", "F10", "M16", "F08", "M08", "F16", "M07", "F01", "M05", "F13", "M12", "F11", "M03", "F02", "M13"];
+
+const BY = {}; META.forEach(m => BY[m.id] = m);
+const first = id => BY[id].name.split(' ')[0];
+const city = id => BY[id].city.split(',')[0];
+const WOMEN = ORDER.filter(id => id[0] === 'F');
+const MEN = ORDER.filter(id => id[0] === 'M');
+const hexRgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const S = { opt: 'A', screen: 'welcome', dwell: 1.0, names: true, rm: false };
+const sysRM = matchMedia('(prefers-reduced-motion: reduce)');
+const RM = () => S.rm || sysRM.matches;
+const dwell = () => RM() ? Math.max(2.4, S.dwell * 2) : S.dwell;
+
+/* ---------- lifecycle ---------- */
+function life() {
+  const L = { alive: true, fns: [], rafs: new Set(), timers: new Set() };
+  L.raf = fn => { const id = requestAnimationFrame(t => { L.rafs.delete(id); if (L.alive) fn(t); }); L.rafs.add(id); return id; };
+  L.loop = fn => { let last = performance.now(); const step = t => { const dt = Math.min(0.05, (t - last) / 1000); last = t; fn(t / 1000, dt); L.raf(step); }; L.raf(step); };
+  L.timeout = (fn, ms) => { const id = setTimeout(() => { L.timers.delete(id); if (L.alive) fn(); }, ms); L.timers.add(id); return id; };
+  L.on = (el, ev, fn, opt) => { el.addEventListener(ev, fn, opt); L.fns.push(() => el.removeEventListener(ev, fn, opt)); };
+  L.add = fn => L.fns.push(fn);
+  L.kill = () => { L.alive = false; L.rafs.forEach(cancelAnimationFrame); L.timers.forEach(clearTimeout); L.fns.forEach(f => { try { f(); } catch (e) {} }); };
+  return L;
+}
+
+const imgCache = {};
+function loadImg(kind, id) {
+  const k = kind + id;
+  if (!imgCache[k]) {
+    const im = new Image(); im.decoding = 'async'; im.src = ASSETS[kind][id];
+    imgCache[k] = { im, ready: (im.decode ? im.decode() : Promise.resolve()).then(() => im, () => im) };
+  }
+  return imgCache[k];
+}
+
+/* ---------- shared markup ---------- */
+const LOGO = () => `<div class="wm"><img src="${ASSETS.logo}" alt=""><span>Ally</span></div>`;
+const ACTS = () => `<div class="acts nodrag">
+  <button class="btn primary" data-go="choose">Get started</button>
+  <a class="login" href="#" data-login>Already have an account? Log in</a>
+  <p class="foot">Ally is an AI. Every character here is fictional.</p></div>`;
+const BACK = `<button class="iconb nodrag" data-go="welcome" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>`;
+const GRIP = `<div class="grip" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 9.5l5-5 5 5M7 14.5l5 5 5-5"/></svg></div>`;
+const HEAD = h => `<h1 class="q">Who would you rather talk to?</h1><p class="hint">${h}</p>`;
+
+function setCaption(el, id) {
+  if (!el) return;
+  el.classList.add('swap');
+  setTimeout(() => { el.innerHTML = `<b>${esc(first(id))}</b><span>${esc(city(id))}</span>`; el.classList.remove('swap'); }, 180);
+}
+
+function wireCommon(root, L, ctx) {
+  L.on(root, 'click', e => {
+    const go = e.target.closest('[data-go]');
+    if (go) { e.preventDefault(); ctx.go(go.dataset.go); return; }
+    if (e.target.closest('[data-login]')) { e.preventDefault(); toast(root, L, 'Log in screen stays as it is'); }
+  });
+}
+function toast(root, L, msg) {
+  root.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; root.appendChild(t);
+  L.timeout(() => t.remove(), 1800);
+}
+function endCard(root, L, ctx, g) {
+  const el = document.createElement('div');
+  el.className = 'end nodrag';
+  el.innerHTML = `<h2>You picked ${g === 'woman' ? 'a woman' : 'a man'}.</h2>
+    <p>In the app this goes straight to "What should I call you?" after a 200ms beat.</p>
+    <div class="acts"><button class="btn primary" data-again>Choose again</button><button class="btn ghost" data-go="welcome">Back to the first screen</button></div>`;
+  root.appendChild(el);
+  L.on(el, 'click', e => { if (e.target.closest('[data-again]')) ctx.go('choose'); });
+}
+
+/* ---------- shared vertical choice gesture ----------
+   b in [-1, 1]. Positive = dragged down = the top option (a woman) is pulled toward you. */
+function verticalChoice(L, surface, o) {
+  let b = 0, v = 0, target = 0, drag = null, committed = false, touched = false, hintT = null;
+  const K = 170, C = 2 * Math.sqrt(170) * 0.78;
+  const H = () => surface.clientHeight || 1;
+  function commit(g) {
+    if (committed) return; committed = true;
+    target = g === 'woman' ? 1 : -1;
+    if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+    o.onCommitStart && o.onCommitStart(g);
+    L.timeout(() => o.onCommit(g), RM() ? 150 : 620);
+  }
+  L.on(surface, 'pointerdown', e => {
+    if (committed || e.target.closest('.nodrag')) return;
+    touched = true; hintT = null;
+    drag = { y: e.clientY, b0: b, ly: e.clientY, lt: performance.now(), vy: 0, moved: false };
+    try { surface.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  L.on(surface, 'pointermove', e => {
+    if (!drag) return;
+    const dy = e.clientY - drag.y;
+    if (Math.abs(dy) > 7) drag.moved = true;
+    let nb = drag.b0 + dy / (H() * 0.5);
+    if (Math.abs(nb) > 0.85) nb = Math.sign(nb) * (0.85 + (Math.abs(nb) - 0.85) * 0.35);
+    b = clamp(nb, -1, 1);
+    const now = performance.now(), dt = Math.max(1, now - drag.lt);
+    drag.vy = 0.7 * drag.vy + 0.3 * ((e.clientY - drag.ly) / dt);
+    drag.ly = e.clientY; drag.lt = now;
+  });
+  const up = e => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (!d.moved) { const g = o.tapAt(e.clientY); if (g) commit(g); else target = 0; return; }
+    const vel = d.vy;
+    if (b > 0.42 || vel > 0.9) commit('woman');
+    else if (b < -0.42 || vel < -0.9) commit('man');
+    else { target = 0; v = vel * 2; }
+  };
+  L.on(surface, 'pointerup', up);
+  L.on(surface, 'pointercancel', () => { drag = null; target = 0; });
+  L.timeout(() => { if (!touched && !RM()) hintT = 0; }, 900);
+  L.loop((t, dt) => {
+    if (!drag) {
+      if (hintT !== null) {
+        hintT += dt; const p = hintT / 1.7;
+        target = p < 1 ? Math.sin(p * Math.PI * 2) * 0.1 * (1 - p * 0.3) : 0;
+        if (p >= 1) hintT = null;
+        b += (target - b) * Math.min(1, dt * 14); v = 0;
+      } else if (RM()) {
+        b += (target - b) * Math.min(1, dt * 12);
+      } else {
+        const a = -K * (b - target) - C * v; v += a * dt; b += v * dt;
+      }
+    }
+    o.onBalance(b, t, dt);
+  });
+  return { commit, get b() { return b; } };
+}
+
+/* ---------- tiny WebGL helper ---------- */
+const VERT = `attribute vec2 p;varying vec2 vUv;void main(){vUv=vec2(p.x*.5+.5,.5-p.y*.5);gl_Position=vec4(p,0.,1.);}`;
+function glInit(canvas, frag) {
+  const gl = canvas.getContext('webgl', { antialias: false, alpha: false, premultipliedAlpha: false, powerPreference: 'high-performance' });
+  if (!gl) return null;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(s)); return null; } return s; };
+  const vs = sh(gl.VERTEX_SHADER, VERT), fs = sh(gl.FRAGMENT_SHADER, frag);
+  if (!vs || !fs) return null;
+  const pr = gl.createProgram(); gl.attachShader(pr, vs); gl.attachShader(pr, fs); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return null;
+  gl.useProgram(pr);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  const U = {}; const u = n => (n in U) ? U[n] : (U[n] = gl.getUniformLocation(pr, n));
+  const texs = {};
+  function tex(key, im) {
+    if (texs[key]) return texs[key];
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, im);
+    return (texs[key] = t);
+  }
+  function drop(key) { if (texs[key]) { gl.deleteTexture(texs[key]); delete texs[key]; } }
+  function bind(unit, name, t) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t); gl.uniform1i(u(name), unit); }
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    gl.viewport(0, 0, w, h); gl.uniform2f(u('uRes'), w, h);
+  }
+  function draw() { gl.drawArrays(gl.TRIANGLES, 0, 6); }
+  function destroy() { Object.keys(texs).forEach(drop); const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); }
+  return { gl, u, tex, drop, bind, resize, draw, destroy, has: k => !!texs[k] };
+}
+
+/* =========================================================
+   A. RIPPLE
+   ========================================================= */
+const RIPPLE_FN = `
+precision highp float;
+varying vec2 vUv;
+uniform vec2 uRes;
+const vec2 IMG = vec2(540.,960.);
+vec2 coverBox(vec2 uv, vec2 b0, vec2 b1, float z){
+  vec2 bs = (b1-b0)*uRes; float ca = bs.x/max(bs.y,1.), ia = IMG.x/IMG.y;
+  vec2 s = ca>ia ? vec2(1., ia/ca) : vec2(ca/ia, 1.);
+  vec2 f = vec2(.5,.33);
+  vec2 l = (uv-b0)/(b1-b0); l = (l-f)/z+f;
+  return (1.-s)*f + l*s;
+}
+`;
+const A_WELCOME_FRAG = RIPPLE_FN + `
+uniform sampler2D uA,uB; uniform float uP,uZa,uZb,uMax,uAmp; uniform vec2 uC; uniform vec3 uTint;
+void main(){
+  vec2 uv=vUv; float asp=uRes.x/uRes.y;
+  vec2 d2=(uv-uC)*vec2(asp,1.); float d=length(d2);
+  float R=uP*uMax; float x=d-R;
+  float band=exp(-x*x*240.);
+  float w=sin(x*70.);
+  vec2 dir=d2/max(d,1e-4);
+  float fade=1.-uP*.75;
+  float inner=step(x,0.)*exp(x*9.);
+  vec2 off=dir*(w*band*.014+sin(x*46.)*inner*.004)*uAmp*fade*vec2(1./asp,1.);
+  vec3 a=texture2D(uA,coverBox(uv+off,vec2(0.),vec2(1.),uZa)).rgb;
+  vec3 b=texture2D(uB,coverBox(uv+off,vec2(0.),vec2(1.),uZb)).rgb;
+  float m=smoothstep(.012,-.03,x);
+  vec3 col=mix(a,b,m);
+  float glint=band*(.5+.5*w)*fade*uAmp;
+  col+=uTint*glint*.28+vec3(glint*.15);
+  gl_FragColor=vec4(col,1.);
+}`;
+
+function A_welcome(root, ctx) {
+  const L = life();
+  root.innerHTML = `<div class="scr a-w ${S.names ? '' : 'nonames'}">
+    <canvas aria-hidden="true"></canvas><div class="fb" aria-hidden="true"></div>
+    <div class="shade"></div>${LOGO()}
+    <div class="low"><p class="cap"></p><h1 class="hl">Someone to talk to. Not a chatbot pretending.</h1>${ACTS()}</div></div>`;
+  const scr = root.firstElementChild; ctx.enterAnim(scr);
+  wireCommon(scr, L, ctx);
+  const cap = scr.querySelector('.cap');
+  const canvas = scr.querySelector('canvas');
+  const N = ORDER.length;
+  const G = RM() ? null : glInit(canvas, A_WELCOME_FRAG);
+  const setK = id => scr.style.setProperty('--k', BY[id].palette);
+  setK(ORDER[0]); setCaption(cap, ORDER[0]);
+
+  if (!G) { // fallback: crossfade
+    canvas.remove();
+    const fb = scr.querySelector('.fb');
+    const imgs = [0, 1].map(() => { const i = document.createElement('img'); i.alt = ''; fb.appendChild(i); return i; });
+    let idx = 0, slot = 0; imgs[0].src = ASSETS.reveal[ORDER[0]]; requestAnimationFrame(() => imgs[0].classList.add('on'));
+    const tick = () => {
+      idx = (idx + 1) % N; slot ^= 1; const id = ORDER[idx];
+      imgs[slot].src = ASSETS.reveal[id];
+      imgs[slot].classList.remove('on'); void imgs[slot].offsetWidth;
+      imgs[slot].classList.add('on'); imgs[slot ^ 1].classList.remove('on');
+      setK(id); setCaption(cap, id);
+      L.timeout(tick, dwell() * 1000 + 700);
+    };
+    L.timeout(tick, dwell() * 1000 + 700);
+    return L;
+  }
+  canvas.parentElement.querySelector('.fb').remove();
+  G.resize(); L.on(window, 'resize', () => G.resize());
+  const texFor = i => { const id = ORDER[(i + N) % N]; const key = 'r' + id; if (G.has(key)) return G.tex(key); const c = loadImg('reveal', id); if (c.im.complete && c.im.naturalWidth) return G.tex(key, c.im); c.ready.then(() => { if (L.alive) G.tex(key, c.im); }); return null; };
+  L.add(() => G.destroy());
+  for (let i = 0; i < 4; i++) texFor(i);
+
+  const T = 0.95;
+  let cur = 0, phase = 'dwell', t0 = null, center = [0.5, 0.4], maxR = 1.4, queued = null;
+  const born = {};
+  const zoom = (t, i) => { const age = t - (born[i] ?? t); return 1 + 0.075 * (1 - Math.min(1, age / (dwell() + T + 1.2)) ** 0.8); };
+  const ease = p => 1 - Math.pow(1 - p, 2.1);
+  function start(t, c) {
+    const nx = (cur + 1) % N; if (!texFor(nx)) return false;
+    phase = 'trans'; t0 = t; born[nx] = t; center = c;
+    const asp = canvas.clientWidth / canvas.clientHeight;
+    maxR = Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1]].map(([x, y]) => Math.hypot((x - c[0]) * asp, y - c[1]))) + 0.25;
+    const id = ORDER[nx]; setK(id); L.timeout(() => setCaption(cap, id), 140);
+    texFor(nx + 1); texFor(nx + 2);
+    const old = ORDER[(cur - 2 + N) % N]; if (old) G.drop('r' + old);
+    G.gl.uniform3f(G.u('uTint'), ...hexRgb(BY[id].palette));
+    return true;
+  }
+  L.on(scr, 'pointerdown', e => {
+    if (e.target.closest('.nodrag')) return;
+    const r = canvas.getBoundingClientRect();
+    const c = [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+    const rp = document.createElement('i'); rp.className = 'tapripple'; rp.style.left = (e.clientX - r.left) + 'px'; rp.style.top = (e.clientY - r.top) + 'px'; scr.appendChild(rp); L.timeout(() => rp.remove(), 800);
+    if (phase === 'dwell') { if (!start(performance.now() / 1000, c)) queued = c; } else queued = c;
+  });
+  L.loop(t => {
+    if (t0 === null) { t0 = t; born[0] = t; }
+    let p = 0;
+    if (phase === 'dwell') {
+      if (queued && start(t, queued)) queued = null;
+      else if (t - t0 >= dwell()) start(t, [0.3 + Math.random() * 0.4, 0.22 + Math.random() * 0.26]);
+    }
+    if (phase === 'trans') {
+      p = Math.min(1, (t - t0) / T);
+      if (p >= 1) { cur = (cur + 1) % N; phase = 'dwell'; t0 = t; p = 0; }
+    }
+    const ta = texFor(cur); if (!ta) return;
+    const nx = (cur + 1) % N; const tb = phase === 'trans' ? texFor(nx) : ta;
+    G.bind(0, 'uA', ta); G.bind(1, 'uB', tb || ta);
+    G.gl.uniform1f(G.u('uP'), phase === 'trans' ? ease(p) : 0);
+    G.gl.uniform1f(G.u('uZa'), zoom(t, cur)); G.gl.uniform1f(G.u('uZb'), zoom(t, nx));
+    G.gl.uniform2f(G.u('uC'), center[0], center[1]);
+    G.gl.uniform1f(G.u('uMax'), maxR); G.gl.uniform1f(G.u('uAmp'), 1);
+    G.draw();
+  });
+  return L;
+}
+
+const A_CHOOSE_FRAG = RIPPLE_FN + `
+uniform sampler2D uW0,uW1,uM0,uM1; uniform float uWp,uMp,uS,uTop,uWob,uT,uAmp; uniform vec2 uWc,uMc; uniform vec3 uWk,uMk;
+vec3 pool(sampler2D t0, sampler2D t1, float p, vec2 c, vec2 uv, vec2 b0, vec2 b1, vec3 tint){
+  float asp=uRes.x/uRes.y;
+  vec2 cc=mix(b0,b1,c);
+  vec2 d2=(uv-cc)*vec2(asp,1.); float d=length(d2);
+  float R=p*1.15; float x=d-R; float band=exp(-x*x*260.); float w=sin(x*72.);
+  vec2 dir=d2/max(d,1e-4);
+  vec2 off=dir*w*band*.013*uAmp*(1.-p*.7)*vec2(1./asp,1.);
+  vec3 a=texture2D(t0,coverBox(uv+off,b0,b1,1.04)).rgb;
+  vec3 b=texture2D(t1,coverBox(uv+off,b0,b1,1.04)).rgb;
+  float m = uAmp>.5 ? smoothstep(.012,-.03,x) : p;
+  vec3 col=mix(a,b,m);
+  col+=(tint*.16+.07)*band*(.5+.5*w)*(1.-p)*uAmp;
+  return col;
+}
+void main(){
+  vec2 uv=vUv;
+  if(uv.y<uTop){ gl_FragColor=vec4(21./255.,18./255.,32./255.,1.); return; }
+  float seam=uS+uWob*(sin(uv.x*8.5+uT*3.1)*.018+sin(uv.x*17.-uT*4.3)*.007);
+  vec3 col;
+  float share;
+  if(uv.y<seam){
+    col=pool(uW0,uW1,uWp,uWc,uv,vec2(0.,uTop),vec2(1.,max(uS,uTop+.001)),uWk);
+    share=(uS-uTop)/(1.-uTop);
+  } else {
+    col=pool(uM0,uM1,uMp,uMc,uv,vec2(0.,min(uS,.999)),vec2(1.,1.),uMk);
+    share=(1.-uS)/(1.-uTop);
+  }
+  col*=mix(.42,1.,smoothstep(.12,.5,share));
+  col*=1.-.42*smoothstep(.17,0.,abs(uv.y-uS))*step(uTop+.02,uS)*step(uS,.98);
+  float px=abs(uv.y-seam)*uRes.y;
+  col=mix(col,vec3(.957,.937,.902),exp(-px*px*.35)*.85);
+  col+=vec3(.957,.937,.902)*exp(-px*.09)*.06;
+  gl_FragColor=vec4(col,1.);
+}`;
+
+function poolRunner(L, list, offset) {
+  // manages a slideshow for one gender: cur index, transition progress
+  const P = { list, cur: 0, p: 0, phase: 'dwell', t0: null, c: [0.5, 0.4], offset };
+  P.step = (t, ready) => {
+    if (P.t0 === null) P.t0 = t + offset;
+    if (P.phase === 'dwell' && t - P.t0 >= dwell() && ready(P.cur + 1)) { P.phase = 'trans'; P.t0 = t; P.c = [0.25 + Math.random() * 0.5, 0.3 + Math.random() * 0.4]; P.onChange && P.onChange(P.list[(P.cur + 1) % P.list.length]); }
+    if (P.phase === 'trans') { P.p = Math.min(1, (t - P.t0) / (RM() ? 0.7 : 1.0)); if (P.p >= 1) { const prev = P.list[P.cur]; P.cur = (P.cur + 1) % P.list.length; P.phase = 'dwell'; P.t0 = t; P.p = 0; P.onAdvance && P.onAdvance(prev); } }
+  };
+  P.id = k => P.list[(P.cur + k) % P.list.length];
+  return P;
+}
+
+function A_choose(root, ctx) {
+  const L = life();
+  root.innerHTML = `<div class="scr a-c ${ctx.back ? 'back-in' : ''}">
+    <canvas aria-hidden="true"></canvas>
+    <div class="top">${HEAD('Drag the waterline, or tap one.')}</div>${BACK}
+    <div class="arena">
+      <button class="zone zw" aria-label="A woman"></button><button class="zone zm" aria-label="A man"></button>
+      <p class="glab lw">A woman<span class="gsub"></span></p><p class="glab lm">A man<span class="gsub"></span></p>${GRIP}
+    </div></div>`;
+  const scr = root.firstElementChild; ctx.enterAnim(scr); wireCommon(scr, L, ctx);
+  const canvas = scr.querySelector('canvas'), top = scr.querySelector('.top'), arena = scr.querySelector('.arena');
+  const lw = scr.querySelector('.lw'), lm = scr.querySelector('.lm'), grip = scr.querySelector('.grip');
+  const zw = scr.querySelector('.zw'), zm = scr.querySelector('.zm');
+  const subW = lw.querySelector('.gsub'), subM = lm.querySelector('.gsub');
+  const G = glInit(canvas, A_CHOOSE_FRAG);
+  const W = poolRunner(L, WOMEN, 0), M = poolRunner(L, MEN, dwell() * 0.5 + 0.5);
+  const sub = (el, id) => { if (S.names) el.textContent = `${first(id)}, ${city(id)}`; };
+  sub(subW, W.id(0)); sub(subM, M.id(0));
+  W.onChange = id => sub(subW, id); M.onChange = id => sub(subM, id);
+  let topFrac = 0.3, topAnim = null, wob = 0, lastB = 0;
+  const measure = () => { topFrac = (top.offsetHeight) / scr.clientHeight; };
+  measure(); L.on(window, 'resize', () => { measure(); G && G.resize(); });
+  let fallback = null;
+  if (!G) {
+    canvas.remove();
+    fallback = document.createElement('div'); fallback.style.cssText = 'position:absolute;inset:0;z-index:0';
+    fallback.innerHTML = `<div class="fbw" style="position:absolute;left:0;right:0;overflow:hidden"></div><div class="fbm" style="position:absolute;left:0;right:0;bottom:0;overflow:hidden"></div>`;
+    scr.prepend(fallback);
+  } else { G.resize(); L.add(() => G.destroy()); }
+  const texFor = (P, k) => { const id = P.id(k); const key = 'p' + id; if (G.has(key)) return G.tex(key); const c = loadImg('reveal', id); if (c.im.complete && c.im.naturalWidth) return G.tex(key, c.im); c.ready.then(() => { if (L.alive) G.tex(key, c.im); }); return null; };
+  const readyFor = P => k => !G || !!texFor(P, k);
+  if (G) { [0, 1, 2].forEach(k => { texFor(W, k); texFor(M, k); }); W.onAdvance = M.onAdvance = id => { G.drop('p' + id); }; }
+  let lwH = 0;
+  let fbW = null, fbM = null;
+  if (fallback) {
+    const mk = (box, P) => { const im = document.createElement('img'); im.alt = ''; im.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 33%;transition:opacity .6s'; box.appendChild(im); im.src = ASSETS.reveal[P.id(0)]; return im; };
+    fbW = mk(fallback.querySelector('.fbw'), W); fbM = mk(fallback.querySelector('.fbm'), M);
+    W.onChange = id => { sub(subW, id); fbW.src = ASSETS.reveal[id]; };
+    M.onChange = id => { sub(subM, id); fbM.src = ASSETS.reveal[id]; };
+  }
+  const seamY = b => topFrac + (1 - topFrac) * (0.5 + b * 0.5);
+  const vc = verticalChoice(L, arena, {
+    tapAt: y => { const r = scr.getBoundingClientRect(); const f = (y - r.top) / r.height; if (f < topFrac) return null; return f < seamY(vc.b) ? 'woman' : 'man'; },
+    onCommitStart: () => { topAnim = 0; top.style.transition = 'opacity .4s'; top.style.opacity = '0'; grip.style.opacity = '0'; },
+    onCommit: g => endCard(scr, L, ctx, g),
+    onBalance: (b, t, dt) => {
+      if (topAnim !== null) topAnim = Math.min(1, topAnim + dt / 0.5);
+      const tf = topAnim === null ? topFrac : topFrac * (1 - (1 - Math.pow(1 - topAnim, 3)));
+      const s = tf + (1 - tf) * (0.5 + b * 0.5);
+      wob = Math.min(1.4, wob * Math.pow(0.04, dt) + Math.abs(b - lastB) * 9); lastB = b;
+      const H = scr.clientHeight, sy = s * H;
+      if (!lwH) lwH = lw.offsetHeight;
+      lw.style.top = (sy - lwH - 18) + 'px'; lm.style.top = (sy + 18) + 'px';
+      const bw = Math.max(b, 0), bm = Math.max(-b, 0);
+      lw.style.transform = `scale(${1 + bw * 0.22 - bm * 0.15})`; lw.style.opacity = String(1 - bm * 0.75);
+      lm.style.transform = `scale(${1 + bm * 0.22 - bw * 0.15})`; lm.style.opacity = String(1 - bw * 0.75);
+      grip.style.top = sy + 'px';
+      zw.style.top = (tf * H) + 'px'; zw.style.height = (sy - tf * H) + 'px'; zm.style.top = sy + 'px'; zm.style.height = (H - sy) + 'px';
+      W.step(t, readyFor(W)); M.step(t, readyFor(M));
+      if (fallback) {
+        const fw = fallback.querySelector('.fbw'), fm = fallback.querySelector('.fbm');
+        fw.style.top = (tf * H) + 'px'; fw.style.height = (sy - tf * H) + 'px'; fm.style.height = (H - sy) + 'px';
+        return;
+      }
+      const w0 = texFor(W, 0), m0 = texFor(M, 0); if (!w0 || !m0) return;
+      G.bind(0, 'uW0', w0); G.bind(1, 'uW1', (W.phase === 'trans' && texFor(W, 1)) || w0);
+      G.bind(2, 'uM0', m0); G.bind(3, 'uM1', (M.phase === 'trans' && texFor(M, 1)) || m0);
+      const gl = G.gl, u = G.u;
+      gl.uniform1f(u('uWp'), W.phase === 'trans' ? 1 - Math.pow(1 - W.p, 2) : 0);
+      gl.uniform1f(u('uMp'), M.phase === 'trans' ? 1 - Math.pow(1 - M.p, 2) : 0);
+      gl.uniform2f(u('uWc'), W.c[0], W.c[1]); gl.uniform2f(u('uMc'), M.c[0], M.c[1]);
+      gl.uniform3f(u('uWk'), ...hexRgb(BY[W.id(W.phase === 'trans' ? 1 : 0)].palette));
+      gl.uniform3f(u('uMk'), ...hexRgb(BY[M.id(M.phase === 'trans' ? 1 : 0)].palette));
+      gl.uniform1f(u('uS'), s); gl.uniform1f(u('uTop'), tf); gl.uniform1f(u('uWob'), RM() ? 0 : wob);
+      gl.uniform1f(u('uT'), t); gl.uniform1f(u('uAmp'), RM() ? 0 : 1);
+      G.draw();
+    }
+  });
+  L.on(zw, 'click', () => vc.commit('woman')); L.on(zm, 'click', () => vc.commit('man'));
+  L.on(arena, 'keydown', e => { if (e.key === 'ArrowDown') vc.commit('woman'); if (e.key === 'ArrowUp') vc.commit('man'); });
+  zw.style.pointerEvents = zm.style.pointerEvents = 'none';
+  return L;
+}
+
+/* =========================================================
+   B. CAROUSEL
+   ========================================================= */
+function carousel(L, box, ids, o) {
+  const N = ids.length;
+  const cards = ids.map(id => {
+    const c = document.createElement('div'); c.className = 'card'; c.style.setProperty('--pk', BY[id].palette);
+    c.innerHTML = `<img alt="" draggable="false" src="${ASSETS.portrait[id]}"><div class="bl"><b>${esc(first(id))}</b><span>${esc(city(id))}</span></div>`;
+    c.style.visibility = 'hidden'; box.appendChild(c); return c;
+  });
+  let cw = 200, ch = 250;
+  const measure = () => { const H = box.clientHeight, Wd = box.clientWidth; ch = Math.min(H * o.hFrac, Wd * o.wFrac / 0.8); cw = ch * 0.8; box.style.setProperty('--cw', cw + 'px'); box.style.setProperty('--ch', ch + 'px'); };
+  measure(); L.on(window, 'resize', measure);
+  let pos = 0, vel = 0, target = 0, drag = null, settledAt = null, active = -1, holdUntil = 0;
+  const stiff = RM() ? 260 : 150, damp = RM() ? 2 * Math.sqrt(260) : 2 * Math.sqrt(150) * 0.6;
+  const wrap = x => ((x % N) + N) % N;
+  const layout = () => {
+    for (let i = 0; i < N; i++) {
+      let off = wrap(i - pos); if (off > N / 2) off -= N; const a = Math.abs(off); const c = cards[i];
+      if (a > 2.5) { if (c.style.visibility !== 'hidden') c.style.visibility = 'hidden'; continue; }
+      c.style.visibility = 'visible';
+      const x = off * cw * o.spacing, y = Math.pow(a, 1.3) * o.drop, r = off * o.rot, s = 1 - Math.min(a, 2.3) * o.fall;
+      c.style.transform = `translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0) rotate(${r.toFixed(2)}deg) scale(${s.toFixed(4)})`;
+      c.style.zIndex = String(100 - Math.round(a * 10));
+      c.style.setProperty('--dim', (Math.min(a, 1.2) * 0.5).toFixed(3));
+      c.style.opacity = a > 1.7 ? String(Math.max(0, 1 - (a - 1.7) / 0.8)) : '1';
+    }
+    const ai = wrap(Math.round(pos)); if (ai !== active) { active = ai; o.onActive && o.onActive(ids[ai]); }
+  };
+  if (o.draggable) {
+    L.on(box, 'pointerdown', e => { drag = { x: e.clientX, p0: pos, lx: e.clientX, lt: performance.now(), v: 0 }; try { box.setPointerCapture(e.pointerId); } catch (err) {} });
+    L.on(box, 'pointermove', e => { if (!drag) return; pos = drag.p0 - (e.clientX - drag.x) / (cw * o.spacing); const now = performance.now(); drag.v = 0.7 * drag.v + 0.3 * (-(e.clientX - drag.lx) / (cw * o.spacing) / Math.max(1, now - drag.lt) * 1000); drag.lx = e.clientX; drag.lt = now; });
+    const up = () => { if (!drag) return; vel = drag.v; target = Math.round(pos + clamp(drag.v * 0.18, -2, 2)); drag = null; settledAt = null; holdUntil = performance.now() / 1000 + 2.2; };
+    L.on(box, 'pointerup', up); L.on(box, 'pointercancel', up);
+  }
+  const t0 = performance.now() / 1000 + (o.delay || 0);
+  L.loop((t, dt) => {
+    if (!drag) {
+      const acc = -stiff * (pos - target) - damp * vel; vel += acc * dt; pos += vel * dt;
+      const settled = Math.abs(pos - target) < 0.02 && Math.abs(vel) < 0.06;
+      if (settled) { if (settledAt === null) settledAt = Math.max(t, t0); if (t - settledAt > dwell() && t > holdUntil && !o.paused?.()) { target += 1; settledAt = null; } }
+      else settledAt = null;
+    }
+    layout();
+  });
+  return { get cw() { return cw; } };
+}
+
+function B_welcome(root, ctx) {
+  const L = life();
+  root.innerHTML = `<div class="scr b-w ${S.names ? '' : 'nonames'}">
+    <div class="amb" aria-hidden="true"><i></i><i></i></div><div class="wash"></div>
+    ${LOGO()}<div class="deck" aria-hidden="true"></div>
+    <div class="copy"><h1 class="hl">Someone to talk to. Not a chatbot pretending.</h1></div>${ACTS()}</div>`;
+  const scr = root.firstElementChild; ctx.enterAnim(scr); wireCommon(scr, L, ctx);
+  scr.querySelector('.acts').style.position = 'relative'; scr.querySelector('.acts').style.zIndex = 2;
+  const amb = scr.querySelectorAll('.amb i'); let slot = 0;
+  carousel(L, scr.querySelector('.deck'), ORDER, {
+    spacing: 0.74, rot: 7, fall: 0.13, drop: 16, hFrac: 0.92, wFrac: 0.7, draggable: true, delay: 0.3,
+    onActive: id => {
+      slot ^= 1; amb[slot].style.backgroundImage = `url(${ASSETS.portrait[id]})`; amb[slot].classList.add('on'); amb[slot ^ 1].classList.remove('on');
+      scr.style.setProperty('--k', BY[id].palette);
+    }
+  });
+  return L;
+}
+
+function B_choose(root, ctx) {
+  const L = life();
+  root.innerHTML = `<div class="scr b-c ${ctx.back ? 'back-in' : ''} ${S.names ? '' : 'nonames'}">${BACK}${HEAD('Pull a deck to the middle, or tap it.')}
+    <div class="arena">
+      <div class="fan w"><div class="glow"></div><div class="deck sm"></div></div>
+      <div class="fan m"><div class="glow"></div><div class="deck sm"></div></div>
+      <p class="glab bw">A woman</p><p class="glab bm">A man</p>
+      <button class="zone zw" aria-label="A woman" style="top:0;height:50%"></button><button class="zone zm" aria-label="A man" style="top:50%;height:50%"></button>
+      ${GRIP}
+    </div></div>`;
+  const scr = root.firstElementChild; ctx.enterAnim(scr); wireCommon(scr, L, ctx);
+  const arena = scr.querySelector('.arena'), fw = scr.querySelector('.fan.w'), fm = scr.querySelector('.fan.m'), grip = scr.querySelector('.grip');
+  const labW = scr.querySelector('.glab.bw'), labM = scr.querySelector('.glab.bm');
+  let chosen = null;
+  const mk = (fan, ids, delay) => carousel(L, fan.querySelector('.deck'), ids, {
+    spacing: 0.5, rot: 9, fall: 0.15, drop: 10, hFrac: 0.8, wFrac: 0.5, delay,
+    paused: () => chosen && chosen !== fan,
+    onActive: id => fan.style.setProperty('--fk', BY[id].palette)
+  });
+  mk(fw, WOMEN, 0); mk(fm, MEN, dwell() * 0.5 + 0.4);
+  const vc = verticalChoice(L, arena, {
+    tapAt: y => { const r = arena.getBoundingClientRect(); return (y - r.top) < r.height / 2 ? 'woman' : 'man'; },
+    onCommitStart: g => { chosen = g === 'woman' ? fw : fm; grip.style.transition = 'opacity .3s'; grip.style.opacity = '0'; },
+    onCommit: g => endCard(scr, L, ctx, g),
+    onBalance: b => {
+      const H = arena.clientHeight, bw = Math.max(b, 0), bm = Math.max(-b, 0);
+      const shift = b * H * 0.25;
+      fw.style.transform = `translateY(${shift}px) scale(${1 + bw * 0.34 - bm * 0.2})`; fw.style.opacity = String(1 - bm * 0.8);
+      fm.style.transform = `translateY(${shift}px) scale(${1 + bm * 0.34 - bw * 0.2})`; fm.style.opacity = String(1 - bw * 0.8);
+      labW.style.transform = `translateY(${shift * 0.55}px) scale(${1 + bw * 0.18 - bm * 0.1})`; labW.style.opacity = String(1 - bm * 0.85);
+      labM.style.transform = `translateY(${shift * 0.55}px) scale(${1 + bm * 0.18 - bw * 0.1})`; labM.style.opacity = String(1 - bw * 0.85);
+      grip.style.top = (H / 2 + shift * 0.6) + 'px';
+    }
+  });
+  L.on(scr.querySelector('.zw'), 'click', () => vc.commit('woman')); L.on(scr.querySelector('.zm'), 'click', () => vc.commit('man'));
+  return L;
+}
+
+/* =========================================================
+   C. WALL
+   ========================================================= */
+function C_welcome(root, ctx) {
+  const L = life();
+  const cols = [0, 1, 2, 3].map(c => ORDER.filter((_, i) => i % 4 === c));
+  const tile = id => `<div class="tile" data-id="${id}"><img alt="" src="${ASSETS.portrait[id]}"></div>`;
+  root.innerHTML = `<div class="scr c-w ${S.names ? '' : 'nonames'} ${RM() ? 'rm' : ''}">
+    <div class="wall" aria-hidden="true">${cols.map((c, i) => `<div class="col ${i % 2 ? 'dn' : ''}" style="--dur:${[58, 70, 64, 76][i]}s;margin-top:${[0, -70, -24, -96][i]}px"><div class="track">${c.map(tile).join('')}${c.map(tile).join('')}</div></div>`).join('')}</div>
+    <div class="shade"></div>${LOGO()}
+    <div class="low"><p class="cap"></p><h1 class="hl">Someone to talk to. Not a chatbot pretending.</h1>${ACTS()}</div></div>`;
+  const scr = root.firstElementChild; ctx.enterAnim(scr); wireCommon(scr, L, ctx);
+  const cap = scr.querySelector('.cap'); const tiles = [...scr.querySelectorAll('.tile')];
+  let on = null; const recent = [];
+  const spot = () => {
+    const fr = scr.getBoundingClientRect();
+    const cands = tiles.filter(t => {
+      const r = t.getBoundingClientRect(); const cx = (r.left + r.width / 2 - fr.left) / fr.width, cy = (r.top + r.height / 2 - fr.top) / fr.height;
+      t._d = Math.hypot(cx - 0.5, (cy - 0.36) * 1.3);
+      return cx > 0.12 && cx < 0.88 && cy > 0.14 && cy < 0.58 && !recent.includes(t.dataset.id);
+    });
+    const pool = cands.length ? cands : tiles.filter(t => !recent.includes(t.dataset.id)).sort((a, b) => a._d - b._d).slice(0, 2);
+    const pick = pool[Math.floor(Math.random() * pool.length)] || null;
+    if (pick) {
+      on && on.classList.remove('on'); pick.classList.add('on'); on = pick;
+      const id = pick.dataset.id; recent.push(id); if (recent.length > 10) recent.shift();
+      scr.style.setProperty('--k', BY[id].palette); setCaption(cap, id);
+    }
+    L.timeout(spot, dwell() * 1000 + 350);
+  };
+  L.timeout(spot, 500);
+  return L;
+}
+
+function C_choose(root, ctx) {
+  const L = life();
+  const rows = list => [list.filter((_, i) => i % 2 === 0), list.filter((_, i) => i % 2 === 1)];
+  const rt = id => `<div class="rtile"><img alt="" src="${ASSETS.portrait[id]}"></div>`;
+  const river = (cls, list, dirs) => `<div class="river ${cls}"><div class="rin">${rows(list).map((r, i) => `<div class="rrow ${dirs[i]}" style="top:calc(var(--gap) + ${i} * (var(--rh) + var(--gap)));--dur:${[46, 58][i]}s"><div class="rtrack">${r.map(rt).join('')}${r.map(rt).join('')}</div></div>`).join('')}</div><div class="rdim"></div></div>`;
+  root.innerHTML = `<div class="scr c-c ${ctx.back ? 'back-in' : ''} ${RM() ? 'rm' : ''}">
+    <div class="top">${HEAD('Drag the line, or tap one.')}</div>${BACK}
+    <div class="arena">
+      ${river('w', WOMEN, ['', 'rt'])}${river('m', MEN, ['rt', ''])}
+      <div class="labscrim lsw"></div><div class="labscrim lsm"></div><div class="seamline"></div>
+      <p class="glab lw">A woman</p><p class="glab lm">A man</p>
+      <button class="zone zw" aria-label="A woman"></button><button class="zone zm" aria-label="A man"></button>${GRIP}
+    </div></div>`;
+  const scr = root.firstElementChild; ctx.enterAnim(scr); wireCommon(scr, L, ctx);
+  const top = scr.querySelector('.top'), arena = scr.querySelector('.arena');
+  const rw = scr.querySelector('.river.w'), rm = scr.querySelector('.river.m');
+  const iw = rw.querySelector('.rin'), im = rm.querySelector('.rin'), dw = rw.querySelector('.rdim'), dm = rm.querySelector('.rdim');
+  const lw = scr.querySelector('.lw'), lm = scr.querySelector('.lm'), grip = scr.querySelector('.grip'), seam = scr.querySelector('.seamline');
+  const lsw = scr.querySelector('.lsw'), lsm = scr.querySelector('.lsm'), zw = scr.querySelector('.zw'), zm = scr.querySelector('.zm');
+  let base = 300, topH = 180, topAnim = null, lwH = 0;
+  const measure = () => {
+    topH = top.offsetHeight; arena.style.top = topH + 'px';
+    const A = scr.clientHeight - topH; base = A / 2; const gap = 10; const rh = (base - gap * 3) / 2;
+    arena.style.setProperty('--base', base + 'px'); arena.style.setProperty('--rh', rh + 'px'); arena.style.setProperty('--gap', gap + 'px');
+  };
+  measure(); L.on(window, 'resize', measure);
+  lsw.style.background = 'linear-gradient(to top, rgb(10 9 16 / .7), transparent)';
+  lsm.style.background = 'linear-gradient(to bottom, rgb(10 9 16 / .7), transparent)';
+  const vc = verticalChoice(L, arena, {
+    tapAt: y => { const r = arena.getBoundingClientRect(); const s = base * (1 + vc.b); return (y - r.top) < s ? 'woman' : 'man'; },
+    onCommitStart: () => { topAnim = 0; grip.style.transition = 'opacity .3s'; grip.style.opacity = '0'; },
+    onCommit: g => endCard(scr, L, ctx, g),
+    onBalance: (b, t, dt) => {
+      let th = topH;
+      if (topAnim !== null) { topAnim = Math.min(1, topAnim + dt / 0.5); th = topH * (1 - (1 - Math.pow(1 - topAnim, 3))); top.style.transform = `translateY(${-(topH - th)}px)`; top.style.opacity = String(1 - topAnim); arena.style.top = th + 'px'; }
+      const A = scr.clientHeight - th, sw = (A / 2) * (1 + b), sm = A - sw;
+      rw.style.height = sw + 'px'; rm.style.height = sm + 'px';
+      iw.style.transform = `scale(${Math.max(1, sw / base)})`; im.style.transform = `scale(${Math.max(1, sm / base)})`;
+      const bw = Math.max(b, 0), bm = Math.max(-b, 0);
+      dw.style.opacity = String(bm * 0.6); dm.style.opacity = String(bw * 0.6);
+      seam.style.top = sw + 'px'; grip.style.top = sw + 'px';
+      if (!lwH) lwH = lw.offsetHeight;
+      lw.style.top = (sw - lwH - 18) + 'px'; lm.style.top = (sw + 18) + 'px';
+      lsw.style.top = (sw - 120) + 'px'; lsm.style.top = sw + 'px';
+      lw.style.transform = `scale(${1 + bw * 0.22 - bm * 0.15})`; lw.style.opacity = String(1 - bm * 0.75);
+      lm.style.transform = `scale(${1 + bm * 0.22 - bw * 0.15})`; lm.style.opacity = String(1 - bw * 0.75);
+      zw.style.top = '0px'; zw.style.height = sw + 'px'; zm.style.top = sw + 'px'; zm.style.height = sm + 'px';
+      seam.style.opacity = String(1 - Math.abs(b) * 0.9);
+    }
+  });
+  L.on(zw, 'click', () => vc.commit('woman')); L.on(zm, 'click', () => vc.commit('man'));
+  return L;
+}
+
+/* =========================================================
+   Shell
+   ========================================================= */
+const OPTS = { A: { welcome: A_welcome, choose: A_choose }, B: { welcome: B_welcome, choose: B_choose }, C: { welcome: C_welcome, choose: C_choose } };
+
+const NOTES = {
+  A: {
+    title: 'A. Ripple',
+    lede: 'One face at a time, full bleed. Each new face surfaces through a water ripple, and a tap anywhere on the photo drops your own ripple and skips ahead.',
+    what: [
+      'Uses the 9:16 reveal images, so the first screen already looks like the reveal moment later in the flow.',
+      'The bottom scrim takes the palette hex of whoever is on screen, the same colour logic as the Bleed deck cards.',
+      'Choice screen: two pools with a live waterline. Drag it down for a woman, up for a man; the line wobbles with your finger speed. Tap a pool to choose it outright.'
+    ],
+    why: 'Most memorable of the three and the only one that answers touch on the first screen. Tolan-style "opening a film" energy without animating the faces themselves, so the living-portrait moment stays reserved for the reveal.',
+    risk: [
+      'WebGL. A single full-screen quad is cheap, but low-end Androids get the crossfade fallback (flip "Preview reduced motion" to see it).',
+      'The ripple edge passes across faces. An earlier, stronger version warped a mouth in testing, so displacement is now a thin lens with a light glint. Judge it on your own phone; below 0.8s per face it starts to feel busy.',
+      'Heaviest build: about 250 lines plus two shaders, no new npm dependency.'
+    ]
+  },
+  B: {
+    title: 'B. Carousel',
+    lede: 'A fanned hand of cards that deals itself every second. The whole screen takes the colour of whoever is in front: their portrait, blurred into the background, plus their palette hex.',
+    what: [
+      'Cards use the Bleed treatment already chosen for the deck, so the landing quietly previews the deck.',
+      'Spring physics with a small overshoot; you can flick the cards yourself and autoplay resumes after two seconds.',
+      'Choice screen: two smaller decks, women above, men below. Pull one toward you and it grows and comes forward; the other recedes.'
+    ],
+    why: 'The Apple Invites intro carousel pattern, done with our own content. Safest to ship and the most coherent with the rest of the app.',
+    risk: [
+      'Familiar. It will look expensive, but it will not surprise anyone who has opened a 2025 Apple app.',
+      'Only three faces visible at a time, so the sense of 32 people builds slower than in C.'
+    ]
+  },
+  C: {
+    title: 'C. Wall',
+    lede: 'All 32 at once on a tilted, drifting wall. Every second a spotlight lifts one face, the rest dim, and the screen floods with that person\u2019s colour.',
+    what: [
+      'Three columns, alternate directions, CSS-only motion on the compositor. Cheapest of the three to run.',
+      'The spotlight gives the one-face-per-second rhythm you asked for without hiding the breadth.',
+      'Choice screen: two rivers of faces, women drifting one way, men the other. Pull one toward you and it swells to fill the screen.'
+    ],
+    why: 'Communicates "there are real people here" in under a second. It is the 3D-marquee hero that a lot of 2026 landing pages use.',
+    risk: [
+      'Reads as a catalogue. For a product built on hidden matching and earned trust, a wall of choosable faces sets the wrong expectation.',
+      'Tiles are small on 360px phones; faces are recognisable, not intimate.'
+    ]
+  }
+};
+
+const GENERAL = `
+  <h3>Fixed across all three</h3>
+  <ul>
+    <li>Copy is unchanged. The disclosure line stays at full size; with 32 synthetic faces now leading the screen it matters more, not less.</li>
+    <li>No video. Living portraits stay reserved for the reveal, per the settled animation rule.</li>
+    <li>First eight faces are curated (Aditi, Rehan, Mawii, Karthik, Ritwika, Tenzing, Ann, Vikram) because most people tap Get started within eight seconds. The rest alternate women and men with maximum colour contrast. It is one array.</li>
+    <li>Round two (second companion) and the empty-pool state are not drawn here; they go in the build spec.</li>
+  </ul>`;
+
+let current = null;
+const phone = document.getElementById('phone');
+function ctxFor(back) {
+  return {
+    back,
+    go: scr => { const b = scr === 'welcome' && S.screen === 'choose'; S.screen = scr; syncBar(); mount(b); },
+    enterAnim: el => { if (back) el.classList.add('back-in'); }
+  };
+}
+function mount(back = false) {
+  if (current) current.kill();
+  phone.innerHTML = '';
+  current = OPTS[S.opt][S.screen](phone, ctxFor(back));
+  document.getElementById('stageNote').textContent = S.screen === 'welcome' ? 'Tap Get started to go to the choice screen.' + (S.opt === 'A' ? ' Tap the photo to drop a ripple.' : S.opt === 'B' ? ' Flick the cards sideways.' : '') : 'Drag toward one, or tap it.';
+}
+function renderNotes() {
+  const n = NOTES[S.opt];
+  document.getElementById('notes').innerHTML = `
+    <h2>${n.title}</h2><p class="lede">${n.lede}</p>
+    <h3>What it does</h3><ul>${n.what.map(x => `<li>${x}</li>`).join('')}</ul>
+    <h3>Why it works</h3><p>${n.why}</p>
+    <h3>Watch out for</h3><ul>${n.risk.map(x => `<li>${x}</li>`).join('')}</ul>
+    <div class="tune"><h3>Tune it live</h3>
+      <div class="row"><label for="dw">Seconds per face</label><input id="dw" type="range" min="0.6" max="2" step="0.1" value="${S.dwell}"><output id="dwo">${S.dwell.toFixed(1)}s</output></div>
+      <div class="row"><label id="nmL">Names on faces</label><button class="sw" id="nm" role="switch" aria-labelledby="nmL" aria-checked="${S.names}"></button></div>
+      <div class="row"><label id="rmL">Preview reduced motion</label><button class="sw" id="rmS" role="switch" aria-labelledby="rmL" aria-checked="${S.rm}"></button></div>
+    </div>
+    ${GENERAL}`;
+  const dw = document.getElementById('dw');
+  dw.addEventListener('input', () => { S.dwell = +dw.value; document.getElementById('dwo').textContent = S.dwell.toFixed(1) + 's'; summary(); });
+  document.getElementById('nm').addEventListener('click', e => { S.names = !S.names; e.currentTarget.setAttribute('aria-checked', S.names); mount(); summary(); });
+  document.getElementById('rmS').addEventListener('click', e => { S.rm = !S.rm; e.currentTarget.setAttribute('aria-checked', S.rm); mount(); });
+}
+function syncBar() {
+  document.querySelectorAll('.opt').forEach(b => b.setAttribute('aria-pressed', b.dataset.opt === S.opt));
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', b.dataset.scr === S.screen));
+}
+document.querySelectorAll('.opt').forEach(b => b.addEventListener('click', () => { S.opt = b.dataset.opt; syncBar(); renderNotes(); mount(); document.getElementById('pW').value = S.opt; document.getElementById('pC').value = S.opt; summary(); }));
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { if (S.screen === b.dataset.scr) return; S.screen = b.dataset.scr; syncBar(); mount(); }));
+
+const NAME = { A: 'A (Ripple)', B: 'B (Carousel)', C: 'C (Wall)' };
+function summary() {
+  const w = document.getElementById('pW').value, c = document.getElementById('pC').value;
+  const lines = [`Approve: first screen ${NAME[w]}, choice screen ${NAME[c]}.`, `${S.dwell.toFixed(1)}s per face, names on faces ${S.names ? 'on' : 'off'}.`, 'Edits: '];
+  document.getElementById('summary').value = lines.join('\n');
+}
+['pW', 'pC'].forEach(id => document.getElementById(id).addEventListener('change', summary));
+document.getElementById('copyBtn').addEventListener('click', async e => {
+  const ta = document.getElementById('summary'); let ok = false;
+  try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (err) { try { ta.removeAttribute('readonly'); ta.select(); ok = document.execCommand('copy'); ta.setAttribute('readonly', ''); } catch (e2) {} }
+  e.currentTarget.textContent = ok ? 'Copied' : 'Select and copy the text above';
+  setTimeout(() => { document.getElementById('copyBtn').textContent = 'Copy'; }, 1600);
+});
+
+function sizePhone() {
+  const bar = document.querySelector('.bar').getBoundingClientRect();
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+  const availH = vh - bar.height - (vw >= 900 ? 110 : 40);
+  const w = Math.max(280, Math.min(390, vw - 28, availH * 390 / 844));
+  document.documentElement.style.setProperty('--pw', Math.floor(w) + 'px');
+}
+let rsT = null, lastVW = document.documentElement.clientWidth, lastVH = window.innerHeight, lastSize = '';
+window.addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(() => {
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+  if (vw !== lastVW || Math.abs(vh - lastVH) > 150) { lastVW = vw; lastVH = vh; sizePhone(); }
+}, 140); });
+let roT = null;
+new ResizeObserver(() => { clearTimeout(roT); roT = setTimeout(() => { const k = phone.clientWidth + 'x' + phone.clientHeight; if (lastSize && k !== lastSize) mount(); lastSize = k; }, 160); }).observe(phone);
+document.getElementById('fsBtn').addEventListener('click', () => { phone.classList.add('fs'); document.body.classList.add('is-fs'); mount(); });
+document.getElementById('fsClose').addEventListener('click', () => { phone.classList.remove('fs'); document.body.classList.remove('is-fs'); mount(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && phone.classList.contains('fs')) document.getElementById('fsClose').click(); });
+sysRM.addEventListener && sysRM.addEventListener('change', () => mount());
+
+sizePhone(); renderNotes(); summary();
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => { sizePhone(); mount(); lastSize = phone.clientWidth + 'x' + phone.clientHeight; });
+</script>
+</body>
+</html>
