@@ -2,6 +2,13 @@
    vanilla build's <style> block. Screen-specific rules live in each
    screen's own CSS Module. */
 
+/* Registered so --k can transition (first-run splash scrim, first-run visuals spec §4.3). */
+@property --k {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #151220;
+}
+
 :root {
   --ink: #0a0910;
   --surf: #151220;

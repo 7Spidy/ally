@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
@@ -11,7 +11,7 @@ import { COPY } from "@/lib/copy";
 import type { Gender } from "@/state/schema";
 import { invalidationFor } from "../_lib/invalidate";
 import { useOnboardingToast } from "../_lib/Toast";
-import styles from "./page.module.css";
+import { ChoiceRivers } from "@/components/firstRun/ChoiceRivers";
 
 export default function GenderPage() {
   return (
@@ -26,18 +26,22 @@ function GenderScreen() {
   const { state, dispatch } = useAlly();
   const { templates } = useManifest();
   const toast = useOnboardingToast();
-  const [committing, setCommitting] = useState(false);
+  const committing = useRef(false);
 
   const isRound2 = state.flow?.kind === "round2";
-  const womanPool = useMemo(() => pool(state, templates, "woman").length, [state, templates]);
-  const manPool = useMemo(() => pool(state, templates, "man").length, [state, templates]);
+  const womanIds = useMemo(() => pool(state, templates, "woman").map((t) => t.id), [state, templates]);
+  const manIds = useMemo(() => pool(state, templates, "man").map((t) => t.id), [state, templates]);
+  const womanDisabled = genderPanelInert(isRound2, womanIds.length);
+  const manDisabled = genderPanelInert(isRound2, manIds.length);
+  const disabled = useMemo(() => ({ woman: womanDisabled, man: manDisabled }), [womanDisabled, manDisabled]);
 
   if (!state.flow) return null;
 
-  function choose(g: Gender) {
-    if (!state.flow || committing) return;
-    if (genderPanelInert(isRound2, g === "woman" ? womanPool : manPool)) return;
-    setCommitting(true);
+  /** The existing choose(g) body, run at commit start. Routing is ChoiceRivers' onRoute. */
+  function choose(g: Gender): boolean {
+    if (!state.flow || committing.current) return false;
+    if (genderPanelInert(isRound2, g === "woman" ? womanIds.length : manIds.length)) return false;
+    committing.current = true;
     if (g !== state.flow.deckGender) {
       const { patch, changed } = invalidationFor("gender", state.flow);
       if (changed && patch) {
@@ -46,38 +50,18 @@ function GenderScreen() {
       }
     }
     dispatch({ type: "SET_GENDER", gender: g });
-    setTimeout(() => {
-      router.push(isRound2 ? "/onboarding/questions/disclosure" : "/onboarding/name");
-    }, 200);
+    return true;
   }
 
-  const womanDisabled = genderPanelInert(isRound2, womanPool);
-  const manDisabled = genderPanelInert(isRound2, manPool);
-
   return (
-    <div className={styles.wrap}>
-      <h1 className={`q ${styles.q}`}>{COPY.gender.question}</h1>
-      <button
-        type="button"
-        className={`${styles.panel} ${state.flow.deckGender === "woman" ? styles.sel : ""}`}
-        aria-pressed={state.flow.deckGender === "woman"}
-        disabled={womanDisabled}
-        onClick={() => choose("woman")}
-      >
-        <span className={styles.label}>{COPY.gender.optionWoman}</span>
-        {womanDisabled && <span className={styles.empty}>{COPY.round2.genderPoolEmpty}</span>}
-      </button>
-      <button
-        type="button"
-        className={`${styles.panel} ${state.flow.deckGender === "man" ? styles.sel : ""}`}
-        aria-pressed={state.flow.deckGender === "man"}
-        disabled={manDisabled}
-        onClick={() => choose("man")}
-      >
-        <span className={styles.label}>{COPY.gender.optionMan}</span>
-        {manDisabled && <span className={styles.empty}>{COPY.round2.genderPoolEmpty}</span>}
-      </button>
-      {isRound2 && <p className="sub">{COPY.round2.subLine}</p>}
-    </div>
+    <ChoiceRivers
+      womanIds={womanIds}
+      manIds={manIds}
+      disabled={disabled}
+      selected={state.flow.deckGender ?? null}
+      isRound2={isRound2}
+      onCommit={choose}
+      onRoute={() => router.push(isRound2 ? "/onboarding/questions/disclosure" : "/onboarding/name")}
+    />
   );
 }

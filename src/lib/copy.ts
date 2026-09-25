@@ -37,6 +37,7 @@ export const COPY = {
     question: "Who would you rather talk to?",
     optionWoman: "A woman",
     optionMan: "A man",
+    hint: "Drag the line, or tap one.",
   },
   name: {
     question: "What should I call you?",

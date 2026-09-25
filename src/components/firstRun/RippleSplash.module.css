@@ -1,0 +1,177 @@
+/* First-run splash, "Option A, Ripple" (first-run visuals spec §4.3). */
+
+.screen {
+  --k: #151220; /* the @property initial value; the incoming face's palette once the manifest is ready */
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--ink);
+  transition: --k 0.8s var(--ease);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.poster,
+.canvas,
+.fb,
+.fb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.poster,
+.fb img {
+  object-fit: cover;
+  object-position: 50% 34%;
+}
+
+.canvas {
+  display: block;
+  opacity: 0;
+  transition: opacity 300ms var(--ease);
+}
+.canvas.drawn {
+  opacity: 1;
+}
+
+.fb img {
+  opacity: 0;
+  transform: scale(1.07);
+  transition:
+    opacity 0.7s var(--ease),
+    transform 3.2s linear;
+}
+.fb img.on {
+  opacity: 1;
+  transform: scale(1);
+}
+.fb.still img,
+.fb.still img.on {
+  transform: none;
+  transition: opacity 0.7s var(--ease);
+}
+
+.shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(10, 9, 16, 0.6) 0%, rgba(10, 9, 16, 0) 17%),
+    linear-gradient(
+      to top,
+      color-mix(in oklab, var(--k) 30%, #0a0910) 0%,
+      color-mix(in oklab, var(--k) 24%, rgb(10 9 16 / 0.9)) 30%,
+      rgb(10 9 16 / 0) 60%
+    );
+}
+
+.wm {
+  position: absolute;
+  top: calc(22px + var(--safe-t));
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  pointer-events: none;
+}
+.wm img {
+  height: 30px;
+  width: auto;
+}
+.wm span {
+  font: 400 30px/1 var(--serif);
+  letter-spacing: -0.02em;
+}
+
+.low {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: calc(20px + var(--safe-b));
+  z-index: 4;
+}
+
+.cap {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 15.5px;
+  line-height: 1.2;
+  min-height: 19px;
+  transition:
+    opacity 180ms var(--ease),
+    transform 180ms var(--ease);
+}
+.cap b {
+  font-weight: 500;
+  color: var(--fg);
+}
+.cap span {
+  color: rgb(244 239 230 / 0.72);
+}
+.cap.swap {
+  opacity: 0;
+  transform: translateY(5px);
+}
+
+.hl {
+  font: 400 36px/1.06 var(--serif);
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+  margin: 12px 0 0;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.loginLink {
+  align-self: center;
+  color: var(--fg);
+  font-size: 15.5px;
+  line-height: 1.45;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 6px 4px;
+}
+.loginLink:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* D3 keeps the disclosure at its current size (15.5px, the .meta size and
+   the E13 floor), not the prototype's 15px. */
+.footer {
+  text-align: center;
+  font-size: 15.5px;
+  line-height: 1.4;
+  color: var(--mut);
+}
+
+.ring {
+  position: absolute;
+  z-index: 3;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(244 239 230 / 0.7);
+  pointer-events: none;
+  animation: ring 700ms var(--ease) forwards;
+}
+@keyframes ring {
+  to {
+    transform: scale(9);
+    opacity: 0;
+  }
+}

@@ -2,15 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useAuth } from "@/state/useAuth";
-import { COPY } from "@/lib/copy";
 import { now } from "@/lib/clock";
 import { SPLASH_RETURN_MS } from "@/lib/config";
 import { isBlocked, wipeLegacy } from "@/lib/migrate";
 import { bootTarget } from "@/lib/boot";
+import { RippleSplash } from "@/components/firstRun/RippleSplash";
 import styles from "./page.module.css";
 
 const STEP_TO_PATH: Record<string, string> = {
@@ -150,26 +149,7 @@ function FirstRunChoice({ onContinue, onStartOver }: { onContinue: () => void; o
   );
 }
 
+/** First-run splash: the Ripple visual layer (first-run visuals spec §4.3). */
 function FirstRunSplash({ onDone }: { onDone: () => void }) {
-  const started = useRef(false);
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-  }, []);
-  return (
-    <div className={styles.splash}>
-      <Image src="/assets/logo/ally-logo.png" alt="" width={64} height={64} className={styles.logoMark} priority />
-      <p className={`wordmark ${styles.wordmark}`}>Ally</p>
-      <h1 className={styles.headline}>Someone to talk to. Not a chatbot pretending.</h1>
-      <div className={styles.actions}>
-        <button className="btn primary" onClick={onDone}>
-          Get started
-        </button>
-        <Link href="/login" className={`meta ${styles.loginLink}`}>
-          {COPY.splash.login}
-        </Link>
-        <p className={`meta ${styles.footer}`}>Ally is an AI. Every character here is fictional.</p>
-      </div>
-    </div>
-  );
+  return <RippleSplash onDone={onDone} />;
 }

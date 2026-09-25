@@ -1,0 +1,255 @@
+/* Gender choice, "Option C, Rivers" (first-run visuals spec §4.4). Full-bleed
+   inside the onboarding layout's .screen; the layout's back button (z-index 3)
+   stays on top. */
+
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: var(--surf);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.top {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 5;
+  padding: calc(76px + var(--safe-t)) 24px 16px;
+  background: var(--surf);
+  will-change: transform, opacity;
+}
+
+.hint {
+  font-size: 15.5px;
+  color: var(--mut);
+  margin-top: 8px;
+}
+
+.sub {
+  font-size: 15.5px;
+  color: var(--mut);
+  margin-top: 4px;
+}
+
+.arena {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 0;
+  touch-action: none;
+  overflow: hidden;
+}
+
+/* ---- rivers ---- */
+.river {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+}
+.river.w {
+  top: 0;
+}
+.river.m {
+  bottom: 0;
+}
+.river.empty {
+  background: var(--raised);
+}
+
+.rin {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--base);
+  will-change: transform;
+}
+.river.w .rin {
+  bottom: 0;
+  transform-origin: 50% 100%;
+}
+.river.m .rin {
+  top: 0;
+  transform-origin: 50% 0;
+}
+
+.rrow {
+  position: absolute;
+  left: 0;
+  height: var(--rh);
+  white-space: nowrap;
+}
+.rtrack {
+  display: flex;
+  height: 100%;
+  will-change: transform;
+  animation: rl var(--dur, 48s) linear infinite;
+}
+.rrow.rt .rtrack {
+  animation-name: rr;
+}
+.rm .rtrack {
+  animation-play-state: paused;
+}
+@keyframes rl {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+@keyframes rr {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.rtile {
+  flex: none;
+  height: 100%;
+  aspect-ratio: 4 / 5;
+  margin-right: 10px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--raised);
+}
+.rtile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 30%;
+  pointer-events: none;
+}
+
+.rdim {
+  position: absolute;
+  inset: 0;
+  background: #0a0910;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* ---- seam chrome (positioned per frame with translateY) ---- */
+.seam,
+.labscrim,
+.glab,
+.grip {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+
+.seam {
+  left: 0;
+  right: 0;
+  height: 1px;
+  z-index: 6;
+  background: linear-gradient(90deg, transparent, rgb(244 239 230 / 0.75) 18% 82%, transparent);
+}
+
+.labscrim {
+  left: 0;
+  right: 0;
+  height: 120px;
+  z-index: 5;
+}
+.lsw {
+  background: linear-gradient(to top, rgb(10 9 16 / 0.7), transparent);
+}
+.lsm {
+  background: linear-gradient(to bottom, rgb(10 9 16 / 0.7), transparent);
+}
+
+.glab {
+  left: 24px;
+  z-index: 7;
+  transform-origin: left center;
+  will-change: transform, opacity;
+}
+.glabText {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 400 36px/1 var(--serif);
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 18px rgb(10 9 16 / 0.55);
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg);
+  flex: none;
+}
+.gsub {
+  display: block;
+  font: 400 15.5px/1.3 var(--sans);
+  color: rgb(244 239 230 / 0.8);
+  margin-top: 6px;
+  text-shadow: 0 1px 10px rgb(10 9 16 / 0.7);
+}
+
+.grip {
+  left: 50%;
+  z-index: 8;
+  width: 62px;
+  height: 40px;
+  margin: -20px 0 0 -31px;
+  border-radius: 20px;
+  border: 1px solid rgb(244 239 230 / 0.28);
+  background: rgb(21 18 32 / 0.52);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  transition: opacity 300ms var(--ease);
+}
+.grip svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: var(--fg);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---- tap targets: real buttons over each river ---- */
+.zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 50%;
+  z-index: 4;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border-radius: 0;
+}
+.zm {
+  top: 50%;
+}
+.zone:disabled {
+  pointer-events: none; /* drags on an empty river still reach the arena */
+  cursor: default;
+}
+.zone:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: -6px;
+  border-radius: 24px;
+}
