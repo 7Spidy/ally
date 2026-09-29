@@ -76,8 +76,8 @@ test.describe("E5 part with one companion", () => {
     await page.waitForTimeout(2700);
     await page.getByRole("button", { name: "Show me" }).click();
     await page.waitForURL("**/onboarding/deck");
-    // pool = 16 woman templates - F01 (still active) - F02 (parted, permanently excluded) = 14
-    await expect(page.getByText(/^1 of 14$/)).toBeVisible();
+    // B1: ROMANTIC's 9 women - F01 (still active) - F02 (parted, permanently excluded) = 7
+    await expect(page.getByText(/^1 of 7$/)).toBeVisible();
     await screenshotScreen(page, "e5-03-deck-excludes-parted-face");
 
     // P2: the part went through part_companion; the exclusion the deck just

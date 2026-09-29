@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
@@ -8,7 +9,6 @@ import { useSheet } from "@/state/useSheet";
 import { ManifestGate } from "@/components/ManifestGate";
 import { firstNameFromFull } from "@/lib/engine";
 import { COPY, fill } from "@/lib/copy";
-import { redrawFor } from "../_lib/propose";
 import styles from "./page.module.css";
 
 export default function ProposalPage() {
@@ -20,6 +20,7 @@ export default function ProposalPage() {
 }
 
 function ProposalScreen() {
+  const router = useRouter();
   const { state, dispatch } = useAlly();
   const { templates } = useManifest();
   const { openSheet } = useSheet();
@@ -73,11 +74,12 @@ function ProposalScreen() {
 
   const persona = firstNameFromFull(template.name);
 
+  // The redraw is not re-rendered in place: REDRAW, then the short
+  // Constellation, which proposes the next face and lands back here.
   function onRedraw() {
     if (!flow) return;
-    const result = redrawFor(flow);
     dispatch({ type: "REDRAW" });
-    dispatch({ type: "PROPOSE", result });
+    router.push("/onboarding/choosing?short=1");
   }
 
   return (

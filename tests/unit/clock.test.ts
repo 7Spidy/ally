@@ -71,7 +71,7 @@ function fakeCompanion(overrides: Partial<Companion>): Companion {
     id: "c_test",
     templateId: "F01",
     deckGender: "woman",
-    answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] },
+    answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], tb: null },
     core: { primary: null, secondary: null, weight: null, ranked: [] },
     createdAt: 0,
     lastOpenedAt: 0,
@@ -108,16 +108,15 @@ describe("Boot logic", () => {
   });
 
   it("26. a companion record with savedAt 400 days old still resumes; nothing is discarded once a companion/account exists", () => {
-    // migrate() only branches on v1-vs-v2 presence; once ally_v2 exists it
-    // is returned exactly as stored, with no age check anywhere in the
-    // function (read src/lib/migrate.ts: `if (v2) return v2;` before any
-    // date arithmetic happens at all). So an old savedAt never causes a
-    // discard for the v2 shape.
+    // migrate() only branches on v1-vs-stored presence; once ally_v2 exists it
+    // is returned as stored (B1 only upgrades an older v to v3), with no age
+    // check anywhere in the function. So an old savedAt never causes a
+    // discard for the stored shape.
     const now = 1_700_000_000_000;
     const DAY = 86400000;
     const old = now - 400 * DAY;
     const v2 = {
-      v: 2,
+      v: 3,
       savedAt: old,
       user: { displayName: "Resumed", consentAt: old, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
       companions: [
@@ -125,7 +124,7 @@ describe("Boot logic", () => {
           id: "c_resume",
           templateId: "M02",
           deckGender: "man",
-          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] },
+          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], tb: null },
           core: { primary: null, secondary: null, weight: null, ranked: [] },
           createdAt: old,
           lastOpenedAt: old,
@@ -199,8 +198,8 @@ describe("Boot logic", () => {
           id: "c1",
           templateId: "F05",
           deckGender: "woman",
-          answers: { q5: 0.1, q6: 0.2, q7: 0.3, q8: 0.1, q9: 0.4, q10: "money", q11: [] },
-          core: { primary: "MEHER", secondary: null, weight: 100, ranked: [] },
+          answers: { q5: 0, q6: 1, q7: 2, q8: 0, q9: 3, q10: "money", q11: [], tb: null },
+          core: { primary: "PSYCH", secondary: null, weight: 100, ranked: [] },
           createdAt: now - 1000,
           lastOpenedAt: now - 1000,
           status: "parted",
@@ -219,7 +218,7 @@ describe("Boot logic", () => {
     // One ms before purgeAt: untouched.
     const before = allyReducer(state, { type: "PURGE_PARTED", now: state.companions[0].purgeAt! - 1 });
     expect(before.companions[0].messages.length).toBe(1);
-    expect(before.companions[0].core.primary).toBe("MEHER");
+    expect(before.companions[0].core.primary).toBe("PSYCH");
 
     // Exactly at purgeAt: purged.
     const at = allyReducer(state, { type: "PURGE_PARTED", now: state.companions[0].purgeAt! });
@@ -242,7 +241,7 @@ describe("Boot logic", () => {
           id: "c1",
           templateId: "F02", // also in ledger.parted (e.g. re-met, then parted again historically) — must still dedupe
           deckGender: "woman",
-          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] },
+          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], tb: null },
           core: { primary: null, secondary: null, weight: null, ranked: [] },
           createdAt: now,
           lastOpenedAt: now,
@@ -259,7 +258,7 @@ describe("Boot logic", () => {
           id: "c2",
           templateId: "M09",
           deckGender: "man",
-          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] },
+          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], tb: null },
           core: { primary: null, secondary: null, weight: null, ranked: [] },
           createdAt: now,
           lastOpenedAt: now,

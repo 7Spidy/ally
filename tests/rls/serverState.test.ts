@@ -44,7 +44,7 @@ async function makeAnonymous(): Promise<TestUser> {
 }
 
 const ANSWERS = { q5: 0.4, q6: 0.5, q7: 0.5, q8: 0.38, q9: 0.5, q10: "head", q11: ["music"] };
-const CORE = { primary: "MEHER", secondary: null, weight: 100, ranked: [{ id: "MEHER", score: 0.9 }] };
+const CORE = { primary: "PSYCH", secondary: null, weight: 100, ranked: [{ id: "PSYCH", score: 0.9 }] };
 
 async function rpc<T = Record<string, unknown>>(u: TestUser, fn: string, args?: Record<string, unknown>): Promise<T> {
   const { data, error } = await u.client.rpc(fn, args);

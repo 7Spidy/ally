@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { migrate, isBlocked, stateKeyFor, wipeLegacy, SESSION_KEY, STATE_KEY, BLOCK_KEY, type StorageLike } from "@/lib/migrate";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { migrate, upgradeState, upgradeCore, CORE_ID_MAP, isBlocked, stateKeyFor, wipeLegacy, SESSION_KEY, STATE_KEY, BLOCK_KEY, type StorageLike } from "@/lib/migrate";
 import { dayKey } from "@/lib/clock";
 
 function fakeStorage(init: Record<string, string> = {}): StorageLike & { setCalls: string[]; dump(): Record<string, string> } {
@@ -66,8 +68,9 @@ describe("migrate", () => {
     expect(out.companions.length).toBe(1);
     const c = out.companions[0];
     expect(c.templateId).toBe("F01");
-    expect(c.answers).toEqual(v1.state.answers);
-    expect(c.core).toEqual(v1.state.core);
+    // B1: answers keep their historical values and gain `tb`; core ids are rewritten.
+    expect(c.answers).toEqual({ ...v1.state.answers, tb: null });
+    expect(c.core).toEqual({ primary: "PSYCH", secondary: null, weight: 100, ranked: [{ id: "PSYCH", score: 0.9 }] });
     expect(c.deckGender).toBe("woman");
     expect(c.messages).toEqual(v1.state.messages);
     expect(c.exchanges).toBe(1);
@@ -235,11 +238,11 @@ describe("migrate", () => {
   // clock.test.ts, since that's where the spec groups it; this is
   // supporting coverage for the same migrate() behaviour from the
   // migration side.
-  it("supporting: an ally_v2 state with a 400-day-old savedAt is returned intact, unmodified — no age-based discard exists for v2", () => {
+  it("supporting: an ally_v2 state with a 400-day-old savedAt is returned intact, unmodified — no age-based discard exists", () => {
     const now = 1_700_000_000_000;
     const old = now - 400 * DAY;
-    const v2 = {
-      v: 2,
+    const v3 = {
+      v: 3,
       savedAt: old,
       user: { displayName: "X", consentAt: old, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
       companions: [
@@ -247,7 +250,7 @@ describe("migrate", () => {
           id: "c_old",
           templateId: "F03",
           deckGender: "woman",
-          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] },
+          answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], tb: null },
           core: { primary: null, secondary: null, weight: null, ranked: [] },
           createdAt: old,
           lastOpenedAt: old,
@@ -264,7 +267,7 @@ describe("migrate", () => {
       ledger: { slotsUnlocked: 1, unlocks: [], parted: [], day: dayKey(old), freeUsed: 0, pass: null, passes: [] },
       flow: null,
     };
-    const storage = fakeStorage({ [STATE_KEY]: JSON.stringify(v2) });
+    const storage = fakeStorage({ [STATE_KEY]: JSON.stringify(v3) });
     const out = migrate(storage, now);
     expect(out.companions.length).toBe(1);
     expect(out.companions[0].id).toBe("c_old");
@@ -392,5 +395,219 @@ describe("per-user keys and wipeLegacy (P1)", () => {
     expect(removed).toEqual([STATE_KEY]);
     expect(m.has(STATE_KEY)).toBe(false);
     expect([...m.keys()].sort()).toEqual([BLOCK_KEY, SESSION_KEY, "ally_v2x", stateKeyFor("u1")].sort());
+  });
+});
+
+// =====================================================================
+// B1: v2 -> v3 (five cores, option-index answers)
+// =====================================================================
+describe("v2 to v3 upgrade (B1)", () => {
+  const now = 1_700_000_000_000;
+  const oldAnswers = { q5: 0.4, q6: 0.5, q7: 0.5, q8: 0.38, q9: 0.5, q10: "money", q11: ["music"] };
+
+  function v2Flow(over: Record<string, unknown> = {}) {
+    return {
+      kind: "first",
+      step: "deck",
+      cityRaw: "Mumbai",
+      region: "West",
+      deckGender: "woman",
+      displayName: "Rhea",
+      dob: "2000-01-01",
+      age: 26,
+      answers: oldAnswers,
+      core: { primary: "MEHER", secondary: "PRIYA", weight: 70, ranked: [{ id: "MEHER", score: 0.9 }, { id: "PRIYA", score: 0.8 }] },
+      deckOrder: ["F01", "F02"],
+      deckIndex: 1,
+      deckHistory: ["F01"],
+      dwell: { F01: 4000 },
+      liked: ["F01"],
+      expanded: ["F01"],
+      poolRemoved: ["F02"],
+      redraws: 1,
+      canRedraw: true,
+      proposed: "F01",
+      proposalsSeen: 2,
+      proposalMode: "pool",
+      ...over,
+    };
+  }
+
+  function v2State(flow: unknown, companions: unknown[] = []) {
+    return {
+      v: 2,
+      savedAt: now - 1000,
+      user: { displayName: "Rhea", consentAt: now - 5000, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
+      companions,
+      ledger: { slotsUnlocked: 1, unlocks: [], parted: [], day: dayKey(now), freeUsed: 0, pass: null, passes: [] },
+      flow,
+    };
+  }
+
+  function stored(state: unknown) {
+    return fakeStorage({ [STATE_KEY]: JSON.stringify(state) });
+  }
+
+  it("bumps v to 3 and adds tb: null and tutorialShown: false", () => {
+    const out = migrate(stored(v2State(v2Flow({ answers: { ...oldAnswers, q5: null, q6: null, q7: null, q8: null, q9: null } }))), now);
+    expect(out.v).toBe(3);
+    expect(out.flow!.answers.tb).toBeNull();
+    expect(out.flow!.tutorialShown).toBe(false);
+  });
+
+  it("clears the flow's core and deck even when no q5..q9 answer was given", () => {
+    const flow = v2Flow({ step: "birthday", answers: { ...oldAnswers, q5: null, q6: null, q7: null, q8: null, q9: null } });
+    const f = migrate(stored(v2State(flow)), now).flow!;
+    expect(f.core).toEqual({ primary: null, secondary: null, weight: null, ranked: [] });
+    expect([f.deckOrder, f.deckHistory, f.liked, f.expanded, f.poolRemoved]).toEqual([[], [], [], [], []]);
+    expect([f.deckIndex, f.redraws, f.proposalsSeen, f.canRedraw, f.proposed, f.proposalMode]).toEqual([0, 0, 0, false, null, null]);
+    // Nothing was answered, so the user stays where they were.
+    expect(f.step).toBe("birthday");
+    expect(f.answers.q10).toBe("money");
+  });
+
+  it("the ANAY merge keeps the higher score whichever entry comes first", () => {
+    const core = upgradeCore({ primary: "PRIYA", secondary: "KIAAN", weight: 70, ranked: [{ id: "PRIYA", score: 0.95 }, { id: "ANAY", score: 0.9 }, { id: "KIAAN", score: 0.89 }] });
+    expect(core.ranked).toEqual([{ id: "FRIEND", score: 0.95 }, { id: "ROMANTIC", score: 0.89 }]);
+    expect(core).toMatchObject({ primary: "FRIEND", secondary: "ROMANTIC", weight: 70 });
+    const flipped = upgradeCore({ primary: "ANAY", secondary: null, weight: 100, ranked: [{ id: "ANAY", score: 0.9 }, { id: "PRIYA", score: 0.7 }] });
+    expect(flipped.ranked).toEqual([{ id: "FRIEND", score: 0.9 }]);
+  });
+
+  it("rewrites companion cores and adds tb to companion answers, leaving historical answers alone", () => {
+    const companion = {
+      id: "c1",
+      templateId: "F02",
+      deckGender: "woman",
+      answers: oldAnswers,
+      core: { primary: "KIAAN", secondary: "VEER", weight: 70, ranked: [{ id: "KIAAN", score: 0.8 }, { id: "VEER", score: 0.75 }] },
+      createdAt: now - 9000,
+      lastOpenedAt: now - 9000,
+      status: "active",
+      partedAt: null,
+      purgeAt: null,
+      messages: [],
+      exchanges: 0,
+      unread: 0,
+      notify: true,
+      sound: true,
+    };
+    const out = migrate(stored(v2State(null, [companion])), now);
+    expect(out.companions[0].core).toEqual({ primary: "ROMANTIC", secondary: "TRAINER", weight: 70, ranked: [{ id: "ROMANTIC", score: 0.8 }, { id: "TRAINER", score: 0.75 }] });
+    expect(out.companions[0].answers).toEqual({ ...oldAnswers, tb: null });
+  });
+
+  it("a flow with float q5..q9 is reset to the first question, keeping the answers that are not stale", () => {
+    const out = migrate(stored(v2State(v2Flow())), now);
+    const f = out.flow!;
+    expect(f.step).toBe("questions/disclosure");
+    expect([f.answers.q5, f.answers.q6, f.answers.q7, f.answers.q8, f.answers.q9, f.answers.tb]).toEqual([null, null, null, null, null, null]);
+    expect(f.core).toEqual({ primary: null, secondary: null, weight: null, ranked: [] });
+    expect([f.deckOrder, f.deckHistory, f.liked, f.expanded, f.poolRemoved]).toEqual([[], [], [], [], []]);
+    expect([f.deckIndex, f.redraws, f.proposalsSeen]).toEqual([0, 0, 0]);
+    expect([f.canRedraw, f.proposed, f.proposalMode]).toEqual([false, null, null]);
+    // Not part of the stale block.
+    expect(f.answers.q10).toBe("money");
+    expect(f.answers.q11).toEqual(["music"]);
+    expect(f.cityRaw).toBe("Mumbai");
+    expect(f.displayName).toBe("Rhea");
+    expect(f.deckGender).toBe("woman");
+  });
+
+  it("integer q5..q9 are cleared too: a v2 integer is a slider endpoint, not an option index", () => {
+    const flow = v2Flow({ answers: { q5: 1, q6: 0, q7: 1, q8: 0, q9: 1, q10: "head", q11: [] } });
+    const f = migrate(stored(v2State(flow)), now).flow!;
+    expect(f.step).toBe("questions/disclosure");
+    expect([f.answers.q5, f.answers.q6, f.answers.q7, f.answers.q8, f.answers.q9, f.answers.tb]).toEqual([null, null, null, null, null, null]);
+    expect(f.deckOrder).toEqual([]);
+    expect(f.liked).toEqual([]);
+    expect(f.core.primary).toBeNull();
+    expect(f.answers.q10).toBe("head"); // q10 and q11 are not part of the reset
+  });
+
+  it("any single answered question among q5..q9 sends the flow back to the first question", () => {
+    for (const q of ["q5", "q6", "q7", "q8", "q9"] as const) {
+      const flow = v2Flow({ step: "questions/pressure", answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], [q]: 2 } });
+      expect(migrate(stored(v2State(flow)), now).flow!.step, q).toBe("questions/disclosure");
+    }
+  });
+
+  it("a v2 flow parked on the removed nostalgia step resumes at offday only if nothing was answered", () => {
+    const blank = { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] };
+    const empty = v2Flow({ step: "questions/nostalgia", answers: blank });
+    expect(migrate(stored(v2State(empty)), now).flow!.step).toBe("questions/offday");
+    // The user got to nostalgia by answering q5..q8: those are stale, so they restart.
+    const answered = v2Flow({ step: "questions/nostalgia", answers: { ...blank, q5: 0.4, q6: 0.5, q7: 0.5, q8: 0.38 } });
+    expect(migrate(stored(v2State(answered)), now).flow!.step).toBe("questions/disclosure");
+  });
+
+  it("a v1 session's nostalgia screen (10) also resumes at offday, and its float answers restart the questions", () => {
+    const v1 = {
+      savedAt: now - 1000,
+      state: {
+        screen: 10,
+        consentAt: null,
+        consentMarketing: false,
+        cityRaw: "",
+        region: null,
+        deckGender: null,
+        displayName: "A",
+        dob: null,
+        age: null,
+        answers: { q5: 0.4, q6: 0.5, q7: 0.5, q8: 0.38, q9: null, q10: null, q11: [] },
+        core: { primary: null, secondary: null, weight: null, ranked: [] },
+        deckOrder: [],
+        deckIndex: 0,
+        deckHistory: [],
+        dwell: {},
+        liked: [],
+        expanded: [],
+        poolRemoved: [],
+        redraws: 0,
+        canRedraw: false,
+        proposed: null,
+        proposalsSeen: 0,
+        proposalMode: null,
+        locked: null,
+        lockedAt: null,
+        soundOn: true,
+        unmuted: false,
+        messages: [],
+        exchanges: 0,
+        accountDismissed: 0,
+        accountAt: null,
+        accountContact: null,
+      },
+    };
+    const out = migrate(fakeStorage({ [SESSION_KEY]: JSON.stringify(v1) }), now);
+    expect(out.v).toBe(3);
+    expect(out.flow!.step).toBe("questions/disclosure");
+    expect(out.flow!.answers.q5).toBeNull();
+  });
+
+  it("is idempotent: migrating twice, and upgrading an already-v3 state, change nothing", () => {
+    const storage = stored(v2State(v2Flow()));
+    const first = migrate(storage, now);
+    const second = migrate(storage, now);
+    expect(second).toEqual(first);
+    expect(upgradeState(first)).toBe(first);
+    expect(JSON.parse(storage.dump()[STATE_KEY])).toEqual(first);
+  });
+
+  it("upgradeCore leaves an empty or already-new core alone", () => {
+    const empty = { primary: null, secondary: null, weight: null, ranked: [] };
+    expect(upgradeCore(empty)).toEqual(empty);
+    const fresh = { primary: "ROMANTIC" as const, secondary: "PSYCH" as const, weight: 70, ranked: [{ id: "ROMANTIC" as const, score: 8 }, { id: "PSYCH" as const, score: 6 }] };
+    expect(upgradeCore(fresh)).toEqual(fresh);
+  });
+
+  it("the SQL migration maps core ids exactly as the client does", () => {
+    const sql = readFileSync(path.join(__dirname, "../../supabase/migrations/20260930000001_five_cores.sql"), "utf8");
+    const fromSql = Object.fromEntries([...sql.matchAll(/when '(\w+)'\s+then '(\w+)'/g)].map((m) => [m[1], m[2]]));
+    const oldIds = ["KIAAN", "MEHER", "ANANYA", "VEER", "PRIYA", "ANAY"];
+    expect(Object.keys(fromSql).sort()).toEqual([...oldIds].sort());
+    for (const id of oldIds) expect(fromSql[id], id).toBe(CORE_ID_MAP[id]);
+    // Idempotent: the new ids are untouched by both.
+    for (const id of ["ROMANTIC", "PSYCH", "MONEY", "TRAINER", "FRIEND"]) expect(CORE_ID_MAP[id]).toBe(id);
   });
 });

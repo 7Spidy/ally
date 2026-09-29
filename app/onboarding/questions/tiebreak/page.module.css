@@ -1,0 +1,11 @@
+/* A message bubble rather than a plain option card. */
+.message {
+  border-radius: 22px 22px 22px 6px;
+  font-size: 17.5px;
+  line-height: 1.4;
+  padding: 18px 20px;
+}
+
+.message:focus-visible {
+  border-radius: 22px 22px 22px 6px;
+}

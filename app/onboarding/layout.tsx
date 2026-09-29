@@ -51,9 +51,9 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
       return;
     }
     if (!step) return;
-    const target = backTargetFor(step);
+    const target = backTargetFor(step, state.flow?.answers.tb != null);
     if (target) router.push(target);
-  }, [isRound2, openSheet, step, router]);
+  }, [isRound2, openSheet, step, router, state.flow?.answers.tb]);
 
   useEffect(() => {
     function onPopState() {

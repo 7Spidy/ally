@@ -21,21 +21,20 @@ export function dayKeyIST(ms: number): string {
 // ---- state shape helpers (mirrors src/state/schema.ts) ----
 
 export function emptyAnswers() {
-  return { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] as string[] };
+  return { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] as string[], tb: null };
 }
 
 export function defaultCore() {
   return {
-    primary: "MEHER",
+    primary: "PSYCH",
     secondary: null,
     weight: 100,
     ranked: [
-      { id: "MEHER", score: 0.9 },
-      { id: "KIAAN", score: 0.5 },
-      { id: "ANANYA", score: 0.4 },
-      { id: "VEER", score: 0.3 },
-      { id: "PRIYA", score: 0.2 },
-      { id: "ANAY", score: 0.1 },
+      { id: "PSYCH", score: 9 },
+      { id: "ROMANTIC", score: 5 },
+      { id: "MONEY", score: 4 },
+      { id: "TRAINER", score: 3 },
+      { id: "FRIEND", score: 2 },
     ],
   };
 }
@@ -88,7 +87,7 @@ export function makeState(opts: MakeStateOpts = {}) {
   const now = opts.now ?? FIXED_NOW;
   const day = dayKeyIST(now);
   return {
-    v: 2,
+    v: 3,
     savedAt: now,
     user: {
       displayName: "Riya",
@@ -367,8 +366,13 @@ const COPY = {
   consentAction: "Continue",
   genderWoman: "A woman",
   genderMan: "A man",
-  q5stops: ["I keep it to myself", "I tell one person", "I need to say it out loud", "Everyone hears about it"],
-  q8stops: ["Open, I'll see what happens", "Loosely sketched", "Mostly planned", "Every hour accounted for"],
+  // The options each card question is answered with (B1). These pick ROMANTIC
+  // by a wide margin whatever Q10 is, so the run never lands on the tiebreak.
+  q5: "I tell one person",
+  q6: "Feeling understood",
+  q7: "Someone who believes in me",
+  q8: "Loosely sketched",
+  q9: "Someone to just stay",
   matchingAction: "Show me",
   deckDone: "Done",
   proposalPrimary: "Lock them in",
@@ -394,32 +398,27 @@ export async function driveFirstRunIntro(page: Page, { name = "Riya", city = "Mu
   await page.getByRole("button", { name: COPY.consentAction }).click();
 }
 
-/** Drives the 7 question screens, shared by first-run and round-two. */
+/**
+ * Drives the 7 question screens, shared by first-run and round-two. Q5 to Q9
+ * are option cards that advance by themselves 350 ms after a tap; Q10 keeps
+ * its dial and Q11 its tiles. The answers give ROMANTIC a clear lead, so no
+ * tiebreak screen appears.
+ */
 export async function answerSevenQuestions(page: Page) {
-  await page.waitForURL("**/onboarding/questions/disclosure");
-  await page.getByText(COPY.q5stops[1], { exact: true }).click();
-  await page.getByRole("button", { name: COPY.consentAction }).click();
+  const cards: [string, string][] = [
+    ["disclosure", COPY.q5],
+    ["warmth", COPY.q6],
+    ["push", COPY.q7],
+    ["structure", COPY.q8],
+    ["offday", COPY.q9],
+  ];
+  const next = ["warmth", "push", "structure", "offday", "pressure"];
+  for (const [i, [route, option]] of cards.entries()) {
+    await page.waitForURL(`**/onboarding/questions/${route}`);
+    await page.getByRole("radio", { name: option, exact: true }).click();
+    await page.waitForURL(`**/onboarding/questions/${next[i]}`);
+  }
 
-  await page.waitForURL("**/onboarding/questions/warmth");
-  await page.getByRole("slider").focus();
-  await page.getByRole("slider").press("ArrowDown");
-  await page.getByRole("button", { name: COPY.consentAction }).click();
-
-  await page.waitForURL("**/onboarding/questions/push");
-  await page.getByRole("slider").focus();
-  await page.getByRole("slider").press("ArrowDown");
-  await page.getByRole("button", { name: COPY.consentAction }).click();
-
-  await page.waitForURL("**/onboarding/questions/structure");
-  await page.getByText(COPY.q8stops[1], { exact: true }).click();
-  await page.getByRole("button", { name: COPY.consentAction }).click();
-
-  await page.waitForURL("**/onboarding/questions/nostalgia");
-  await page.getByRole("slider").focus();
-  await page.getByRole("slider").press("ArrowDown");
-  await page.getByRole("button", { name: COPY.consentAction }).click();
-
-  await page.waitForURL("**/onboarding/questions/pressure");
   await page.getByRole("slider").focus();
   await page.getByRole("slider").press("ArrowRight");
   await page.getByRole("button", { name: COPY.consentAction }).click();
@@ -431,13 +430,27 @@ export async function answerSevenQuestions(page: Page) {
   await page.getByRole("button", { name: COPY.consentAction }).click();
 }
 
-/** Drives matching -> deck -> choosing -> proposal -> confirm -> reveal -> lands on /chat/[id]. */
-export async function driveMatchingThroughChat(page: Page, { reducedMotion = false } = {}) {
+/**
+ * The first deck of a first run opens with the tutorial, which locks the
+ * card until it ends. Skip (or "Got it" under reduced motion) ends it.
+ * Round two has no tutorial: do not call this there.
+ */
+export async function dismissDeckTutorial(page: Page) {
+  await page.getByRole("button", { name: /^(Skip|Got it)$/ }).click({ timeout: 10000 });
+  await expect(page.getByRole("button", { name: /^(Skip|Got it)$/ })).toHaveCount(0);
+}
+
+/**
+ * Drives matching -> deck -> choosing -> proposal -> confirm -> reveal -> lands on /chat/[id].
+ * `tutorial: false` is for round two, whose deck has no tutorial to dismiss.
+ */
+export async function driveMatchingThroughChat(page: Page, { reducedMotion = false, tutorial = true } = {}) {
   await page.waitForURL("**/onboarding/matching");
   await page.waitForTimeout(2700);
   await page.getByRole("button", { name: COPY.matchingAction }).click();
 
   await page.waitForURL("**/onboarding/deck");
+  if (tutorial) await dismissDeckTutorial(page);
   // a couple of likes, then Done (visible once 4 swipes happened per spec;
   // use ArrowRight to like without needing pointer drags)
   for (let i = 0; i < 6; i++) {

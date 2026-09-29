@@ -1,39 +1,16 @@
 /**
- * Matching, deck ordering, dwell, propose, age gate, location resolution.
- * Ported verbatim from `#ally-engine` in ally-onboarding.html. No DOM, no
- * storage, no Date() — every external input is a parameter. Formulas are
- * unchanged; only types and the `excluded` deck parameter (spec §7.1/§8.4)
- * are new.
+ * Matching, deck building and ordering, dwell, propose, age gate, location
+ * resolution. No DOM, no storage, no Date() — every external input is a
+ * parameter. Deck ordering, dwell and propose are ported from `#ally-engine`
+ * in ally-onboarding.html. B1 replaced the six-core distance matcher with
+ * five cores scored by direct points, and bound each deck to the user's core.
  */
 
 import type { CoreId, Pressure, Gender, Answers } from "@/state/schema";
+import { DECK_HIDDEN, castsAs } from "@/lib/coreMap";
 
 // ---- Cores. Hardcoded by contract. Never shown to the user. ----
-export interface CoreDef {
-  id: CoreId;
-  arc: "romantic" | "mentor" | "friend";
-  warmth: number;
-  push: number;
-  structure: number;
-  disclosure: number;
-  nostalgia: number;
-  owns: Pressure;
-}
-
-export const CORES: CoreDef[] = [
-  { id: "KIAAN", arc: "romantic", warmth: 0.95, push: 0.25, structure: 0.3, disclosure: 0.55, nostalgia: 0.45, owns: "alone" },
-  { id: "MEHER", arc: "mentor", warmth: 0.7, push: 0.3, structure: 0.55, disclosure: 0.9, nostalgia: 0.35, owns: "head" },
-  { id: "ANANYA", arc: "mentor", warmth: 0.35, push: 0.55, structure: 0.9, disclosure: 0.4, nostalgia: 0.2, owns: "money" },
-  { id: "VEER", arc: "mentor", warmth: 0.2, push: 0.95, structure: 0.85, disclosure: 0.3, nostalgia: 0.1, owns: "health" },
-  { id: "PRIYA", arc: "friend", warmth: 0.9, push: 0.4, structure: 0.2, disclosure: 0.7, nostalgia: 0.25, owns: "notgood" },
-  { id: "ANAY", arc: "friend", warmth: 0.75, push: 0.2, structure: 0.25, disclosure: 0.5, nostalgia: 0.95, owns: "change" },
-];
-
-export const WEIGHTS = { warmth: 1.3, push: 1.25, structure: 1.0, disclosure: 0.85, nostalgia: 0.7 } as const;
-export const AXES = Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[];
 export const PRESSURES: Pressure[] = ["money", "health", "head", "alone", "notgood", "change"];
-export const DISCLOSURE_STOPS = [0.1, 0.4, 0.7, 0.95] as const;
-export const STRUCTURE_STOPS = [0.1, 0.38, 0.68, 0.95] as const;
 export const INTEREST_TAGS = ["music", "food", "outdoors", "making", "movement", "screen", "systems", "people"] as const;
 
 // ---- Templates (manifest shape) ----
@@ -65,18 +42,34 @@ export interface Manifest {
   templates: Template[];
 }
 
-// ---- Matching ----
-export interface UserVector {
-  warmth: number;
-  push: number;
-  structure: number;
-  disclosure: number;
-  nostalgia: number;
-}
+// ---- Matching: direct points per answer, five cores ----
 
-export function userVector(a: Answers): UserVector {
-  return { warmth: a.q6 ?? 0, push: a.q7 ?? 0, structure: a.q8 ?? 0, disclosure: a.q5 ?? 0, nostalgia: a.q9 ?? 0 };
-}
+/** Stable sort order for equal scores. ROMANTIC first means it wins every exact tie it is part of. */
+export const CORE_ORDER: readonly CoreId[] = ["ROMANTIC", "PSYCH", "FRIEND", "MONEY", "TRAINER"];
+
+/** Points each option of q5..q9 adds, indexed by the chosen option 0..3. */
+export const SCORE: Record<"q5" | "q6" | "q7" | "q8" | "q9", Partial<Record<CoreId, number>>[]> = {
+  q5: [{ ROMANTIC: 2, PSYCH: 1 }, { ROMANTIC: 2, PSYCH: 1 }, { PSYCH: 2, FRIEND: 1 }, { FRIEND: 2, TRAINER: 1 }],
+  q6: [{ ROMANTIC: 2, PSYCH: 1 }, { FRIEND: 2, ROMANTIC: 1 }, { PSYCH: 2, MONEY: 1 }, { MONEY: 2, TRAINER: 1 }],
+  q7: [{ PSYCH: 2, ROMANTIC: 1 }, { ROMANTIC: 2 }, { FRIEND: 2 }, { TRAINER: 2, MONEY: 1 }],
+  q8: [{ FRIEND: 2, ROMANTIC: 1 }, { ROMANTIC: 2, PSYCH: 1 }, { MONEY: 2, PSYCH: 1 }, { TRAINER: 2, MONEY: 1 }],
+  q9: [{ PSYCH: 2 }, { FRIEND: 2 }, { ROMANTIC: 2 }, { TRAINER: 2, MONEY: 1 }],
+};
+export const PRESSURE_OWNER: Record<Pressure, CoreId> = {
+  money: "MONEY",
+  health: "TRAINER",
+  head: "PSYCH",
+  alone: "ROMANTIC",
+  notgood: "FRIEND",
+  change: "FRIEND",
+};
+export const PRESSURE_POINTS = 3;
+export const TIEBREAK_POINTS = 3;
+export const CLOSE_MARGIN = 2; // top minus second below this is a close call
+/** A support core is only named when it trails the primary by no more than this. */
+export const SECONDARY_MARGIN = 3;
+
+const SCORED_QUESTIONS = ["q5", "q6", "q7", "q8", "q9"] as const;
 
 export interface RankedCore {
   id: CoreId;
@@ -84,14 +77,29 @@ export interface RankedCore {
 }
 
 export function scoreCores(a: Answers): RankedCore[] {
-  const u = userVector(a);
-  const maxD = Math.sqrt(AXES.reduce((s, k) => s + WEIGHTS[k], 0));
-  return CORES.map((c) => {
-    const d = Math.sqrt(AXES.reduce((s, k) => s + WEIGHTS[k] * (u[k] - c[k]) ** 2, 0));
-    let score = 1 - d / maxD;
-    if (c.owns === a.q10) score *= 1.15;
-    return { id: c.id, score: +score.toFixed(4) };
-  }).sort((x, y) => y.score - x.score);
+  const totals: Record<CoreId, number> = { ROMANTIC: 0, PSYCH: 0, MONEY: 0, TRAINER: 0, FRIEND: 0 };
+  for (const q of SCORED_QUESTIONS) {
+    const pick = a[q];
+    if (pick == null) continue;
+    const points = SCORE[q][pick];
+    if (!points) continue; // not an option index; a stale pre-B1 float scores nothing
+    for (const [core, pts] of Object.entries(points) as [CoreId, number][]) totals[core] += pts;
+  }
+  if (a.q10) totals[PRESSURE_OWNER[a.q10]] += PRESSURE_POINTS;
+  if (a.tb) totals[a.tb] += TIEBREAK_POINTS;
+  return CORE_ORDER.map((id) => ({ id, score: totals[id] })).sort(
+    (x, y) => y.score - x.score || CORE_ORDER.indexOf(x.id) - CORE_ORDER.indexOf(y.id)
+  );
+}
+
+/** The two cores to put to the user when the top of the ranking is a close call, else null. */
+export function needsTiebreak(ranked: RankedCore[], a: Answers): [CoreId, CoreId] | null {
+  if (a.tb) return null;
+  const [first, second] = ranked;
+  if (!first || !second) return null;
+  const gap = first.score - second.score;
+  if (gap === 0 && (first.id === "ROMANTIC" || second.id === "ROMANTIC")) return null;
+  return gap < CLOSE_MARGIN ? [first.id, second.id] : null;
 }
 
 export interface AssignedCore {
@@ -101,12 +109,13 @@ export interface AssignedCore {
 }
 
 export function assignCore(ranked: RankedCore[]): AssignedCore {
-  const [first, second, third] = ranked;
-  if (first.score - second.score >= 0.06) {
-    return { primary: first.id, secondary: null, weight: 100 };
+  const [first] = ranked;
+  // Romantic never supports.
+  const support = ranked.slice(1).find((r) => r.id !== "ROMANTIC");
+  if (support && first.score - support.score <= SECONDARY_MARGIN) {
+    return { primary: first.id, secondary: support.id, weight: 70 };
   }
-  const support = second.id === "KIAAN" ? third : second; // Romantic never supports
-  return { primary: first.id, secondary: support.id, weight: 70 };
+  return { primary: first.id, secondary: null, weight: 100 };
 }
 
 export interface ComputedCore extends AssignedCore {
@@ -120,13 +129,43 @@ export function computeCore(answers: Answers): ComputedCore {
 
 // ---- Deck ----
 
-/** Gender is the base filter; `excluded` removes active/parted faces (spec §7.1, §8.3). */
-export function deckTemplates(templates: Template[], gender: Gender, excluded?: ReadonlySet<string>): Template[] {
-  return templates.filter((t) => t.gender === gender && !(excluded && excluded.has(t.id)));
+/**
+ * Gender is the base filter; `core` keeps only faces cast for that core
+ * (minus `DECK_HIDDEN`); `excluded` removes active/parted faces (spec §7.1,
+ * §8.3). Omit `core` for a gender-only pool.
+ */
+export function deckTemplates(templates: Template[], gender: Gender, excluded?: ReadonlySet<string>, core?: CoreId): Template[] {
+  return templates.filter(
+    (t) =>
+      t.gender === gender &&
+      !(excluded && excluded.has(t.id)) &&
+      (!core || (castsAs(t.id, core) && !DECK_HIDDEN[t.id]?.includes(core)))
+  );
 }
 
 /** Alias matching §8.3's `pool(templates, gender, excluded)` signature. */
 export const pool = deckTemplates;
+
+/**
+ * The deck for a user's ranked cores: their core's deck, else the next
+ * ranked core's, and so on down all five (D4, extended). The user is never
+ * told. Every face is cast for at least one core, so this is empty only when
+ * the gender's pool is empty. Ordered by `orderDeck` when `user` is given.
+ */
+export function buildCoreDeck(
+  templates: Template[],
+  gender: Gender,
+  excluded: ReadonlySet<string> | undefined,
+  ranked: RankedCore[],
+  user?: DeckUser,
+  rand?: () => number
+): Template[] {
+  for (const r of ranked) {
+    const deck = deckTemplates(templates, gender, excluded, r.id);
+    if (deck.length) return user ? orderDeck(deck, user, rand) : deck;
+  }
+  return [];
+}
 
 export function overlap(tags: string[], picks: string[] | undefined | null): number {
   if (!picks || !picks.length) return 0;

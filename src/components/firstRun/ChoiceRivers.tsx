@@ -392,10 +392,6 @@ export function ChoiceRivers({ womanIds, manIds, disabled, selected, isRound2, o
 
   const label = (g: Side) => (
     <div ref={g === "woman" ? lwRef : lmRef} className={`${styles.glab} ${g === "woman" ? styles.lw : styles.lm}`} aria-hidden="true">
-      <span className={styles.glabText}>
-        {selected === g && <i className={styles.dot} />}
-        {g === "woman" ? COPY.gender.optionWoman : COPY.gender.optionMan}
-      </span>
       {disabled[g] && <span className={styles.gsub}>{COPY.round2.genderPoolEmpty}</span>}
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { COPY, PRESENCE, REPLIES } from "@/lib/copy";
+import { COPY, OPENERS, PRESENCE, REPLIES, openerFor, replyFor } from "@/lib/copy";
 
 // Recursively collects every string leaf in an object/array tree.
 function collectStrings(node: unknown, out: string[] = []): string[] {
@@ -107,26 +107,31 @@ describe("copy", () => {
   // with `{name}` tokens but were double-checked below too, since they are
   // also user-visible (chat bubble text) even though excluded by the spec's
   // literal wording ("not over REPLIES/OPENERS").
-  it("45. no user-visible string in COPY contains a core id, %, score, level, or 2000", () => {
-    const CORE_IDS = ["KIAAN", "MEHER", "ANANYA", "VEER", "PRIYA", "ANAY"];
-    const banned = [...CORE_IDS, "%", "score", "level", "2000"];
-    const all = collectStrings(COPY);
-    for (const s of all) {
+  // The five ids are ordinary English words in places ("Money and work",
+  // "friend"), so an id is only a leak when it appears as the uppercase token.
+  // The rest of the banned list is checked case-insensitively, as before.
+  const CORE_IDS = ["ROMANTIC", "PSYCH", "MONEY", "TRAINER", "FRIEND"];
+  const OLD_CORE_IDS = ["KIAAN", "MEHER", "ANANYA", "VEER", "PRIYA", "ANAY"];
+  const banned = ["%", "score", "level", "2000"];
+
+  function expectNoLeak(label: string, strings: string[]) {
+    for (const s of strings) {
+      for (const id of [...CORE_IDS, ...OLD_CORE_IDS]) {
+        expect(s.includes(id), `${label}: "${s}" must not contain the core id ${id}`).toBe(false);
+      }
       for (const b of banned) {
-        expect(s.toUpperCase().includes(b.toUpperCase()), `"${s}" must not contain "${b}"`).toBe(false);
+        expect(s.toUpperCase().includes(b.toUpperCase()), `${label}: "${s}" must not contain "${b}"`).toBe(false);
       }
     }
+  }
+
+  it("45. no user-visible string in COPY contains a core id, %, score, level, or 2000", () => {
+    expectNoLeak("COPY", collectStrings(COPY));
   });
 
   it("45b. REPLIES and OPENERS templates likewise never leak a core id / % / score / level / 2000", () => {
-    const CORE_IDS = ["KIAAN", "MEHER", "ANANYA", "VEER", "PRIYA", "ANAY"];
-    const banned = [...CORE_IDS, "%", "score", "level", "2000"];
-    const repliesStrings = collectStrings(REPLIES);
-    for (const s of repliesStrings) {
-      for (const b of banned) {
-        expect(s.toUpperCase().includes(b.toUpperCase()), `REPLIES: "${s}" must not contain "${b}"`).toBe(false);
-      }
-    }
+    expectNoLeak("REPLIES", collectStrings(REPLIES));
+    expectNoLeak("OPENERS", collectStrings(OPENERS));
   });
 
   it("47. no COPY string contains an em dash (P1 D15), and phone copy is gone", () => {
@@ -188,7 +193,7 @@ describe("copy", () => {
     expect(missing, `missing strings: ${JSON.stringify(missing)}`).toEqual([]);
   });
 
-  it("46. PRESENCE has 32 ids x 2 non-empty strings; each REPLIES pool has exactly 4 entries", () => {
+  it("46. PRESENCE has 32 ids x 2 non-empty strings; each REPLIES pool (five cores) has exactly 4 entries", () => {
     const ids = Object.keys(PRESENCE);
     expect(ids.length).toBe(32);
     for (const id of ids) {
@@ -201,10 +206,46 @@ describe("copy", () => {
     expect(ids.filter((id) => id.startsWith("M")).length).toBe(16);
 
     const cores = Object.keys(REPLIES) as (keyof typeof REPLIES)[];
-    expect(cores.length).toBe(6);
+    expect(cores.length).toBe(5);
     for (const core of cores) {
       expect(REPLIES[core].length, core).toBe(4);
       for (const r of REPLIES[core]) expect(r.length, `${core} reply`).toBeGreaterThan(0);
     }
+  });
+
+  it("49. B1: OPENERS and REPLIES are keyed by exactly the five new core ids, with all six pressures", () => {
+    const ids = ["FRIEND", "MONEY", "PSYCH", "ROMANTIC", "TRAINER"];
+    expect(Object.keys(OPENERS).sort()).toEqual(ids);
+    expect(Object.keys(REPLIES).sort()).toEqual(ids);
+    for (const id of ids) {
+      expect(Object.keys(OPENERS[id as keyof typeof OPENERS]).sort()).toEqual(["alone", "change", "head", "health", "money", "notgood"]);
+    }
+    expect(openerFor("PSYCH", "head", "Sam")).toContain("Sam");
+    expect(replyFor("TRAINER", 5)).toBe(REPLIES.TRAINER[0]);
+  });
+
+  it("50. B1: the card questions and the tiebreaker carry the exact spec copy", () => {
+    expect(COPY.q6).toEqual({ question: "A good conversation ends with", options: ["Feeling understood", "Feeling lighter", "Seeing it clearly", "Knowing what to do"] });
+    expect(COPY.q7).toEqual({
+      question: "When you're stuck, what actually gets you moving?",
+      options: ["Someone patient", "Someone who believes in me", "Someone who makes it fun", "Someone who won't let it go"],
+    });
+    expect(COPY.q9).toEqual({
+      question: "When something's off, what do you want most?",
+      options: ["Help understanding it", "Help forgetting it for an hour", "Someone to just stay", "A way to fix it, today"],
+    });
+    expect(COPY.q5.options).toEqual(["I keep it to myself", "I tell one person", "I need to say it out loud", "Everyone hears about it"]);
+    expect(COPY.q8.options).toEqual(["Open, I'll see what happens", "Loosely sketched", "Mostly planned", "Every hour accounted for"]);
+    for (const q of [COPY.q5, COPY.q6, COPY.q7, COPY.q8, COPY.q9]) expect(q.options.length).toBe(4);
+    expect(COPY.tiebreak.question).toBe("It's 11pm and it's been a rough day. Which message would you rather get?");
+    expect(COPY.tiebreak.lines).toEqual({
+      ROMANTIC: "you went quiet today. i noticed. tell me the part you didn't say.",
+      PSYCH: "Let's slow it down. What's the thought that keeps coming back?",
+      FRIEND: "okay. emergency snacks and a terrible movie. then you tell me everything",
+      MONEY: "Right. List what's actually urgent. We'll sort the rest tomorrow.",
+      TRAINER: "Water. Shoes on. Ten-minute walk. Then we talk.",
+    });
+    expect(COPY.tutorial.keep).toBe("Swipe right to keep");
+    expect(COPY.tutorial.pass).toBe("Swipe left to pass");
   });
 });

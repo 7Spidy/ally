@@ -16,7 +16,7 @@ function companion(over: Partial<Companion> = {}): Companion {
     templateId: "F01",
     deckGender: "woman",
     answers: emptyAnswers(),
-    core: { primary: "MEHER", secondary: null, weight: 100, ranked: [] },
+    core: { primary: "PSYCH", secondary: null, weight: 100, ranked: [] },
     createdAt: NOW - 1000,
     lastOpenedAt: NOW - 1000,
     status: "active",
@@ -114,6 +114,35 @@ describe("allyReducer: server-confirmed actions", () => {
     const src = readFileSync(path.join(__dirname, "../../src/state/allyReducer.ts"), "utf8");
     expect(src).not.toMatch(/from "@\/lib\/ledger"/);
     expect(src).not.toMatch(/replyFor/);
+  });
+});
+
+describe("allyReducer: B1 five cores", () => {
+  it("SET_TUTORIAL_SHOWN marks the flow once and is a no-op afterwards", () => {
+    const s = freshState(NOW, DAY);
+    expect(s.flow!.tutorialShown).toBe(false);
+    const shown = allyReducer(s, { type: "SET_TUTORIAL_SHOWN" });
+    expect(shown.flow!.tutorialShown).toBe(true);
+    expect(allyReducer(shown, { type: "SET_TUTORIAL_SHOWN" })).toBe(shown);
+  });
+
+  it("COMPUTE_CORE scores the option-index answers with the five-core engine", () => {
+    let s = freshState(NOW, DAY);
+    for (const [key, value] of [["q5", 0], ["q6", 0], ["q7", 1], ["q8", 1], ["q9", 2], ["q10", "alone"]] as const) {
+      s = allyReducer(s, { type: "SET_ANSWER", key, value });
+    }
+    const next = allyReducer(s, { type: "COMPUTE_CORE" });
+    expect(next.flow!.core.primary).toBe("ROMANTIC");
+    expect(next.flow!.core.ranked.map((r) => r.id).sort()).toEqual(["FRIEND", "MONEY", "PSYCH", "ROMANTIC", "TRAINER"]);
+  });
+
+  it("SET_ANSWER stores the tiebreak winner", () => {
+    const s = allyReducer(freshState(NOW, DAY), { type: "SET_ANSWER", key: "tb", value: "PSYCH" });
+    expect(s.flow!.answers.tb).toBe("PSYCH");
+  });
+
+  it("DELETE_ALL resets to a v3 state", () => {
+    expect(allyReducer(freshState(NOW, DAY), { type: "DELETE_ALL", now: NOW }).v).toBe(3);
   });
 });
 

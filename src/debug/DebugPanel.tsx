@@ -38,16 +38,17 @@ if (typeof window !== "undefined") {
 }
 
 function randomAnswers(): Answers {
-  const rand = () => Math.random();
+  const pick = () => Math.floor(Math.random() * 4);
   const pressures: Answers["q10"][] = ["money", "health", "head", "alone", "notgood", "change"];
   return {
-    q5: [0.1, 0.4, 0.7, 0.95][Math.floor(rand() * 4)],
-    q6: rand(),
-    q7: rand(),
-    q8: [0.1, 0.38, 0.68, 0.95][Math.floor(rand() * 4)],
-    q9: rand(),
-    q10: pressures[Math.floor(rand() * pressures.length)],
+    q5: pick(),
+    q6: pick(),
+    q7: pick(),
+    q8: pick(),
+    q9: pick(),
+    q10: pressures[Math.floor(Math.random() * pressures.length)],
     q11: [],
+    tb: null,
   };
 }
 
@@ -152,7 +153,7 @@ export function DebugPanel() {
           <div className={styles.ranked}>
             {c.core.ranked.map((r) => (
               <span key={r.id}>
-                {r.id} {r.score.toFixed(4)}
+                {r.id} {r.score}
               </span>
             ))}
           </div>

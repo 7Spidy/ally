@@ -16,9 +16,10 @@ export const ORDER = [
   "questions/warmth",
   "questions/push",
   "questions/structure",
-  "questions/nostalgia",
+  "questions/offday",
   "questions/pressure",
   "questions/interests",
+  "questions/tiebreak",
   "matching",
   "deck",
   "choosing",
@@ -38,9 +39,10 @@ export const STEP_TO_PATH: Record<Step, string> = {
   "questions/warmth": "/onboarding/questions/warmth",
   "questions/push": "/onboarding/questions/push",
   "questions/structure": "/onboarding/questions/structure",
-  "questions/nostalgia": "/onboarding/questions/nostalgia",
+  "questions/offday": "/onboarding/questions/offday",
   "questions/pressure": "/onboarding/questions/pressure",
   "questions/interests": "/onboarding/questions/interests",
+  "questions/tiebreak": "/onboarding/questions/tiebreak",
   matching: "/onboarding/matching",
   deck: "/onboarding/deck",
   choosing: "/onboarding/choosing",
@@ -48,13 +50,16 @@ export const STEP_TO_PATH: Record<Step, string> = {
   reveal: "/onboarding/reveal",
 };
 
-/** The seven question steps, in order — used for the Q5-Q11 progress rule. */
+/**
+ * The seven question steps, in order — used for the Q5-Q11 progress rule.
+ * The conditional tiebreak screen is deliberately not one of them.
+ */
 export const QUESTION_STEPS: Step[] = [
   "questions/disclosure",
   "questions/warmth",
   "questions/push",
   "questions/structure",
-  "questions/nostalgia",
+  "questions/offday",
   "questions/pressure",
   "questions/interests",
 ];
@@ -67,8 +72,10 @@ export function stepFromPathname(pathname: string): Step | null {
   return (ORDER as readonly string[]).includes(seg) ? (seg as Step) : null;
 }
 
-export function backTargetFor(step: Step): string | null {
+/** `tiebreakWon` is `answers.tb !== null`: matching only steps back into the tiebreak if one was played. */
+export function backTargetFor(step: Step, tiebreakWon = false): string | null {
   const idx = ORDER.indexOf(step);
   if (idx <= 0) return null;
+  if (step === "matching" && !tiebreakWon) return STEP_TO_PATH["questions/interests"];
   return STEP_TO_PATH[ORDER[idx - 1]];
 }

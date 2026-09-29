@@ -1,12 +1,13 @@
 /**
  * One-time migration from the v1 vanilla build's `ally_session` (and a
- * fresh boot) into the v2 `AllyState` shape. Idempotent: running it twice
- * with the same clock produces byte-identical output. Never touches
+ * fresh boot) into the current `AllyState` shape, plus the v2 -> v3 upgrade
+ * (B1: six cores to five, option-index answers). Idempotent: running it
+ * twice with the same clock produces byte-identical output. Never touches
  * `ally_session`.
  */
 
 import { dayKey } from "@/lib/clock";
-import { emptyAnswers, emptyCore, freshFlow, freshLedger, type AllyState, type Answers, type Core, type Companion, type Gender } from "@/state/schema";
+import { emptyAnswers, emptyCore, freshFlow, freshLedger, type AllyState, type Answers, type Core, type CoreId, type Companion, type Gender, type OnboardingFlow } from "@/state/schema";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -64,7 +65,7 @@ const OLD_SCREEN_STEP: Record<number, string> = {
   7: "questions/warmth",
   8: "questions/push",
   9: "questions/structure",
-  10: "questions/nostalgia",
+  10: "questions/offday",
   11: "questions/pressure",
   12: "questions/interests",
   13: "matching",
@@ -114,6 +115,104 @@ interface V1Session {
   state: V1State;
 }
 
+// ---- v2 -> v3 (B1, five cores) ----
+
+/** Old six-core ids (and the five new ones, so the map is idempotent) to the new ids. */
+export const CORE_ID_MAP: Record<string, CoreId> = {
+  KIAAN: "ROMANTIC",
+  MEHER: "PSYCH",
+  ANANYA: "MONEY",
+  VEER: "TRAINER",
+  PRIYA: "FRIEND",
+  ANAY: "FRIEND",
+  ROMANTIC: "ROMANTIC",
+  PSYCH: "PSYCH",
+  MONEY: "MONEY",
+  TRAINER: "TRAINER",
+  FRIEND: "FRIEND",
+};
+
+function mapCoreId(id: string | null | undefined): CoreId | null {
+  return id ? (CORE_ID_MAP[id] ?? null) : null;
+}
+
+/** A core as stored before B1: ids are plain strings, possibly the old six. */
+interface StoredCore {
+  primary: string | null;
+  secondary: string | null;
+  weight: number | null;
+  ranked: { id: string; score: number }[];
+}
+
+/** Rewrites primary, secondary and every ranked id; ANAY -> FRIEND duplicates keep the higher score. */
+export function upgradeCore(core: StoredCore | null | undefined): Core {
+  if (!core) return emptyCore();
+  const primary = mapCoreId(core.primary);
+  let secondary = mapCoreId(core.secondary);
+  let weight = core.weight;
+  if (secondary && secondary === primary) {
+    secondary = null;
+    weight = 100;
+  }
+  const best = new Map<CoreId, number>();
+  for (const r of core.ranked ?? []) {
+    const id = mapCoreId(r.id);
+    if (!id) continue;
+    best.set(id, Math.max(best.get(id) ?? -Infinity, r.score));
+  }
+  const ranked = [...best.entries()].map(([id, score]) => ({ id, score })).sort((a, b) => b.score - a.score);
+  return { primary, secondary, weight, ranked };
+}
+
+function upgradeAnswers(a: Answers | null | undefined): Answers {
+  return { ...emptyAnswers(), ...(a ?? {}), tb: mapCoreId(a?.tb) };
+}
+
+const SCORED_QUESTIONS = ["q5", "q6", "q7", "q8", "q9"] as const;
+
+/**
+ * B1 changed what q5..q9 mean (slider floats became option indices) and what
+ * the core decides (the deck), so nothing derived from the old answers can be
+ * trusted, integer or not. Every existing flow drops q5..q9, the tiebreak, the
+ * core, the deck and the proposal. Where the user had answered any of q5..q9
+ * they restart at the first question. A flow that had answered none keeps its
+ * step (the removed nostalgia step resumes at offday).
+ */
+function upgradeFlow(flow: OnboardingFlow): OnboardingFlow {
+  const answers = upgradeAnswers(flow.answers);
+  const hadAnswers = SCORED_QUESTIONS.some((q) => answers[q] != null);
+  return {
+    ...flow,
+    step: hadAnswers ? "questions/disclosure" : flow.step === "questions/nostalgia" ? "questions/offday" : flow.step,
+    answers: { ...answers, q5: null, q6: null, q7: null, q8: null, q9: null, tb: null },
+    core: emptyCore(),
+    deckOrder: [],
+    deckIndex: 0,
+    deckHistory: [],
+    dwell: {},
+    liked: [],
+    expanded: [],
+    poolRemoved: [],
+    redraws: 0,
+    canRedraw: false,
+    proposed: null,
+    proposalsSeen: 0,
+    proposalMode: null,
+    tutorialShown: flow.tutorialShown ?? false,
+  };
+}
+
+/** Brings any stored state up to v3. A state already at v3 is returned unchanged. */
+export function upgradeState(raw: AllyState | (Omit<AllyState, "v"> & { v: number })): AllyState {
+  if (raw.v === 3) return raw as AllyState;
+  return {
+    ...raw,
+    v: 3,
+    companions: (raw.companions ?? []).map((c) => ({ ...c, answers: upgradeAnswers(c.answers), core: upgradeCore(c.core) })),
+    flow: raw.flow ? upgradeFlow(raw.flow) : null,
+  };
+}
+
 function tryParse<T>(raw: string | null): T | null {
   if (!raw) return null;
   try {
@@ -129,8 +228,12 @@ function inferAccountKind(contact: string | null): "phone" | "email" | null {
 }
 
 export function migrate(storage: StorageLike, now: number, key: string = STATE_KEY): AllyState {
-  const v2 = tryParse<AllyState>(storage.getItem(key));
-  if (v2) return v2;
+  const stored = tryParse<AllyState | (Omit<AllyState, "v"> & { v: number })>(storage.getItem(key));
+  if (stored) {
+    const upgraded = upgradeState(stored);
+    if (upgraded !== stored) storage.setItem(key, JSON.stringify(upgraded));
+    return upgraded;
+  }
 
   const day = dayKey(now);
   // The v1 `ally_session` only feeds the legacy un-namespaced key. A
@@ -140,6 +243,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
   let next: AllyState;
 
   if (v1 && v1.state) {
+    // v1 answers and core ids are pre-B1 too: they go through the same upgrade as stored v2 state.
     const s = v1.state;
     const user = {
       displayName: s.displayName ?? "",
@@ -158,8 +262,8 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
         id: "c_" + (v1.savedAt ?? now).toString(36),
         templateId: s.locked,
         deckGender: s.deckGender ?? "woman",
-        answers: s.answers ?? emptyAnswers(),
-        core: s.core ?? emptyCore(),
+        answers: upgradeAnswers(s.answers),
+        core: upgradeCore(s.core),
         createdAt: s.lockedAt ?? v1.savedAt ?? now,
         lastOpenedAt: v1.savedAt ?? now,
         status: "active",
@@ -172,7 +276,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
         sound: true,
       };
       next = {
-        v: 2,
+        v: 3,
         savedAt: now,
         user,
         companions: [companion],
@@ -182,12 +286,12 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
     } else {
       const step = OLD_SCREEN_STEP[s.screen] ?? "consent";
       next = {
-        v: 2,
+        v: 3,
         savedAt: now,
         user,
         companions: [],
         ledger: freshLedger(day),
-        flow: {
+        flow: upgradeFlow({
           kind: "first",
           step,
           cityRaw: s.cityRaw ?? "",
@@ -196,8 +300,8 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
           displayName: s.displayName ?? "",
           dob: s.dob ?? null,
           age: s.age ?? null,
-          answers: s.answers ?? emptyAnswers(),
-          core: s.core ?? emptyCore(),
+          answers: upgradeAnswers(s.answers),
+          core: upgradeCore(s.core),
           deckOrder: s.deckOrder ?? [],
           deckIndex: s.deckIndex ?? 0,
           deckHistory: s.deckHistory ?? [],
@@ -210,12 +314,13 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
           proposed: s.proposed ?? null,
           proposalsSeen: s.proposalsSeen ?? 0,
           proposalMode: s.proposalMode ?? null,
-        },
+          tutorialShown: false,
+        }),
       };
     }
   } else {
     next = {
-      v: 2,
+      v: 3,
       savedAt: now,
       user: {
         displayName: "",

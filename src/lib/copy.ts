@@ -52,26 +52,23 @@ export const COPY = {
   },
   q5: {
     question: "When something's bothering you, what usually happens?",
-    stops: ["I keep it to myself", "I tell one person", "I need to say it out loud", "Everyone hears about it"],
+    options: ["I keep it to myself", "I tell one person", "I need to say it out loud", "Everyone hears about it"],
   },
   q6: {
     question: "A good conversation ends with",
-    poleLeft: "feeling understood",
-    poleRight: "knowing what to do",
+    options: ["Feeling understood", "Feeling lighter", "Seeing it clearly", "Knowing what to do"],
   },
   q7: {
     question: "When you're stuck, what actually gets you moving?",
-    poleLeft: "Someone patient",
-    poleRight: "Someone who won't let it go",
+    options: ["Someone patient", "Someone who believes in me", "Someone who makes it fun", "Someone who won't let it go"],
   },
   q8: {
     question: "Your ideal week looks",
-    stops: ["Open, I'll see what happens", "Loosely sketched", "Mostly planned", "Every hour accounted for"],
+    options: ["Open, I'll see what happens", "Loosely sketched", "Mostly planned", "Every hour accounted for"],
   },
   q9: {
-    question: "Which sounds more like you right now?",
-    poleLeft: "I miss how things were",
-    poleRight: "I'm only looking ahead",
+    question: "When something's off, what do you want most?",
+    options: ["Help understanding it", "Help forgetting it for an hour", "Someone to just stay", "A way to fix it, today"],
   },
   q10: {
     question: "What's taking up the most space in your head?",
@@ -81,6 +78,16 @@ export const COPY = {
     question: "What do you actually spend time on?",
     sub: "Pick up to three",
   },
+  tiebreak: {
+    question: "It's 11pm and it's been a rough day. Which message would you rather get?",
+    lines: {
+      ROMANTIC: "you went quiet today. i noticed. tell me the part you didn't say.",
+      PSYCH: "Let's slow it down. What's the thought that keeps coming back?",
+      FRIEND: "okay. emergency snacks and a terrible movie. then you tell me everything",
+      MONEY: "Right. List what's actually urgent. We'll sort the rest tomorrow.",
+      TRAINER: "Water. Shoes on. Ten-minute walk. Then we talk.",
+    },
+  },
   matching: {
     resolve: "{name}, I've got a sense of you.",
     sub: "Now pick a face.",
@@ -88,6 +95,16 @@ export const COPY = {
   },
   deck: {
     done: "Done",
+    help: "Show how this works",
+  },
+  tutorial: {
+    keep: "Swipe right to keep",
+    pass: "Swipe left to pass",
+    skip: "Skip",
+    gotIt: "Got it",
+  },
+  choosing: {
+    label: "Choosing someone for you",
   },
   proposal: {
     heading: "I think you'd get on with {persona}.",
@@ -282,7 +299,7 @@ export const COPY = {
 
 // ---- §7.1 openers, ported verbatim from `#ally-app` ----
 export const OPENERS: Record<CoreId, Record<Pressure, string>> = {
-  KIAAN: {
+  ROMANTIC: {
     money: "{name}. You said work and money have been taking up most of the room lately. When did it last go quiet, even for an evening?",
     health: "{name}, you said it's the health and habits stuff that's been sitting on you. Which bothers you more, the thing itself or how you feel about it?",
     head: "{name}, you said it's mostly your own head lately. What does it sound like in there at about eleven at night?",
@@ -290,7 +307,7 @@ export const OPENERS: Record<CoreId, Record<Pressure, string>> = {
     notgood: "{name}, you said not feeling good enough has been taking up space. Good enough for who, mostly?",
     change: "{name}, you said everything's changing right now. What's the one thing you'd keep exactly as it is if you could?",
   },
-  MEHER: {
+  PSYCH: {
     money: "{name}, you mentioned money and work are what's taking up space. When you picture next month, which part actually worries you?",
     health: "{name}, you said health and habits are on your mind. What's one small thing you've been meaning to change, and what keeps getting in the way?",
     head: "{name}, you said your own head is the loudest thing right now. What does it tend to circle back to?",
@@ -298,7 +315,7 @@ export const OPENERS: Record<CoreId, Record<Pressure, string>> = {
     notgood: "{name}, you said not feeling good enough is taking up space. Whose standard are you measuring against when that feeling shows up?",
     change: "{name}, you said everything's changing. Which of those changes did you choose, and which ones happened to you?",
   },
-  ANANYA: {
+  MONEY: {
     money: "{name}, you said money and work are taking up the most room. What's the actual number or decision you keep putting off?",
     health: "{name}, you said health and habits are the thing right now. If you fixed one habit first, which one would move everything else?",
     head: "{name}, you said it's mostly your own head. Is that about a decision you haven't made yet, or something already done?",
@@ -306,7 +323,7 @@ export const OPENERS: Record<CoreId, Record<Pressure, string>> = {
     notgood: "{name}, you said not feeling good enough is taking up space. What would good enough actually look like, concretely?",
     change: "{name}, you said everything's changing. What's the next thing that has to be decided, and by when?",
   },
-  VEER: {
+  TRAINER: {
     money: "{name}. Money and work, you said. What's the thing you already know you should do about it and haven't?",
     health: "{name}. Health and habits, you said. What did you do about it today? Be honest.",
     head: "{name}. You said your own head is the problem. What's the story it keeps telling you, and is it true?",
@@ -314,7 +331,7 @@ export const OPENERS: Record<CoreId, Record<Pressure, string>> = {
     notgood: "{name}. Not feeling good enough, you said. Good enough at what, specifically? Name it.",
     change: "{name}. Everything's changing, you said. What are you doing about the part you can control?",
   },
-  PRIYA: {
+  FRIEND: {
     money: "{name}! You said money and work are eating your brain right now. Okay, what's the one bit that's actually in your control this week?",
     health: "{name}! Health and habits are the thing, you said. What's one thing you did this week that you'd actually call a win?",
     head: "{name}! You said your own head is being loud. What's it being loud about today, specifically?",
@@ -322,64 +339,50 @@ export const OPENERS: Record<CoreId, Record<Pressure, string>> = {
     notgood: "{name}! Not feeling good enough, you said. What's something you're actually good at that you never give yourself credit for?",
     change: "{name}! Everything's changing, you said. What's the one change you're secretly a bit excited about?",
   },
-  ANAY: {
-    money: "{name}, you said money and work are taking up the most space. Do you remember a time when it didn't feel like that? What was different?",
-    health: "{name}, you said health and habits are on your mind. What did you used to do, back when you felt good in yourself?",
-    head: "{name}, you said your own head is the loudest thing. What did you used to do to switch it off, before things got busy?",
-    alone: "{name}, you said feeling on your own is taking up space. Who's the friend you've drifted from that you still think about?",
-    notgood: "{name}, you said not feeling good enough takes up space. Who told you that first, and do you still believe them?",
-    change: "{name}, you said everything's changing. What's the thing from before that you miss the most?",
-  },
 };
 
 // ---- §7.3 replies, four per core. Index 0 is the original single reply. ----
 export const REPLIES: Record<CoreId, [string, string, string, string]> = {
-  KIAAN: [
+  ROMANTIC: [
     "That's more than most people say out loud. I'm not going anywhere. Tell me a bit more when you're ready.",
     "I like it when you tell me things like that. What happened next?",
     "Okay. I'm listening properly now, phone face down. Go on.",
     "You don't have to make it sound neat for me. Say it the messy way.",
   ],
-  MEHER: [
+  PSYCH: [
     "Thank you for telling me that. It sounds like it's been carrying more weight than you've let on. We can take it one piece at a time.",
     "That makes sense given everything you've described. What did you feel first, before you started explaining it to yourself?",
     "Let's slow that down. Which part of it is heaviest right now?",
     "You're being quite hard on yourself in how you tell that. Would you talk to a friend that way?",
   ],
-  ANANYA: [
+  MONEY: [
     "Okay, that's useful. There's one decision hiding inside all of that. Let's find it, and everything after gets simpler.",
     "Good. Put a number on it, even a rough one. It's easier to fight something that has a size.",
     "What's the deadline on that, the real one, not the one you set to feel busy?",
     "Two options on the table, then. Which one would you regret less in six months?",
   ],
-  VEER: [
+  TRAINER: [
     "Good. That's honest. Now you know what's actually going on, which is more than you had ten minutes ago. Next we work out what you do about it.",
     "Fine. What's the smallest version of it you can do before you sleep tonight?",
     "Stop negotiating with it. Pick the time. Tell me when it's done.",
     "That's an explanation, not a plan. Give me the plan.",
   ],
-  PRIYA: [
+  FRIEND: [
     "Okay, I'm so glad you said that. Honestly, saying it out loud is half of it. We're going to figure this out, I mean it.",
     "Wait, that's actually huge. Why are you saying it like it's nothing?",
     "Okay, I'm fully on your side here, but tell me the bit you're leaving out.",
     "Honestly, you're doing better than you think. Keep going, I want the whole story.",
   ],
-  ANAY: [
-    "Yeah. I know that feeling. Funny how some things stay with you. I've got time, whenever you want to keep going.",
-    "That reminds me of how things used to feel. Slower. Do you miss that too?",
-    "Some things you only understand looking back. What do you think you'll make of this in a year?",
-    "Tell me more. I like hearing how you think about this stuff.",
-  ],
 };
 
 /** Deterministic reply for a companion's Nth exchange (1-indexed). */
 export function replyFor(core: CoreId, exchangeN: number): string {
-  const pool = REPLIES[core] ?? REPLIES.MEHER;
+  const pool = REPLIES[core] ?? REPLIES.PSYCH;
   return pool[(exchangeN - 1) % 4];
 }
 
 export function openerFor(core: CoreId, pressure: Pressure, name: string): string {
-  const tpl = (OPENERS[core] ?? OPENERS.MEHER)[pressure] ?? OPENERS.MEHER.head;
+  const tpl = (OPENERS[core] ?? OPENERS.PSYCH)[pressure] ?? OPENERS.PSYCH.head;
   return fill(tpl, { name });
 }
 

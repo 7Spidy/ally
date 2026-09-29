@@ -52,7 +52,7 @@ async function rpc<T = Record<string, unknown>>(u: TestUser, fn: string, args?: 
 }
 
 const ANSWERS = { q5: 0.4, q6: 0.5, q7: 0.5, q8: 0.38, q9: 0.5, q10: "head", q11: ["music"] };
-const CORE = { primary: "MEHER", secondary: null, weight: 100, ranked: [{ id: "MEHER", score: 0.9 }] };
+const CORE = { primary: "PSYCH", secondary: null, weight: 100, ranked: [{ id: "PSYCH", score: 0.9 }] };
 
 function createArgs(templateId: string) {
   return { template_id: templateId, deck_gender: templateId.startsWith("F") ? "woman" : "man", answers: ANSWERS, core: CORE, display_name: "" };

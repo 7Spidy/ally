@@ -198,7 +198,7 @@ test.describe("E26 first-run visuals", () => {
       displayName: "Riya",
       dob: "2002-01-01",
       age: 24,
-      answers: { ...emptyAnswers(), q5: 1, q6: 50, q7: 50, q8: 1, q9: 50, q10: 50, q11: ["making", "screen"] },
+      answers: { ...emptyAnswers(), q5: 1, q6: 1, q7: 1, q8: 1, q9: 1, q10: "money", q11: ["making", "screen"] },
       core: defaultCore(),
       deckOrder: ["F01", "F02", "F03"],
       deckIndex: 1,
@@ -212,6 +212,7 @@ test.describe("E26 first-run visuals", () => {
       proposed: null,
       proposalsSeen: 0,
       proposalMode: null,
+      tutorialShown: false,
     };
     const state = makeState({ flow, user: { accountAt: null, accountContact: null, accountKind: null } });
     await setClock(page, FIXED_NOW);

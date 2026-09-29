@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
 import { ManifestGate } from "@/components/ManifestGate";
-import { pool } from "@/lib/selectors";
-import { orderDeck, DISCLOSURE_STOPS, STRUCTURE_STOPS } from "@/lib/engine";
+import { excludedFaces } from "@/lib/selectors";
 import { COPY, fill } from "@/lib/copy";
 import type { AllyState } from "@/state/schema";
+import { deckFor } from "../_lib/propose";
 import styles from "./page.module.css";
 
 /**
@@ -30,11 +30,10 @@ function fragmentPool(state: AllyState, interestVocabulary: Record<string, strin
   const a = state.flow.answers;
   const out: string[] = [];
   if (state.flow.cityRaw) out.push(state.flow.cityRaw);
-  if (a.q5 != null) out.push(COPY.q5.stops[DISCLOSURE_STOPS.indexOf(a.q5 as (typeof DISCLOSURE_STOPS)[number])]);
-  if (a.q6 != null) out.push(a.q6 >= 0.5 ? COPY.q6.poleLeft : COPY.q6.poleRight);
-  if (a.q7 != null) out.push(a.q7 >= 0.5 ? COPY.q7.poleRight : COPY.q7.poleLeft);
-  if (a.q8 != null) out.push(COPY.q8.stops[STRUCTURE_STOPS.indexOf(a.q8 as (typeof STRUCTURE_STOPS)[number])]);
-  if (a.q9 != null) out.push(a.q9 >= 0.5 ? COPY.q9.poleLeft : COPY.q9.poleRight);
+  for (const q of ["q5", "q6", "q7", "q8", "q9"] as const) {
+    const pick = a[q];
+    if (pick != null) out.push(COPY[q].options[pick]);
+  }
   if (a.q10) {
     const i = ["money", "health", "head", "alone", "notgood", "change"].indexOf(a.q10);
     if (i >= 0) out.push(COPY.q10.stops[i]);
@@ -72,9 +71,7 @@ function MatchingScreen() {
     ran.current = true;
     dispatch({ type: "COMPUTE_CORE" });
     if (state.flow.deckOrder.length === 0 && state.flow.deckGender) {
-      const p = pool(state, templates, state.flow.deckGender);
-      const ordered = orderDeck(p, { region: state.flow.region, age: state.flow.age, interests: state.flow.answers.q11 });
-      dispatch({ type: "DECK_INIT", deckOrder: ordered.map((t) => t.id) });
+      dispatch({ type: "DECK_INIT", deckOrder: deckFor(state.flow, templates, excludedFaces(state)) });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.flow, templates]);

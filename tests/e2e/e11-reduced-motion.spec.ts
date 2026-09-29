@@ -57,7 +57,8 @@ test.describe("E11 prefers-reduced-motion", () => {
     await page.waitForURL("**/onboarding/gender");
     await page.getByRole("button", { name: "A man" }).click();
     await answerSevenQuestions(page);
-    await driveMatchingThroughChat(page, { reducedMotion: true });
+    // Round two: the deck has no tutorial.
+    await driveMatchingThroughChat(page, { reducedMotion: true, tutorial: false });
 
     await expect(page).toHaveURL(/\/chat\/c_/);
     await page.getByRole("button", { name: "Back" }).click();

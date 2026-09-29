@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
 import { ManifestGate } from "@/components/ManifestGate";
-import { INTEREST_TAGS } from "@/lib/engine";
+import { INTEREST_TAGS, computeCore, needsTiebreak } from "@/lib/engine";
 import { COPY } from "@/lib/copy";
 import { QuestionTiles } from "../../_components/QuestionTiles";
 import { invalidationFor } from "../../_lib/invalidate";
@@ -61,7 +61,9 @@ function InterestsScreen() {
       toast(COPY.recompute.toast);
     }
     dispatch({ type: "SET_ANSWER", key: "q11", value: picks });
-    router.push("/onboarding/matching");
+    // A close call between the top two cores goes to the tiebreak screen first.
+    const tiebreak = needsTiebreak(computeCore(state.flow.answers).ranked, state.flow.answers);
+    router.push(tiebreak ? "/onboarding/questions/tiebreak" : "/onboarding/matching");
   }
 
   return (

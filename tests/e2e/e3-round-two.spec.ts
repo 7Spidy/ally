@@ -14,7 +14,7 @@ import {
 } from "./helpers";
 
 test.describe("E3 round two end to end", () => {
-  test("E3: slot-2 unlock -> gender -> 7 questions -> 15-card deck -> lock -> new chat; home shows 2 cards", async ({
+  test("E3: slot-2 unlock -> gender -> 7 questions -> 8-card deck -> lock -> new chat; home shows 2 cards", async ({
     page,
   }) => {
     // Seed ONE active companion of a KNOWN templateId/gender (F01, woman), and
@@ -52,7 +52,8 @@ test.describe("E3 round two end to end", () => {
     await page.waitForURL("**/onboarding/gender");
     // choose the opposite gender to get a fresh, unconstrained 15/16-card pool if desired;
     // pick "man" so the deck is a different-gender pool (still fine), but spec wants a
-    // same-gender 15-card deck test explicitly, so choose woman (F01 excluded -> 15 left).
+    // same-gender deck test explicitly, so choose woman. B1: the deck is the user's core deck
+    // (ROMANTIC: 9 women), minus F01 (still active) = 8.
     await page.getByRole("button", { name: "A woman" }).click();
     await answerSevenQuestions(page);
 
@@ -61,8 +62,8 @@ test.describe("E3 round two end to end", () => {
     await page.getByRole("button", { name: "Show me" }).click();
 
     await page.waitForURL("**/onboarding/deck");
-    await expect(page.getByText(/^1 of 15$/)).toBeVisible();
-    await screenshotScreen(page, "e3-04-deck-15-cards");
+    await expect(page.getByText(/^1 of 8$/)).toBeVisible();
+    await screenshotScreen(page, "e3-04-deck-8-cards");
 
     for (let i = 0; i < 6; i++) {
       await page.keyboard.press("ArrowRight");

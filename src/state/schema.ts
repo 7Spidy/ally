@@ -1,8 +1,9 @@
-export type CoreId = "KIAAN" | "MEHER" | "ANANYA" | "VEER" | "PRIYA" | "ANAY";
+export type CoreId = "ROMANTIC" | "PSYCH" | "MONEY" | "TRAINER" | "FRIEND";
 export type Pressure = "money" | "health" | "head" | "alone" | "notgood" | "change";
 export type Gender = "woman" | "man";
 
 export interface Answers {
+  /** q5 to q9 are the chosen option index, 0..3. */
   q5: number | null;
   q6: number | null;
   q7: number | null;
@@ -10,6 +11,8 @@ export interface Answers {
   q9: number | null;
   q10: Pressure | null;
   q11: string[];
+  /** Tiebreak winner, null if no tiebreak was needed. */
+  tb: CoreId | null;
 }
 
 export interface Core {
@@ -98,6 +101,8 @@ export interface OnboardingFlow {
   proposed: string | null;
   proposalsSeen: number;
   proposalMode: string | null;
+  /** The first-deck tutorial has played (or been skipped) on this flow. */
+  tutorialShown: boolean;
 }
 
 export interface AllyUser {
@@ -113,7 +118,7 @@ export interface AllyUser {
 }
 
 export interface AllyState {
-  v: 2;
+  v: 3;
   savedAt: number;
   user: AllyUser;
   companions: Companion[];
@@ -122,7 +127,7 @@ export interface AllyState {
 }
 
 export function emptyAnswers(): Answers {
-  return { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] };
+  return { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], tb: null };
 }
 
 export function emptyCore(): Core {
@@ -153,6 +158,7 @@ export function freshFlow(kind: "first" | "round2", step: string): OnboardingFlo
     proposed: null,
     proposalsSeen: 0,
     proposalMode: null,
+    tutorialShown: false,
   };
 }
 
@@ -170,7 +176,7 @@ export function freshLedger(day: string): Ledger {
 
 export function freshState(nowMs: number, day: string): AllyState {
   return {
-    v: 2,
+    v: 3,
     savedAt: nowMs,
     user: {
       displayName: "",

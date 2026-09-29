@@ -1,0 +1,121 @@
+/* The selection moment between the deck and the proposal. Sits over the
+   whole onboarding screen. */
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  /* the ink, darkened to 85% */
+  background: color-mix(in srgb, var(--ink) 85%, black);
+}
+
+.flood {
+  position: absolute;
+  inset: 0;
+  clip-path: circle(0px at 50% 50%);
+  z-index: 1;
+}
+
+.pulse {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  will-change: transform;
+}
+
+.halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  border: 2px solid rgb(244 239 230 / 0.5);
+  transform: translate(-50%, -50%) scale(0.2);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.orbit {
+  position: absolute;
+  inset: 0;
+  animation: orbit var(--orbit, 12s) linear infinite;
+}
+
+/* One face, or the redraw variant: nothing orbits or flies. */
+.still,
+.still .node,
+.still .face {
+  animation: none;
+}
+
+.node {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+  transform: translate(var(--ex), var(--ey));
+  animation: fly 850ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.face {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  /* keeps each face upright while the ring turns */
+  animation: orbit var(--orbit, 12s) linear infinite reverse;
+  transition: opacity var(--fade, 350ms);
+}
+
+.out {
+  opacity: 0;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 160px;
+  height: 160px;
+  margin: -80px 0 0 -80px;
+  border-radius: 50%;
+  overflow: hidden;
+  z-index: 3;
+  transform-origin: center;
+  box-shadow: 0 18px 46px -18px rgb(0 0 0 / 0.7);
+}
+
+/* Reduced motion: faces sit on the ring, no orbit, no flight, no flood. */
+.rm .orbit,
+.rm .node,
+.rm .face {
+  animation: none;
+}
+
+.rm .flood {
+  display: none;
+}
+
+@keyframes orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fly {
+  from {
+    transform: translate(var(--sx), var(--sy)) scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: translate(var(--ex), var(--ey)) scale(1);
+    opacity: 1;
+  }
+}

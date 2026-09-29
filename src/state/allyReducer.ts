@@ -30,6 +30,7 @@ export type AllyAction =
   | { type: "DECK_EXPAND"; id: string }
   | { type: "DECK_ADVANCE" }
   | { type: "DECK_UNDO" }
+  | { type: "SET_TUTORIAL_SHOWN" }
   | { type: "PROPOSE"; result: { proposed: string | null; canRedraw: boolean; mode: string | null } }
   | { type: "REDRAW" }
   | { type: "START_ROUND2"; templates: { id: string; gender: Gender }[] }
@@ -151,6 +152,12 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
       return { ...state, flow: { ...flow, deckIndex: Math.max(0, flow.deckIndex - 1), deckHistory: flow.deckHistory.slice(0, -1) } };
     }
 
+    case "SET_TUTORIAL_SHOWN": {
+      const flow = requireFlow(state);
+      if (flow.tutorialShown) return state;
+      return { ...state, flow: { ...flow, tutorialShown: true } };
+    }
+
     case "PROPOSE": {
       const flow = requireFlow(state);
       return {
@@ -264,7 +271,7 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
 
     case "DELETE_ALL":
       return {
-        v: 2,
+        v: 3,
         savedAt: action.now,
         user: { displayName: "", consentAt: null, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
         companions: [],

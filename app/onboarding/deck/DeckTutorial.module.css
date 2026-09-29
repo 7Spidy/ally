@@ -1,0 +1,93 @@
+/* Covers the deck while the tutorial runs, so nothing underneath takes input. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.glyph {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.glyph svg {
+  display: block;
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 112px; /* until the card has been measured */
+  min-height: 30px;
+  text-align: center;
+  font: 400 20px/1.4 var(--sans);
+  text-shadow: 0 2px 14px rgb(10 9 16 / 0.8);
+  pointer-events: none;
+}
+
+.skip {
+  position: absolute;
+  left: 50%;
+  bottom: 6px; /* room for the focus ring, which the overlay would clip */
+  transform: translateX(-50%);
+  min-width: 96px;
+  min-height: 44px;
+  padding: 10px 22px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgb(21 18 32 / 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 17px;
+}
+
+/* Reduced motion: two static panels and a button, no movement. */
+.staticCard {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 20px;
+  border-radius: 22px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+}
+
+.panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.staticGlyph {
+  width: 36px;
+  height: 36px;
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

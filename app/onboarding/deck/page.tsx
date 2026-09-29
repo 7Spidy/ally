@@ -9,6 +9,7 @@ import { ManifestGate } from "@/components/ManifestGate";
 import type { Template } from "@/lib/engine";
 import { firstNameFromFull, EXPAND_BONUS } from "@/lib/engine";
 import { COPY } from "@/lib/copy";
+import { DeckTutorial } from "./DeckTutorial";
 import styles from "./page.module.css";
 
 function clamp(v: number, a: number, b: number) {
@@ -42,8 +43,13 @@ function DeckScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drag, setDrag] = useState({ dx: 0, dy: 0, dragging: false });
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [tutorial, setTutorial] = useState(false);
+  const tutorialRef = useRef(false);
+  tutorialRef.current = tutorial;
+  const tutorialStarted = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
   const dwellAccum = useRef(0);
   const dwellId = useRef<string | null>(null);
   const lastTs = useRef(0);
@@ -61,6 +67,7 @@ function DeckScreen() {
   const N = flow?.deckOrder.length ?? 0;
   const index = flow?.deckIndex ?? 0;
   const topId = flow && index < N ? flow.deckOrder[index] : null;
+  const topPalette = topId ? byId.get(topId)?.palette : undefined;
   const under1Id = flow && index + 1 < N ? flow.deckOrder[index + 1] : null;
   const under2Id = flow && index + 2 < N ? flow.deckOrder[index + 2] : null;
 
@@ -84,6 +91,24 @@ function DeckScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow?.deckOrder.join(",")]);
 
+  // The first-deck tutorial plays once, on the real first card of the first
+  // run, once that card has rendered. The "?" button replays it any time.
+  const autoTutorial = !!flow && flow.kind === "first" && !flow.tutorialShown && flow.deckIndex === 0 && !!topId;
+  useEffect(() => {
+    if (!autoTutorial || tutorialStarted.current) return;
+    const raf = requestAnimationFrame(() => {
+      tutorialStarted.current = true;
+      setTutorial(true);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [autoTutorial]);
+
+  const endTutorial = useCallback(() => {
+    setTutorial(false);
+    dispatch({ type: "SET_TUTORIAL_SHOWN" });
+    stageRef.current?.focus({ preventScroll: true });
+  }, [dispatch]);
+
   // Dwell accumulation: while topmost and visible, capped at DWELL_CAP
   // inside the reducer. Flushed to the store every ~250ms via rAF.
   useEffect(() => {
@@ -92,7 +117,8 @@ function DeckScreen() {
     lastTs.current = 0;
     let raf = 0;
     function tick(ts: number) {
-      if (document.visibilityState === "visible" && lastTs.current && dwellId.current) {
+      // The tutorial's own time never counts toward the first card's dwell.
+      if (document.visibilityState === "visible" && !tutorialRef.current && lastTs.current && dwellId.current) {
         const delta = ts - lastTs.current;
         dwellAccum.current += delta;
         if (dwellAccum.current >= DWELL_FLUSH_MS) {
@@ -124,7 +150,7 @@ function DeckScreen() {
 
   const swipe = useCallback(
     (dir: "like" | "pass") => {
-      if (!flow || !topId) return;
+      if (!flow || !topId || tutorialRef.current) return;
       if (dir === "like") {
         dispatch({ type: "DECK_LIKE", id: topId });
         vibrate(18);
@@ -141,7 +167,7 @@ function DeckScreen() {
   );
 
   const expand = useCallback(() => {
-    if (!flow || !topId) return;
+    if (!flow || !topId || tutorialRef.current) return;
     setExpandedId(topId);
     if (!flow.expanded.includes(topId)) {
       dispatch({ type: "DECK_EXPAND", id: topId });
@@ -152,7 +178,7 @@ function DeckScreen() {
   const collapse = useCallback(() => setExpandedId(null), []);
 
   const undo = useCallback(() => {
-    if (!flow || flow.deckHistory.length === 0) return;
+    if (!flow || flow.deckHistory.length === 0 || tutorialRef.current) return;
     dispatch({ type: "DECK_UNDO" });
     setExpandedId(null);
   }, [flow, dispatch]);
@@ -160,7 +186,7 @@ function DeckScreen() {
   const dragRef = useRef({ dx: 0, dy: 0, dragging: false });
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.button !== 0 || (e.target as Element).closest("button")) return;
+    if (e.button !== 0 || tutorialRef.current || (e.target as Element).closest("button")) return;
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
     dragStartRef.current = { x: e.clientX, y: e.clientY, t: e.timeStamp, lastX: e.clientX, lastT: e.timeStamp, vx: 0 };
     dragRef.current = { dx: 0, dy: 0, dragging: true };
@@ -203,6 +229,7 @@ function DeckScreen() {
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (tutorialRef.current) return; // inputs are locked while the tutorial runs
       if (document.activeElement && ["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
       if (e.key === "ArrowLeft") swipe("pass");
       else if (e.key === "ArrowRight") swipe("like");
@@ -229,7 +256,21 @@ function DeckScreen() {
   const expanded = expandedId === topId;
 
   return (
-    <>
+    <div className={styles.root}>
+      <div className={styles.backdrop} ref={backdropRef} style={topPalette ? { ["--k" as string]: topPalette } : undefined} aria-hidden="true" />
+      <button
+        type="button"
+        className={`icon-btn ${styles.help}`}
+        aria-label={COPY.deck.help}
+        disabled={tutorial}
+        onClick={() => setTutorial(true)}
+      >
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M9.6 9.4a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1.1.9-1.1 1.7" />
+          <path d="M12 16.6v.1" />
+        </svg>
+      </button>
       <div className={styles.counter} aria-live="polite">
         {index + 1} of {N}
       </div>
@@ -260,15 +301,22 @@ function DeckScreen() {
         />
       </div>
       <div className={styles.deckbar}>
-        <button type="button" className="btn secondary" hidden={flow.deckHistory.length === 0} onClick={undo}>
+        <button type="button" className="btn secondary" hidden={flow.deckHistory.length === 0} disabled={tutorial} onClick={undo}>
           Undo
         </button>
         <span className="grow" />
-        <button type="button" className="btn primary" hidden={flow.deckHistory.length < Math.min(4, N)} onClick={() => router.push("/onboarding/choosing")}>
+        <button
+          type="button"
+          className="btn primary"
+          hidden={flow.deckHistory.length < Math.min(4, N)}
+          disabled={tutorial}
+          onClick={() => router.push("/onboarding/choosing")}
+        >
           {COPY.deck.done}
         </button>
       </div>
-    </>
+      {tutorial && <DeckTutorial cardRef={cardRef} backdropRef={backdropRef} reducedMotion={reducedMotion} onEnd={endTutorial} />}
+    </div>
   );
 }
 

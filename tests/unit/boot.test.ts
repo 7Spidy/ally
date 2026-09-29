@@ -19,7 +19,7 @@ function companion(overrides: Partial<Companion> = {}): Companion {
     id: "c_a",
     templateId: "F01",
     deckGender: "woman",
-    answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] },
+    answers: { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [], tb: null },
     core: { primary: null, secondary: null, weight: null, ranked: [] },
     createdAt: NOW,
     lastOpenedAt: NOW,

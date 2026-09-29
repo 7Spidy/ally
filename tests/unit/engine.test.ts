@@ -1,6 +1,6 @@
 // Ported from ally-onboarding.test.js (node --test) into Vitest, importing
 // src/lib/engine.ts directly instead of vm-extracting the HTML build.
-// Tests 1-15 port verbatim. Test 16 keeps only the pure ageAt() assertions
+// Tests 1 and 8-15 port verbatim (2-7 were replaced in B1, see below). Test 16 keeps only the pure ageAt() assertions
 // (applyGate/initialState/S.blocked are gate-application logic that lives in
 // route/component code in this architecture, not in src/lib — see note at
 // bottom of file). Tests 17, 18 and 20 are SKIPPED here for the same reason
@@ -11,13 +11,8 @@
 // new (round two / add-card / no-companion-without-confirm).
 import { describe, it, expect } from "vitest";
 import {
-  CORES,
   INTEREST_TAGS,
-  DISCLOSURE_STOPS,
-  STRUCTURE_STOPS,
   PRESSURES,
-  scoreCores,
-  assignCore,
   computeCore,
   deckTemplates,
   orderDeck,
@@ -51,19 +46,8 @@ function randomAnswers(): Answers {
   const tags = [...INTEREST_TAGS];
   const n = Math.floor(Math.random() * 4);
   for (let i = 0; i < n; i++) q11.push(tags.splice(Math.floor(Math.random() * tags.length), 1)[0]);
-  return {
-    q5: pick(DISCLOSURE_STOPS),
-    q6: Math.random(),
-    q7: Math.random(),
-    q8: pick(STRUCTURE_STOPS),
-    q9: Math.random(),
-    q10: pick(PRESSURES),
-    q11,
-  };
-}
-
-function answersForCore(c: (typeof CORES)[number], q10: (typeof PRESSURES)[number] | null = c.owns): Answers {
-  return { q5: c.disclosure, q6: c.warmth, q7: c.push, q8: c.structure, q9: c.nostalgia, q10, q11: [] };
+  const option = () => Math.floor(Math.random() * 4);
+  return { q5: option(), q6: option(), q7: option(), q8: option(), q9: option(), q10: pick(PRESSURES), q11, tb: null };
 }
 
 function subsets<T>(arr: readonly T[], maxSize: number): T[][] {
@@ -99,80 +83,16 @@ describe("Matching", () => {
     }
   });
 
-  it("2. every one of the six cores is reachable by some answer combination", () => {
+  // Tests 2-7 (the six-core distance engine: reachability by vector, the 1.15x
+  // boost, the 0.06 gap rule, KIAAN-never-secondary) were removed in B1 with
+  // the engine they tested. Their five-core replacements are in fiveCores.test.ts.
+
+  it("2. every one of the five cores is reachable by some answer combination", () => {
     const reached = new Set<string>();
-    for (const c of CORES) reached.add(computeCore(answersForCore(c)).primary);
-    expect([...reached].sort()).toEqual(CORES.map((c) => c.id).sort());
-  });
-
-  it("3. a user whose vector exactly matches a core scores that core first", () => {
-    for (const c of CORES) {
-      expect(scoreCores(answersForCore(c))[0].id).toBe(c.id);
-      expect(scoreCores(answersForCore(c, null))[0].id).toBe(c.id);
-    }
-  });
-
-  it("4. the pressure boost is exactly 1.15x and applies to exactly one core", () => {
-    for (let run = 0; run < 200; run++) {
-      const a = randomAnswers();
-      const boosted = new Map(scoreCores(a).map((r) => [r.id, r.score]));
-      const plain = new Map(scoreCores({ ...a, q10: null }).map((r) => [r.id, r.score]));
-      const changed = [...boosted.keys()].filter((id) => boosted.get(id) !== plain.get(id));
-      expect(changed.length, `exactly one core changed for q10=${a.q10}`).toBe(1);
-      const id = changed[0];
-      expect(CORES.find((c) => c.id === id)!.owns).toBe(a.q10);
-      expect(Math.abs(boosted.get(id)! - plain.get(id)! * 1.15)).toBeLessThan(0.0002);
-    }
-  });
-
-  it("5. top-two gap below 0.06 produces a blend with weight 70", () => {
-    let found = 0;
-    for (let i = 0; i < 20000 && found < 25; i++) {
-      const ranked = scoreCores(randomAnswers());
-      if (ranked[0].score - ranked[1].score < 0.06) {
-        const r = assignCore(ranked);
-        expect(r.weight).toBe(70);
-        expect(r.primary).toBe(ranked[0].id);
-        expect(r.secondary).not.toBeNull();
-        expect(r.secondary).not.toBe(r.primary);
-        found++;
-      }
-    }
-    expect(found, "found near-tie vectors").toBeGreaterThan(0);
-  });
-
-  it("6. top-two gap of 0.06 or above gives secondary null and weight 100", () => {
-    let found = 0;
-    for (let i = 0; i < 20000 && found < 25; i++) {
-      const ranked = scoreCores(randomAnswers());
-      if (ranked[0].score - ranked[1].score >= 0.06) {
-        const r = assignCore(ranked);
-        expect(r.weight).toBe(100);
-        expect(r.secondary).toBeNull();
-        expect(r.primary).toBe(ranked[0].id);
-        found++;
-      }
-    }
-    expect(found, "found clear-gap vectors").toBeGreaterThan(0);
-    const r = assignCore([
-      { id: "KIAAN", score: 0.8 },
-      { id: "MEHER", score: 0.74 },
-      { id: "ANANYA", score: 0.5 },
-    ]);
-    expect(r).toEqual({ primary: "KIAAN", secondary: null, weight: 100 });
-  });
-
-  it("7. KIAAN is never secondary across a 10,000-run random sweep", () => {
-    for (let i = 0; i < 10000; i++) {
-      const r = computeCore(randomAnswers());
-      expect(r.secondary).not.toBe("KIAAN");
-    }
-    const r = assignCore([
-      { id: "PRIYA", score: 0.9 },
-      { id: "KIAAN", score: 0.89 },
-      { id: "ANAY", score: 0.7 },
-    ]);
-    expect(r.secondary).toBe("ANAY");
+    const options = [0, 1, 2, 3];
+    for (const q5 of options) for (const q6 of options) for (const q7 of options) for (const q8 of options) for (const q9 of options)
+      for (const q10 of PRESSURES) reached.add(computeCore({ q5, q6, q7, q8, q9, q10, q11: [], tb: null }).primary);
+    expect([...reached].sort()).toEqual(["FRIEND", "MONEY", "PSYCH", "ROMANTIC", "TRAINER"]);
   });
 
   it("8. Q11 interests do not change the assigned core", () => {
