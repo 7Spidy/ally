@@ -1,7 +1,7 @@
 // Manual eval launcher (B2). Not part of CI. Runs scripts/eval-ira.ts through
-// vite-node (already installed with vitest, so no new dependency) with the
-// project's "@" alias, then writes docs/evals/ira-<date>.md.
+// vite-node, so no new dependency. Flags pass through:
+//   node scripts/eval-ira.mjs --only=1,2,18,19 --gap=20 --tag=gpt-oss
 import { spawnSync } from "node:child_process";
 
-const r = spawnSync("npx", ["vite-node", "--config", "vitest.config.ts", "scripts/eval-ira.ts"], { stdio: "inherit", shell: true });
+const r = spawnSync("npx", ["vite-node", "--config", "vitest.config.ts", "scripts/eval-ira.ts", "--", ...process.argv.slice(2)], { stdio: "inherit", shell: true });
 process.exit(r.status ?? 1);
