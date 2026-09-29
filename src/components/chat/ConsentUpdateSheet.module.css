@@ -1,0 +1,10 @@
+.heading {
+  font-size: 26px;
+}
+
+.body {
+  color: var(--mut);
+  font-size: 15.5px;
+  line-height: 1.5;
+  margin-top: 12px;
+}

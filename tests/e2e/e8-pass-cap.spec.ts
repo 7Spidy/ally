@@ -13,12 +13,12 @@ import {
 } from "./helpers";
 
 test.describe("E8 pass cap -> done for the night", () => {
-  test("E8: pass at 1999 used, send 1 -> done-for-the-night bar replaces the composer", async ({ page }) => {
+  test("E8: pass at 199 used, send 1 -> done-for-the-night bar replaces the composer", async ({ page }) => {
     const companion = makeCompanion({ id: "c_e8", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000 });
     const state = makeState({
       companions: [companion],
       ledger: {
-        pass: { startedAt: FIXED_NOW - 3600000, endsAt: FIXED_NOW + 20 * 3600000, used: 1999 },
+        pass: { startedAt: FIXED_NOW - 3600000, endsAt: FIXED_NOW + 20 * 3600000, used: 199 },
       },
     });
 
@@ -39,7 +39,7 @@ test.describe("E8 pass cap -> done for the night", () => {
 
     // P2: the cap was reached server-side (send_message debited the pass).
     const snap = await serverSnapshot(userId);
-    expect(snap.ledger).toMatchObject({ pass_used: 2000 });
+    expect(snap.ledger).toMatchObject({ pass_used: 200 });
     expect(snap.messages.filter((m) => m.who === "me").map((m) => m.text)).toEqual(["One more before the cap"]);
 
     assertHealthy(health);

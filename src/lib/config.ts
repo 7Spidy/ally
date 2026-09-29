@@ -2,7 +2,7 @@
 
 export const FREE_DAILY = 100;
 export const PASS_HOURS = 24; // rolling from purchase
-export const PASS_CAP = 2000; // hidden, never rendered
+export const PASS_CAP = 200; // hidden, never rendered (B2 D12: was 2000)
 export const PRICE_SLOT_2 = 199; // INR, placeholder
 export const PRICE_SLOT_3 = 349; // INR, placeholder, must exceed PRICE_SLOT_2
 export const PRICE_DAY_PASS = 49; // INR, placeholder
@@ -15,6 +15,8 @@ export const BLOCK_DAYS = 180; // under-18 gate: ally_blocked_until = now + BLOC
 
 // P1 accounts and auth
 export const CONSENT_VERSION = "2026-09-v1";
+/** B2: the consent a user gives once Ira replies live (xAI processing). */
+export const LIVE_CONSENT_VERSION = "v2-live";
 export const OTP_LENGTH = 6;
 export const OTP_RESEND_SECONDS = 60;
 export const PASSWORD_MIN = 8;

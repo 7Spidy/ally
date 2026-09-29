@@ -50,6 +50,12 @@ export interface AdminCompanion {
   created_at: string;
   last_opened_at: string;
   parted_at: string | null;
+  /** B2: only present once the live-chat migration is applied. */
+  live?: boolean;
+  trust_level?: number;
+  highest_level?: number;
+  trust_points?: number;
+  relationship_day?: number;
 }
 
 export type AdminAction =
@@ -81,6 +87,8 @@ export interface AdminUserDetail extends AdminUserRow {
   } | null;
   defaults: { free_daily: number; pass_cap: number; pass_hours: number; max_companions: number };
   companions: AdminCompanion[];
+  /** B2: safety events in the last 30 days, by kind. Counts only, never text. */
+  safety_counts?: Partial<Record<"concern" | "acute" | "age_claim" | "backstop", number>>;
   audit: AdminAuditEntry[];
 }
 

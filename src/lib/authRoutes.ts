@@ -7,7 +7,9 @@
 export type RouteAccess = "public" | "session" | "admin";
 
 const PUBLIC_EXACT = new Set(["/", "/onboarding/consent", "/blocked", "/login"]);
-const PUBLIC_PREFIXES = ["/login/", "/auth/", "/api/test/"];
+// /api/chat/ and /api/cron/ answer 401 themselves (a session or the cron
+// bearer secret), rather than being redirected to `/` by the guard.
+const PUBLIC_PREFIXES = ["/login/", "/auth/", "/api/test/", "/api/chat/", "/api/cron/"];
 
 export function routeAccess(pathname: string): RouteAccess {
   const path = pathname.split("?")[0].split("#")[0];

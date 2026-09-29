@@ -28,6 +28,15 @@ test.describe("E22 companion survives a new device", () => {
     await answerSevenQuestions(page);
     await driveMatchingThroughChat(page);
 
+    // B2: a ROMANTIC deck can propose the live F01, whose chat opens behind the
+    // one-time v2-live consent sheet. Accept it when it shows.
+    const liveConsent = page.getByRole("dialog").getByRole("button", { name: "Continue" });
+    if (await liveConsent.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await liveConsent.click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.getByTestId("typing")).toHaveCount(0, { timeout: 15000 });
+    }
+
     const companionId = new URL(page.url()).pathname.split("/chat/")[1];
     // The deck decides who gets proposed; remember whose chat this is.
     const personaName = (await page.locator('[class*="identity"]').innerText()).trim().split(/\s+/)[0];

@@ -41,6 +41,9 @@ export type AllyAction =
   | { type: "SEND_MESSAGE"; companionId: string; message: Message; exchanges: number; ledger: Ledger }
   | { type: "RECEIVE_REPLY"; companionId: string; message: Message }
   | { type: "SEED_OPENER"; companionId: string; message: Message }
+  | { type: "SET_CONSENT_VERSION"; version: string }
+  | { type: "SET_REACTION"; companionId: string; messageId: number; reaction: string }
+  | { type: "LIVE_SYNC"; companionId: string; patch: Pick<Partial<Companion>, "trustLevel" | "levelChangedAt" | "pausedReason" | "lastCtxDay"> }
   | { type: "OPEN_CHAT"; companionId: string; lastOpenedAt: number }
   | { type: "ACCOUNT_SAVE"; contact: string; kind: "phone" | "email"; now: number }
   | { type: "ACCOUNT_DISMISS" }
@@ -208,11 +211,23 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
       };
 
     case "RECEIVE_REPLY":
+      return updateCompanion(state, action.companionId, (c) => {
+        // A live bubble carries its server id; never add the same one twice.
+        if (action.message.id !== undefined && c.messages.some((m) => m.id === action.message.id)) return c;
+        return { ...c, messages: [...c.messages, action.message], unread: c.unread + 1 };
+      });
+
+    case "SET_CONSENT_VERSION":
+      return { ...state, user: { ...state.user, consentVersion: action.version } };
+
+    case "SET_REACTION":
       return updateCompanion(state, action.companionId, (c) => ({
         ...c,
-        messages: [...c.messages, action.message],
-        unread: c.unread + 1,
+        messages: c.messages.map((m) => (m.id === action.messageId ? { ...m, meta: { ...m.meta, reaction: action.reaction } } : m)),
       }));
+
+    case "LIVE_SYNC":
+      return updateCompanion(state, action.companionId, (c) => ({ ...c, ...action.patch }));
 
     case "SEED_OPENER": {
       const companion = state.companions.find((c) => c.id === action.companionId);

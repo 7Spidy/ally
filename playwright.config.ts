@@ -46,6 +46,10 @@ export default defineConfig({
     env: {
       ...testEnv,
       ALLY_E2E: "1",
+      // B2: live chat talks to the in-app mock instead of xAI.
+      E2E_MOCKS: "1",
+      XAI_API_KEY: "e2e-mock-key",
+      XAI_BASE_URL: "http://127.0.0.1:3100/api/test/xai-mock",
       NEXT_PUBLIC_TURNSTILE_BYPASS: "1",
     },
   },

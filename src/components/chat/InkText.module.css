@@ -1,0 +1,46 @@
+.ink {
+  position: relative;
+  display: block;
+  touch-action: pan-y;
+  cursor: pointer;
+}
+
+.textHidden {
+  display: block;
+  filter: blur(7px);
+  user-select: none;
+}
+
+.textShown {
+  display: block;
+  transition: filter 300ms var(--ease);
+}
+
+.speckle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, var(--fg) 0.8px, transparent 1.2px);
+  background-size: 9px 9px;
+  opacity: 0.25;
+  animation: drift 6s linear infinite;
+}
+
+.hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--mut);
+}
+
+@keyframes drift {
+  to {
+    background-position: 18px 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .speckle {
+    animation: none;
+  }
+}
