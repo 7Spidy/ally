@@ -232,19 +232,23 @@ export async function seedServerState(userId: string, state: SeedState): Promise
  * and user) into localStorage['ally_v2:<userId>'] before any app script
  * runs. Returns the user id.
  */
-export async function seedState(page: Page, state: SeedState): Promise<string> {
+export async function seedState(page: Page, state: SeedState, { once = false } = {}): Promise<string> {
   const userId = await createTestSession(page);
   await seedServerState(userId, state);
   const local = { ...state, companions: [], ledger: { ...state.ledger, unlocks: [], parted: [], passes: [], pass: null, freeUsed: 0, slotsUnlocked: 1 } };
   await page.addInitScript(
-    ({ key, json }) => {
+    ({ key, json, once }) => {
       try {
+        // `once`: seed on the first document only, so a hard navigation or a
+        // reload sees what the app persisted, as a real one would.
+        if (once && window.sessionStorage.getItem("__seeded")) return;
         window.localStorage.setItem(key, json);
+        window.sessionStorage.setItem("__seeded", "1");
       } catch {
         /* ignore */
       }
     },
-    { key: stateKeyFor(userId), json: JSON.stringify(local) }
+    { key: stateKeyFor(userId), json: JSON.stringify(local), once }
   );
   return userId;
 }

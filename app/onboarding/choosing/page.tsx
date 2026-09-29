@@ -7,7 +7,7 @@ import { useManifest } from "@/state/useManifest";
 import { ManifestGate } from "@/components/ManifestGate";
 import type { Template } from "@/lib/engine";
 import { constellationFaces, proposeFor } from "../_lib/propose";
-import { Constellation } from "./Constellation";
+import { Constellation, PROPOSAL_PATH } from "./Constellation";
 
 interface Plan {
   winner: Template;
@@ -49,8 +49,15 @@ function ChoosingScreen() {
     const byId = new Map(templates.map((t) => [t.id, t]));
     const winner = result.proposed ? byId.get(result.proposed) : undefined;
     if (!winner) {
-      router.replace("/onboarding/proposal");
+      router.replace(PROPOSAL_PATH);
       return;
+    }
+    // Fetch the proposal's payload while the animation plays, so the route at
+    // the end is not a cold network round trip.
+    try {
+      router.prefetch(PROPOSAL_PATH);
+    } catch {
+      /* the route still works without it */
     }
     const short = new URLSearchParams(window.location.search).get("short") === "1";
     const ring = constellationFaces(flow, winner.id)
@@ -66,8 +73,7 @@ function ChoosingScreen() {
       winner={plan.winner}
       ring={plan.ring}
       short={plan.short}
-      soundOn={state.user.soundOn}
-      onDone={() => router.replace("/onboarding/proposal")}
+      onDone={() => router.replace(PROPOSAL_PATH)}
     />
   );
 }

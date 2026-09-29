@@ -19,7 +19,7 @@ import {
   type Template,
 } from "@/lib/engine";
 import { CORE_MAP, DECK_HIDDEN, castsAs } from "@/lib/coreMap";
-import { createHeartbeat } from "@/lib/sound/heartbeat";
+import { BEAT_BUZZ, REVEAL_BUZZ, vibrate } from "@/lib/vibrate";
 import { emptyAnswers, freshFlow, type Answers, type CoreId, type Gender } from "@/state/schema";
 import { invalidationFor } from "../../app/onboarding/_lib/invalidate";
 import { backTargetFor } from "../../app/onboarding/_lib/steps";
@@ -479,81 +479,51 @@ describe("Constellation faces", () => {
   });
 });
 
-describe("heartbeat synth", () => {
-  const g = globalThis as unknown as { window?: unknown };
-  const original = g.window;
+describe("vibration", () => {
+  const g = globalThis as unknown as { navigator?: unknown };
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
   afterEach(() => {
-    if (original === undefined) delete g.window;
-    else g.window = original;
+    if (original) Object.defineProperty(globalThis, "navigator", original);
+    else delete g.navigator;
+  });
+  const setNavigator = (value: unknown) => Object.defineProperty(globalThis, "navigator", { value, configurable: true, writable: true });
+
+  it("uses the spec patterns", () => {
+    expect([...BEAT_BUZZ]).toEqual([35, 80, 25]);
+    expect([...REVEAL_BUZZ]).toEqual([20, 40, 70]);
   });
 
-  function stubContext(state: "running" | "suspended") {
-    const created = { contexts: 0, oscillators: 0, closed: 0 };
-    const node = () => ({ connect: (n: unknown) => n, gain: { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} } });
-    class Ctx {
-      state = state;
-      currentTime = 0;
-      destination = {};
-      constructor() {
-        created.contexts++;
-      }
-      resume() {
-        return Promise.resolve();
-      }
-      close() {
-        created.closed++;
-        return Promise.resolve();
-      }
-      createGain() {
-        return node();
-      }
-      createBiquadFilter() {
-        return { ...node(), frequency: { value: 0 }, type: "" };
-      }
-      createDelay() {
-        return { ...node(), delayTime: { value: 0 } };
-      }
-      createOscillator() {
-        created.oscillators++;
-        return { ...node(), type: "", frequency: { value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} }, start() {}, stop() {} };
-      }
-    }
-    g.window = { AudioContext: Ctx };
-    return created;
-  }
-
-  it("is null where Web Audio does not exist", () => {
-    delete g.window;
-    expect(createHeartbeat()).toBeNull();
-    g.window = {};
-    expect(createHeartbeat()).toBeNull();
+  it("passes the pattern to navigator.vibrate", () => {
+    const calls: unknown[] = [];
+    setNavigator({ vibrate: (p: unknown) => calls.push(p) });
+    vibrate(BEAT_BUZZ);
+    vibrate(REVEAL_BUZZ);
+    expect(calls).toEqual([[35, 80, 25], [20, 40, 70]]);
   });
 
-  it("a beat is a lub and a dub: two oscillators", () => {
-    const created = stubContext("running");
-    const synth = createHeartbeat()!;
-    synth.beat();
-    expect(created.oscillators).toBe(2);
+  it("does not call vibrate before the user has tapped the page (Chrome would log an error)", () => {
+    const calls: unknown[] = [];
+    setNavigator({ userActivation: { hasBeenActive: false }, vibrate: (p: unknown) => calls.push(p) });
+    vibrate(BEAT_BUZZ);
+    expect(calls).toEqual([]);
+    setNavigator({ userActivation: { hasBeenActive: true }, vibrate: (p: unknown) => calls.push(p) });
+    vibrate(BEAT_BUZZ);
+    expect(calls).toEqual([[35, 80, 25]]);
   });
 
-  it("the reveal is the glissando plus a three-note chord", () => {
-    const created = stubContext("running");
-    createHeartbeat()!.reveal();
-    expect(created.oscillators).toBe(1 + 3);
+  it("is a silent no-op where the API does not exist (iOS) or there is no navigator", () => {
+    setNavigator({});
+    expect(() => vibrate(BEAT_BUZZ)).not.toThrow();
+    delete g.navigator;
+    expect(() => vibrate(BEAT_BUZZ)).not.toThrow();
   });
 
-  it("the chord alone is three oscillators (reduced motion)", () => {
-    const created = stubContext("running");
-    createHeartbeat()!.chord();
-    expect(created.oscillators).toBe(3);
-  });
-
-  it("a suspended context stays silent instead of throwing", () => {
-    const created = stubContext("suspended");
-    const synth = createHeartbeat()!;
-    synth.beat();
-    synth.reveal();
-    synth.chord();
-    expect(created.oscillators).toBe(0);
+  it("swallows a browser that throws", () => {
+    setNavigator({
+      vibrate: () => {
+        throw new Error("blocked");
+      },
+    });
+    expect(() => vibrate(REVEAL_BUZZ)).not.toThrow();
   });
 });

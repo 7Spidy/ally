@@ -57,9 +57,9 @@ function flowAt(step: string, over: Record<string, unknown> = {}) {
   };
 }
 
-async function seedFlow(page: Page, flow: unknown) {
+async function seedFlow(page: Page, flow: unknown, opts: { once?: boolean } = {}) {
   await setClock(page, FIXED_NOW);
-  await seedState(page, makeState({ flow, user: { accountAt: null, accountContact: null, accountKind: null } }));
+  await seedState(page, makeState({ flow, user: { accountAt: null, accountContact: null, accountKind: null } }), opts);
 }
 
 /** The flow out of whichever namespaced state key this context wrote. */
@@ -78,6 +78,34 @@ async function storedFlow(page: Page): Promise<Record<string, any> | null> {
     return null;
   }, `${STATE_KEY}:`);
 }
+
+/** Counts AudioContext constructions: the Constellation has no audio, so this must stay 0. */
+async function spyOnAudio(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as Record<string, unknown> & { __audioContexts: number };
+    w.__audioContexts = 0;
+    for (const name of ["AudioContext", "webkitAudioContext"]) {
+      const Orig = w[name] as (new (...a: unknown[]) => object) | undefined;
+      if (!Orig) continue;
+      w[name] = class extends Orig {
+        constructor(...a: unknown[]) {
+          super(...a);
+          w.__audioContexts++;
+        }
+      };
+    }
+  });
+}
+const audioContexts = (page: Page) => page.evaluate(() => (window as unknown as { __audioContexts: number }).__audioContexts);
+
+/** A flow parked on the Constellation with three liked faces (ring of three). */
+function choosingFlow(over: Record<string, unknown> = {}) {
+  return flowAt("choosing", { deckOrder: ["F02", "F03", "F05"], liked: ["F02", "F03", "F05"], dwell: { F02: 5000, F03: 3000, F05: 1000 }, ...over });
+}
+
+const NEVER = () => {
+  /* a request that is never answered */
+};
 
 test.describe("E27 B1: five cores and onboarding motion", () => {
   test("E27.1: the rivers carry no Woman/Man text, and the tap by aria-label still commits", async ({ page }) => {
@@ -243,6 +271,7 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
 
   test("E27.5: finishing the deck plays the Constellation and lands on the proposal; a redraw plays the short one", async ({ page }) => {
     const health = trackHealth(page);
+    await spyOnAudio(page);
     const deck = ["F02", "F03", "F05"];
     await seedFlow(page, flowAt("deck", { deckOrder: deck, tutorialShown: true }));
     await page.goto("/onboarding/deck");
@@ -266,6 +295,8 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
     await expect(page.getByRole("status", { name: "Choosing someone for you" })).toBeVisible();
     await page.waitForURL("**/onboarding/proposal", { timeout: 6000 });
     expect((await storedFlow(page))?.proposed).not.toBe(first);
+    // No audio anywhere in the Constellation: no AudioContext was ever created.
+    expect(await audioContexts(page)).toBe(0);
     assertHealthy(health);
   });
 
@@ -328,5 +359,134 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
     expect(flow?.answers.tb).toBeNull();
     expect(flow?.deckOrder).toEqual([]);
     expect(flow?.core.primary).toBeNull();
+  });
+
+  test("E27.8: with every CSS transition and animation disabled it still routes within 6.5 s", async ({ page }) => {
+    await page.addInitScript(() => {
+      const style = document.createElement("style");
+      style.textContent = "*,*::before,*::after{transition:none!important;animation:none!important}";
+      document.documentElement.appendChild(style);
+    });
+    await seedFlow(page, choosingFlow());
+    const t0 = Date.now();
+    await page.goto("/onboarding/choosing");
+    await page.waitForURL("**/onboarding/proposal", { timeout: 6500 });
+    expect(Date.now() - t0).toBeLessThan(6500);
+    await expect(page.getByRole("button", { name: "Lock them in" })).toBeVisible();
+  });
+
+  test("E27.9: an extra state update in the middle of the animation does not stop the route", async ({ page }) => {
+    await spyOnAudio(page);
+    await seedFlow(page, choosingFlow());
+    await page.goto("/onboarding/choosing");
+    await expect(page.getByRole("status", { name: "Choosing someone for you" })).toBeVisible();
+    await page.waitForTimeout(1200);
+
+    // The debug panel's "Start pass" goes through the server and dispatches
+    // BUY_PASS: a provider-wide state change while the Constellation plays.
+    for (let i = 0; i < 3; i++) {
+      await page.mouse.click(20, 20);
+      await page.waitForTimeout(80);
+    }
+    await page.getByRole("button", { name: "Start pass" }).click();
+    await page.waitForTimeout(600);
+    await page.getByRole("button", { name: "Clock +1 day (display only)" }).click(); // and one that touches no state
+    await page.getByRole("button", { name: "Close debug panel" }).click();
+    expect(new URL(page.url()).pathname).toBe("/onboarding/choosing");
+
+    await page.waitForURL("**/onboarding/proposal", { timeout: 6500 });
+    expect(await audioContexts(page)).toBe(0);
+  });
+
+  test("E27.10: a stalled proposal request cannot strand the flood: the failsafe leaves by a hard navigation", async ({ page }) => {
+    // The root cause of the stuck route: router.replace() is a client-side
+    // navigation that waits for the proposal's RSC payload. If that request
+    // never answers, nothing ever times it out.
+    await page.route(/\/onboarding\/proposal\?_rsc/, NEVER);
+    // Seeded once: the hard navigation must see the flow the app persisted, as a real reload does.
+    await seedFlow(page, choosingFlow(), { once: true });
+    const t0 = Date.now();
+    await page.goto("/onboarding/choosing");
+    await expect(page.getByRole("status", { name: "Choosing someone for you" })).toBeVisible();
+    // Still stuck after the natural end (about 4.2 s, plus the preload allowance)...
+    await page.waitForTimeout(5300);
+    expect(new URL(page.url()).pathname).toBe("/onboarding/choosing");
+    // ...and out by the 6 s failsafe.
+    await page.waitForURL("**/onboarding/proposal", { timeout: 2500 });
+    expect(Date.now() - t0).toBeLessThan(8500);
+    await expect(page.getByRole("button", { name: "Lock them in" })).toBeVisible();
+    expect((await storedFlow(page))?.proposed).toBeTruthy();
+  });
+
+  test("E27.10b: the short variant has a 2.5 s failsafe", async ({ page }) => {
+    await page.route(/\/onboarding\/proposal\?_rsc/, NEVER);
+    await seedFlow(page, choosingFlow({ redraws: 1, poolRemoved: ["F02"], proposed: "F02" }), { once: true });
+    const t0 = Date.now();
+    await page.goto("/onboarding/choosing?short=1");
+    await page.waitForURL("**/onboarding/proposal", { timeout: 5000 });
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
+
+  test("E27.11: the winner's avatar is visible, in front of the flood, at about 3.5 s", async ({ page }) => {
+    await seedFlow(page, choosingFlow());
+    await page.goto("/onboarding/choosing");
+    await expect(page.getByRole("status", { name: "Choosing someone for you" })).toBeVisible();
+    await page.waitForTimeout(3500);
+
+    const hero = page.locator("[data-hero]");
+    const img = hero.locator("img");
+    await expect(img).toBeVisible();
+    const probe = await hero.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const im = el.querySelector("img") as HTMLImageElement;
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return {
+        opacity: parseFloat(getComputedStyle(el).opacity),
+        naturalWidth: im.naturalWidth,
+        width: r.width,
+        inFront: !!top && el.contains(top), // not covered by the flood
+      };
+    });
+    expect(probe.opacity).toBe(1);
+    expect(probe.naturalWidth).toBeGreaterThan(0); // the image really loaded
+    expect(probe.width).toBeGreaterThan(100); // grown towards 160
+    expect(probe.inFront).toBe(true);
+    await screenshotScreen(page, "e27-06-winner-at-3500");
+
+    // Once the flood is actually covering the centre, the winner is still the
+    // topmost thing there: the flood is the winner's own colour, so behind it
+    // the circle would look empty.
+    await expect
+      .poll(() => page.evaluate(() => getComputedStyle(document.querySelector("[class*=flood]") as Element).clipPath), { timeout: 3000 })
+      .not.toBe("circle(0px at 50% 50%)");
+    const covered = await hero.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return { inFront: !!top && el.contains(top), naturalWidth: (el.querySelector("img") as HTMLImageElement).naturalWidth };
+    });
+    expect(covered).toEqual({ inFront: true, naturalWidth: expect.any(Number) });
+    expect(covered.naturalWidth).toBeGreaterThan(0);
+    await page.waitForURL("**/onboarding/proposal", { timeout: 6500 });
+  });
+
+  test("E27.11b: an avatar that fails to load shows the face's first initial on its palette colour", async ({ page }) => {
+    await page.route("**/assets/avatars/*", (route) => route.abort());
+    await seedFlow(page, choosingFlow());
+    await page.goto("/onboarding/choosing");
+    await expect(page.getByRole("status", { name: "Choosing someone for you" })).toBeVisible();
+    await page.waitForTimeout(3500);
+
+    const winnerId = (await storedFlow(page))?.proposed as string;
+    const manifest = (await (await page.request.get("/assets/manifest.json")).json()) as { templates: { id: string; name: string; palette: string }[] };
+    const winner = manifest.templates.find((t) => t.id === winnerId)!;
+    const initial = winner.name.charAt(0).toUpperCase();
+
+    const hero = page.locator("[data-hero]");
+    await expect(hero.locator("img")).toHaveCount(0);
+    await expect(hero).toContainText(initial);
+    await expect(hero).toBeVisible();
+    // Never an empty circle: every ring face that has faded in shows its initial too.
+    await screenshotScreen(page, "e27-07-avatar-fallback");
+    await page.waitForURL("**/onboarding/proposal", { timeout: 6500 });
   });
 });

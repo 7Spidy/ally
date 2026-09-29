@@ -61,6 +61,7 @@
 .face {
   width: 100%;
   height: 100%;
+  font-size: 34px; /* sizes the initial fallback */
   border-radius: 50%;
   overflow: hidden;
   /* keeps each face upright while the ring turns */
@@ -73,9 +74,21 @@
 }
 
 .img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* The face's first initial, shown on the palette colour when its image is missing. */
+.initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font: 400 1em/1 var(--serif);
+  color: var(--fg);
 }
 
 .hero {
@@ -85,11 +98,17 @@
   width: 160px;
   height: 160px;
   margin: -80px 0 0 -80px;
+  font-size: 76px; /* sizes the initial fallback */
   border-radius: 50%;
   overflow: hidden;
-  z-index: 3;
+  /* Above the flood (1) and the ring (2). The flood is the winner's own
+     colour, so the circle carries a light rim: even an image that has not
+     painted yet is visibly a circle, not a hole. */
+  z-index: 4;
+  isolation: isolate;
+  will-change: transform, opacity;
   transform-origin: center;
-  box-shadow: 0 18px 46px -18px rgb(0 0 0 / 0.7);
+  box-shadow: 0 0 0 3px rgb(244 239 230 / 0.9), 0 18px 46px -18px rgb(0 0 0 / 0.7);
 }
 
 /* Reduced motion: faces sit on the ring, no orbit, no flight, no flood. */
