@@ -155,6 +155,7 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
           displayName: server.profile?.display_name || local.user.displayName,
           consentAt: local.user.consentAt ?? server.consent?.granted_at ?? null,
           consentMarketing: local.user.consentAt !== null ? local.user.consentMarketing : (server.consent?.marketing ?? false),
+          consentVersion: server.consent?.version ?? null,
         };
         // A first-run flow can't coexist with companions (CONFIRM_LOCK clears
         // it); on a new device the fresh local blob would otherwise carry one.

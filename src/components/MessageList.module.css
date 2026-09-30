@@ -46,6 +46,78 @@
   border-bottom-right-radius: 6px;
 }
 
+.rowMe,
+.rowThem {
+  display: flex;
+  flex-direction: column;
+}
+.rowMe {
+  align-items: flex-end;
+}
+.rowThem {
+  align-items: flex-start;
+}
+.rowMe > .divider,
+.rowThem > .divider {
+  align-self: stretch;
+}
+
+.bubble {
+  position: relative;
+}
+
+.me:has([data-testid="reaction"]) {
+  margin-bottom: 10px;
+}
+
+.soft {
+  font-size: 15px;
+  opacity: 0.86;
+}
+
+.loud {
+  font-size: 24px;
+  font-weight: 700;
+  animation: slam 500ms var(--ease) both;
+}
+
+.pin {
+  outline: none;
+}
+
+.pinned {
+  margin: 4px 6px 0;
+  font-size: 15.5px;
+  color: var(--mut);
+}
+
+.retry {
+  align-self: flex-start;
+  background: var(--raised);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px 14px;
+  font-size: 15.5px;
+}
+
+@keyframes slam {
+  from {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loud {
+    animation: none;
+  }
+}
+
 .typing {
   align-self: flex-start;
   background: var(--raised);

@@ -28,7 +28,20 @@ test.describe("E22 companion survives a new device", () => {
     await answerSevenQuestions(page);
     await driveMatchingThroughChat(page);
 
+    // B2: a ROMANTIC deck can propose the live F01, whose chat opens behind the
+    // one-time v2-live-groq consent sheet. Accept it when it shows.
+    const liveConsent = page.getByRole("dialog").getByRole("button", { name: "Continue" });
+    if (await liveConsent.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await liveConsent.click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.getByTestId("typing")).toHaveCount(0, { timeout: 15000 });
+    }
+
     const companionId = new URL(page.url()).pathname.split("/chat/")[1];
+    // The opener is written first, by the app (mocked) or the server (live). Send only once it is stored,
+    // or a live chat, whose opener is skipped once the conversation is not empty, would have none.
+    const uid = await page.evaluate(() => Object.keys(window.localStorage).find((k) => k.startsWith("ally_v2:"))!.slice("ally_v2:".length));
+    await expect.poll(async () => (await serverSnapshot(uid)).messages.length, { timeout: 20000 }).toBeGreaterThan(0);
     // The deck decides who gets proposed; remember whose chat this is.
     const personaName = (await page.locator('[class*="identity"]').innerText()).trim().split(/\s+/)[0];
     await page.getByLabel("Message").fill("Hello from device one");

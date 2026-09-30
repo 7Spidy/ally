@@ -1,0 +1,29 @@
+.canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.wash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  opacity: 0;
+  animation: wash 400ms ease-out both;
+}
+
+@keyframes wash {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.22;
+  }
+  100% {
+    opacity: 0;
+  }
+}

@@ -38,6 +38,6 @@ describe("SQL constants match src/lib/config.ts", () => {
   }
 
   it("pins the current values, so a change on either side is deliberate", () => {
-    expect(expected).toEqual({ free_daily: 100, pass_hours: 24, pass_cap: 2000, max_companions: 3, part_purge_days: 30, price_day_pass: 49 });
+    expect(expected).toEqual({ free_daily: 100, pass_hours: 24, pass_cap: 200, max_companions: 3, part_purge_days: 30, price_day_pass: 49 });
   });
 });

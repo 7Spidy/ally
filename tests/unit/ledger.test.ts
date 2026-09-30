@@ -38,7 +38,7 @@ describe("ledger", () => {
     expect(stillEmpty).toEqual(l);
   });
 
-  it("32. a pass allows 2000 sends; the 2001st returns 'capped'", () => {
+  it("32. a pass allows 200 sends; the 201st returns 'capped'", () => {
     let l = buyPass(freshLedger(dayKey(NOW)), NOW);
     for (let i = 0; i < PASS_CAP; i++) {
       expect(canSend(l, NOW), `send #${i + 1}`).toBe("ok");

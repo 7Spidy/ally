@@ -1,0 +1,42 @@
+.dots {
+  align-self: flex-start;
+  display: flex;
+  gap: 5px;
+  padding: 16px 18px;
+  background: var(--raised);
+  border-radius: 20px;
+  border-bottom-left-radius: 6px;
+}
+
+.dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mut);
+  animation: bob 1s infinite ease-in-out;
+}
+.dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes bob {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots span {
+    animation: none;
+  }
+}

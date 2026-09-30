@@ -8,6 +8,13 @@ describe("routeAccess (spec §5.1.6)", () => {
     }
   });
 
+  it("B2: /api/cron/ and /api/chat/ are public to the guard (they answer 401 themselves)", () => {
+    for (const p of ["/api/cron/vault", "/api/cron/vault?job=daily", "/api/chat/reply"]) {
+      expect(routeAccess(p), p).toBe("public");
+    }
+    expect(routeAccess("/api/cronx/vault")).toBe("session");
+  });
+
   it("session routes, including nested chat and settings paths", () => {
     for (const p of [
       "/home",

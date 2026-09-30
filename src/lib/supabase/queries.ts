@@ -33,7 +33,7 @@ export interface ServerState {
   messages_by_companion: Record<string, Message[]>;
   ledger: Ledger;
   profile: { display_name: string | null } | null;
-  consent: { granted_at: number; marketing: boolean } | null;
+  consent: { granted_at: number; marketing: boolean; version?: string } | null;
 }
 
 /** Companions with their messages attached, plus the ledger, as the client cache holds them. */
@@ -83,6 +83,50 @@ export function receiveReply(companionId: string, body: string): Promise<{ messa
 /** Posts the opener only into an empty conversation; `message` is null otherwise. */
 export function seedOpener(companionId: string, body: string): Promise<{ message: Message | null; unread: number }> {
   return call("seed_opener", { companion_id: companionId, body });
+}
+
+/** B2: the reply endpoint's response (app/api/chat/reply). */
+export interface LiveReply {
+  reaction: string | null;
+  screen?: "confetti" | "lanterns" | "rain" | "petals" | null;
+  bubbles: { id: number; text: string; meta: Message["meta"]; at: number }[];
+  trustLevel: number;
+  leveledUp: number | null;
+  resourceCard: boolean;
+  paused: boolean;
+  replayed?: boolean;
+}
+
+export class LiveReplyError extends Error {
+  constructor(readonly status: number) {
+    super(`live_reply_${status}`);
+  }
+}
+
+/** Asks the server for Ira's reply (or opener). 202 means one is already in flight. */
+export async function requestLiveReply(companionId: string, mode: "reply" | "opener"): Promise<LiveReply | null> {
+  const res = await fetch("/api/chat/reply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companionId, mode }),
+  });
+  if (res.status === 202) return null;
+  if (!res.ok) throw new LiveReplyError(res.status);
+  return (await res.json()) as LiveReply;
+}
+
+export function markCtxShown(companionId: string): Promise<void> {
+  return call("mark_ctx_shown", { companion_id: companionId });
+}
+
+export function clearAgeCheck(companionId: string, dob: string): Promise<{ pausedReason: null }> {
+  return call("clear_age_check", { companion_id: companionId, dob });
+}
+
+/** Records the v2-live-groq consent (the consents table allows a user's own insert). */
+export async function insertConsent(userId: string, version: string): Promise<void> {
+  const { error } = await getBrowserClient().from("consents").insert({ user_id: userId, version, marketing: false });
+  if (error) throw error;
 }
 
 export function openChat(companionId: string): Promise<{ lastOpenedAt: number }> {

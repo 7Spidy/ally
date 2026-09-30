@@ -15,6 +15,8 @@
     "db:reset": "supabase db reset",
     "test:rls": "vitest run --config vitest.rls.config.ts",
     "e2e:env": "node scripts/e2e-env.mjs",
+    "llm:diagnose": "node scripts/run-ts.mjs scripts/llm-diagnose.ts",
+    "eval:ira": "node scripts/eval-ira.mjs",
     "assets:first-run": "node scripts/build-first-run-assets.mjs"
   },
   "dependencies": {

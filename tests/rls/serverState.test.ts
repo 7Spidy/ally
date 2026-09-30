@@ -371,7 +371,8 @@ describe("purge and get_my_state", () => {
     expect(state.consent).toMatchObject({ marketing: true });
     const companions = state.companions as Record<string, unknown>[];
     expect(Object.keys(companions[0]).sort()).toEqual(
-      ["answers", "core", "createdAt", "deckGender", "exchanges", "id", "lastOpenedAt", "messages", "notify", "partedAt", "purgeAt", "sound", "status", "templateId", "unread"].sort()
+      // B2 adds trustLevel, levelChangedAt, pausedReason and lastCtxDay; never trust points.
+      ["answers", "core", "createdAt", "deckGender", "exchanges", "id", "lastCtxDay", "lastOpenedAt", "levelChangedAt", "messages", "notify", "partedAt", "pausedReason", "purgeAt", "sound", "status", "templateId", "trustLevel", "unread"].sort()
     );
     expect(companions[0]).toMatchObject({ id: c.id, templateId: "M03", deckGender: "man", status: "active", answers: ANSWERS, core: CORE });
     // freeDaily/passCap: P3's effective limits (admin override or default).

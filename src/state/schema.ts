@@ -22,10 +22,23 @@ export interface Core {
   ranked: { id: CoreId; score: number }[];
 }
 
+/** B2: what the server stamped on a message (reaction, effect, quote). */
+export interface MessageMeta {
+  reaction?: string;
+  effect?: "soft" | "loud" | "stop" | "ink" | "pin" | "screen";
+  quoteId?: number;
+  screen?: "confetti" | "lanterns" | "rain" | "petals";
+  safety?: boolean;
+}
+
 export interface Message {
+  /** Server id. Absent on messages from a locally built state. */
+  id?: number;
   who: "them" | "me";
   text: string;
   at: number;
+  meta?: MessageMeta;
+  inReplyTo?: number | null;
 }
 
 export interface Companion {
@@ -44,6 +57,11 @@ export interface Companion {
   unread: number;
   notify: boolean;
   sound: boolean;
+  /** B2 (live companions only meaningfully): trust level 1..6, never points or thresholds. */
+  trustLevel?: number;
+  levelChangedAt?: number | null;
+  pausedReason?: "age_check" | null;
+  lastCtxDay?: string | null;
 }
 
 export interface LedgerUnlock {
@@ -109,6 +127,8 @@ export interface AllyUser {
   displayName: string;
   consentAt: number | null;
   consentMarketing: boolean;
+  /** Version of the newest consent row, from the server. Absent until loaded. */
+  consentVersion?: string | null;
   accountAt: number | null;
   accountContact: string | null;
   accountKind: "phone" | "email" | null;

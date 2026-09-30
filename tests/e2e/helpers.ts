@@ -39,11 +39,19 @@ export function defaultCore() {
   };
 }
 
+export function romanticCore() {
+  return { ...defaultCore(), primary: "ROMANTIC", ranked: [{ id: "ROMANTIC", score: 9 }, { id: "PSYCH", score: 5 }, { id: "MONEY", score: 4 }, { id: "TRAINER", score: 3 }, { id: "FRIEND", score: 2 }] };
+}
+
 export interface MakeCompanionOpts {
   id: string;
   templateId: string;
   deckGender: "woman" | "man";
   createdAt: number;
+  /** B2: a ROMANTIC core makes an F01 companion live. */
+  core?: ReturnType<typeof defaultCore>;
+  trustLevel?: number;
+  pausedReason?: "age_check" | null;
   lastOpenedAt?: number;
   status?: "active" | "parted";
   partedAt?: number | null;
@@ -61,7 +69,9 @@ export function makeCompanion(o: MakeCompanionOpts) {
     templateId: o.templateId,
     deckGender: o.deckGender,
     answers: emptyAnswers(),
-    core: defaultCore(),
+    core: o.core ?? defaultCore(),
+    trustLevel: o.trustLevel ?? 1,
+    pausedReason: o.pausedReason ?? null,
     createdAt: o.createdAt,
     lastOpenedAt: o.lastOpenedAt ?? o.createdAt,
     status: o.status ?? "active",
@@ -192,6 +202,9 @@ export async function seedServerState(userId: string, state: SeedState): Promise
         unread: c.unread,
         notify: c.notify,
         sound: c.sound,
+        trust_level: c.trustLevel,
+        highest_level: c.trustLevel,
+        paused_reason: c.pausedReason,
       })
     );
     if (c.messages.length) {
@@ -485,6 +498,12 @@ export function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL as string, process.env.SUPABASE_SECRET_KEY as string, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+/** B2: records the v2-live-groq consent, so a live chat opens without the update sheet. */
+export async function grantLiveConsent(userId: string) {
+  const { error } = await adminClient().from("consents").insert({ user_id: userId, version: "v2-live-groq", marketing: false });
+  if (error) throw new Error(`consent: ${error.message}`);
 }
 
 /** Creates a confirmed user (optionally with a password) without sending any mail. */

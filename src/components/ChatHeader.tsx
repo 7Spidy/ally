@@ -16,12 +16,15 @@ export function ChatHeader({
   onOpenProfile,
   onLongPressAvatar,
   onOverflow,
+  presenceOverride,
 }: {
   template: Template;
   onBack: () => void;
   onOpenProfile: () => void;
   onLongPressAvatar: () => void;
   onOverflow: () => void;
+  /** B2: a live companion's presence line, from her current time block. */
+  presenceOverride?: string;
 }) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
@@ -38,7 +41,7 @@ export function ChatHeader({
   }
 
   const presence = PRESENCE[template.id];
-  const presenceLine = presence ? (isDaytimeIST(now()) ? presence.day : presence.night) : "";
+  const presenceLine = presenceOverride ?? (presence ? (isDaytimeIST(now()) ? presence.day : presence.night) : "");
 
   return (
     <div className={styles.header}>

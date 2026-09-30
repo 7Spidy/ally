@@ -103,10 +103,25 @@ export default async function AdminUserPage({ params }: { params: Promise<{ id: 
                         {plural(c.exchanges, "exchange")}, {plural(c.message_count, "message")}. Met {formatWhen(c.created_at)}
                         {c.parted_at ? `, parted ${formatWhen(c.parted_at)}` : ""}.
                       </p>
+                      {c.live && (
+                        <p className={styles.meta}>
+                          Trust level {c.trust_level}, highest {c.highest_level}, {c.trust_points} TP, day {c.relationship_day}.
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
+            </section>
+
+            <section className={styles.group} aria-labelledby="safety">
+              <h2 id="safety" className={styles.groupLabel}>
+                Safety, last 30 days
+              </h2>
+              <p className={styles.note}>
+                Concern {user.safety_counts?.concern ?? 0}, acute {user.safety_counts?.acute ?? 0}, age claim {user.safety_counts?.age_claim ?? 0}, backstop{" "}
+                {user.safety_counts?.backstop ?? 0}.
+              </p>
             </section>
 
             <AccountControls user={user} />
