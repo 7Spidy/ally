@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { compile, type CompileCtx } from "@/lib/llm/compile";
 import * as heart from "@/lib/heart";
 import { F01 } from "@/personas/persona";
-import { variantsFor } from "@/personas/cores/romantic";
+import { GOLDEN, variantsFor } from "@/personas/cores/romantic";
 
 const NOW = Date.UTC(2026, 4, 12, 4, 30); // Tue 2026-05-12 10:00 IST
 const H = heart.now({ id: "c_x", createdAt: NOW - 40 * 86400000 }, NOW);
@@ -128,7 +128,7 @@ describe("volatile sections", () => {
     ]);
   });
   it("allowed reactions and effects follow the level", () => {
-    expect(compile(ctx(1)).system).toContain("none (always null)");
+    expect(compile(ctx(1)).system).toContain("none, always null");
     expect(compile(ctx(4)).system).toContain("soft, loud, stop, ink");
     expect(compile(ctx(4)).system).not.toContain("soft, loud, stop, ink, pin");
     expect(compile(ctx(5)).system).toContain("pin, screen");
@@ -138,11 +138,11 @@ describe("volatile sections", () => {
 describe("voice rules", () => {
   const s = compile(ctx(3)).system;
   it("carries the style rules", () => {
-    expect(s).toContain("at most once per reply, and only when it is relevant");
-    expect(s).toContain("Never reuse a personal detail she gave in the last 10 messages");
+    expect(s).toContain("at most once per reply, only when relevant");
+    expect(s).toContain("never reuse a personal detail from the last 10 messages");
     expect(s).toContain("Never end a turn by leaving or turning away");
-    expect(s).toContain("Never quote or paraphrase a mood's sample line");
-    expect(s).toContain("Never mention message counts, turns");
+    expect(s).toContain("never quote a mood's sample line");
+    expect(s).toContain("Never mention system mechanics (message numbers, turns, tokens, trust, levels); in-world phrasing is fine");
     expect(s).toContain('"SPA Delhi"');
     expect(s).toContain("at most 200 characters");
   });
@@ -169,6 +169,87 @@ describe("voice rules", () => {
     expect(six).toHaveLength(1);
     expect(six[0]).toMatch(/sensual boundary/);
     expect(compile(ctx(1)).system).not.toContain(six[0]);
+  });
+});
+
+describe("tightening rules", () => {
+  const s = compile(ctx(3)).system;
+  it("carries the distress, invention, people, weather, memory and limit rules", () => {
+    expect(s).toContain("first bubble is never sarcastic");
+    expect(s).toContain('reassurance never opens with a bare "you\'re not" or "you are"');
+    expect(s).toContain("Never invent facts about the user");
+    expect(s).toContain('"my brother\'s in pune"');
+    expect(s).toContain("never apply them to the user's location");
+    expect(s).toContain("Her memories are first person");
+    expect(s).toContain("Never frame a limit as a rule");
+  });
+  it("forbids only system mechanics, not in-world phrasing", () => {
+    expect(s).toContain("in-world phrasing is fine");
+    expect(s).not.toContain("message counts");
+  });
+});
+
+describe("golden exchanges", () => {
+  const pairs = (level: number) => GOLDEN[level >= 5 ? 5 : level >= 3 ? 3 : 1];
+  it("has two exchanges each for L1, L3 and L5", () => {
+    for (const k of [1, 3, 5] as const) expect(GOLDEN[k]).toHaveLength(2);
+  });
+  it("shows only the current level's pair (L2 uses L1's, L4 uses L3's, L6 uses L5's)", () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const s = compile(ctx(level)).system;
+      expect(s).toContain("EXAMPLES (how you sound at this level)");
+      for (const [u, i] of pairs(level)) {
+        expect(s).toContain(`User: ${u}`);
+        expect(s).toContain(`Ira: ${i}`);
+      }
+      for (const k of [1, 3, 5] as const) {
+        if (pairs(level) === GOLDEN[k]) continue;
+        for (const [u, i] of GOLDEN[k]) {
+          expect(s, `L${level} shows an L${k} example`).not.toContain(`Ira: ${i}`);
+          expect(s).not.toContain(`User: ${u}`);
+        }
+      }
+    }
+  });
+  it("uses only lines from the sheet's playbook and level lines", () => {
+    const sheet = JSON.stringify(F01.playbook) + JSON.stringify(F01.levels);
+    for (const k of [1, 3, 5] as const) {
+      for (const [, ira] of GOLDEN[k]) expect(sheet.replace(/\\"/g, '"'), ira).toContain(ira.replace(/\.$/, ""));
+    }
+  });
+});
+
+describe("falling-for-you row", () => {
+  const row = F01.playbook.find((p) => p.situation.includes("falling for you"))!;
+  it("L1 to L3 use the 'you don't know me yet' line, L4 to L5 are tender, L6 is open", () => {
+    for (const level of [1, 2, 3]) expect(variantsFor(row.lines, level)[0]).toMatch(/^you don't know me yet/);
+    for (const level of [4, 5]) {
+      const v = variantsFor(row.lines, level);
+      expect(v).toEqual(["you just said the thing i was building up to. unfair."]);
+    }
+    expect(variantsFor(row.lines, 6)[0]).toMatch(/^open/);
+  });
+  it("shows the current level's variant only", () => {
+    expect(compile(ctx(2)).system).not.toContain("building up to");
+    expect(compile(ctx(4)).system).toContain("you just said the thing i was building up to. unfair.");
+    expect(compile(ctx(4)).system).not.toContain("you don't know me yet. stay long enough to find out if you still mean it. |");
+  });
+});
+
+describe("playbook trimming", () => {
+  it("leaves out rows that have no variant for the current level, and the crisis row", () => {
+    const l5 = compile(ctx(5)).system;
+    expect(l5).not.toContain("you haven't earned that question yet. try again"); // flirting, L1 to L3
+    expect(l5).not.toContain("Crisis signal");
+    expect(compile(ctx(1)).system).not.toContain("okay. i'm allowed to not love hearing that");
+  });
+  it("keeps the generic rows at every level", () => {
+    for (const level of [1, 3, 5]) expect(compile(ctx(level)).system).toContain("Traffic complaint");
+  });
+  it("an L3 prompt is much smaller than the untrimmed playbook would make it", () => {
+    const l3 = compile(ctx(3, { history: [{ id: 2, who: "me", text: "rough day. everything went wrong at work" }] }));
+    const chars = l3.system.length + l3.messages.reduce((n, m) => n + m.content.length, 0);
+    expect(chars).toBeLessThan(8700); // measured at 2,238 input tokens on Groq (was 2,913)
   });
 });
 

@@ -221,9 +221,15 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
   const level = ctx.level;
 
   // Bubbles: trim, drop empties (and any echoed "[#id]" prefix), cap the count and the length.
+  // A bubble with line breaks in it becomes several bubbles (the effect stays on the first).
   let bubbles = out.bubbles
+    .flatMap((b) =>
+      String(b.text ?? "")
+        .split(/\r?\n+/)
+        .map((part, i) => ({ text: part, effect: i === 0 ? b.effect : null }))
+    )
     .map((b) => ({
-      text: cutAtSentence(String(b.text ?? "").replace(/^\s*\[#\d+\]\s*/, "").trim(), MAX_BUBBLE_CHARS),
+      text: cutAtSentence(b.text.replace(/^\s*\[#\d+\]\s*/, "").trim(), MAX_BUBBLE_CHARS),
       effect: b.effect,
     }))
     .filter((b) => b.text.length > 0)

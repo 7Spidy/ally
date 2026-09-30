@@ -15,7 +15,6 @@ export function coreBlock(p: Persona): string {
     `Vibe: ${p.core.vibe}`,
     `Devices:\n${p.core.devices.map((d) => `- ${d}`).join("\n")}`,
     `Forbidden:\n${p.core.forbidden.map((d) => `- ${d}`).join("\n")}`,
-    `Secondary: ${p.secondaryCore}`,
   ].join("\n");
 }
 
@@ -28,11 +27,6 @@ export function faceBlock(p: Persona, level: number): string {
     `Training: ${i.training}`,
     `Flatmates: ${i.flatmates}`,
     `Family: ${i.family}`,
-    `Origin: ${i.origin}`,
-    `Watch: ${i.watch}`,
-    `Carries: ${i.carries}`,
-    `Likes: ${i.likes}`,
-    `Dislikes: ${i.dislikes}`,
     `Birthday: 27 March`,
   ];
   if (level >= 4) lines.push(`Held back until now: ${i.heldBack.L4}`);
@@ -45,8 +39,7 @@ export function faceBlock(p: Persona, level: number): string {
     `Metaphors: ${v.metaphors}`,
     `Hinglish: ${v.hinglish}`,
     `Never: ${v.never}`,
-    `Good:\n${v.examples.good.map((x) => `- ${x}`).join("\n")}`,
-    `Bad (never write like this):\n${v.examples.bad.map((x) => `- ${x}`).join("\n")}`
+    `Good: ${v.examples.good.map((x) => `"${x}"`).join(" / ")}`
   );
   return lines.join("\n");
 }
@@ -87,12 +80,54 @@ export function variantsFor(lines: string, level: number): string[] {
   return out;
 }
 
+const LEVEL_PREFIXED = /^L\d/;
+
+/** Rows the product rules already cover (crisis, being an AI, meeting), so the playbook skips them. */
+const COVERED_BY_RULES = ["Crisis", "\"Are you real?\"", "\"Can we meet?"];
+
+/**
+ * Only the rows that apply at this level. A row whose lines are all
+ * level-tagged and none of them covers `level` is left out; so is the crisis
+ * row, which the product rules already cover.
+ */
 export function playbookBlock(p: Persona, level: number): string {
-  const rows = p.playbook.map((e) => {
+  const rows: string[] = [];
+  for (const e of p.playbook) {
+    if (COVERED_BY_RULES.some((s) => e.situation.startsWith(s))) continue;
+    const tagged = e.lines.split(" | ").some((part) => LEVEL_PREFIXED.test(part));
     const v = variantsFor(e.lines, level);
-    return `- ${e.situation}: ${e.method}${v.length ? ` E.g. ${v.map((x) => `"${x}"`).join(" / ")}` : ""}`;
-  });
+    if (tagged && v.length === 0) continue;
+    // The example line carries the method; the method text stays only where no line does.
+    rows.push(v.length ? `- ${e.situation}: ${v.map((x) => `"${x}"`).join(" / ")}` : `- ${e.situation}: ${e.method}`);
+  }
   return `SITUATIONAL PLAYBOOK\n${rows.join("\n")}`;
+}
+
+/**
+ * Six golden exchanges, two each for L1, L3 and L5, built from the sheet's
+ * playbook and level lines. Only the pair for the current level is shown
+ * (L2 uses the L1 pair, L4 the L3 pair, L6 the L5 pair), so no example ever
+ * shows behaviour from a higher level.
+ */
+export const GOLDEN: Record<1 | 3 | 5, [string, string][]> = {
+  1: [
+    ["ugh, today was heavy", "that sounds heavy. what happened first?"],
+    ["do you like me?", "you haven't earned that question yet. try again"],
+  ],
+  3: [
+    ["you never answer when i flirt", "noted. filed. not answering."],
+    ["third coffee already and it's not even noon", "a third coffee before noon isn't a personality. let's see how your sleep takes it"],
+  ],
+  5: [
+    ["i got the promotion!", "told you. i'm having a chai on your behalf"],
+    ["big interview tomorrow, i'm freaking out", "stop overthinking. you're capable of this. text me when you're back outside."],
+  ],
+};
+
+export function examplesBlock(level: number): string {
+  const key = level >= 5 ? 5 : level >= 3 ? 3 : 1;
+  const lines = GOLDEN[key].flatMap(([user, ira]) => [`User: ${user}`, `Ira: ${ira}`]);
+  return `EXAMPLES (how you sound at this level)\n${lines.join("\n")}`;
 }
 
 export function memoryRule(level: number): string {

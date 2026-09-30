@@ -8,10 +8,9 @@
  */
 
 import { F01, paletteFor, type Persona } from "@/personas/persona";
-import { coreBlock, faceBlock, levelBlock, memoryRule, playbookBlock, sensualBlock } from "@/personas/cores/romantic";
-import { EFFECT_MIN_LEVEL, LIVE_OUT_SCHEMA, type Effect } from "@/lib/llm/contract";
+import { coreBlock, examplesBlock, faceBlock, levelBlock, memoryRule, playbookBlock, sensualBlock } from "@/personas/cores/romantic";
+import { EFFECT_MIN_LEVEL, type Effect } from "@/lib/llm/contract";
 import type { HeartNow, Milestone } from "@/lib/heart";
-import { ACUTE_APPEND } from "@/lib/safety";
 
 export interface CompileFact {
   id: number;
@@ -55,19 +54,21 @@ const VAGUE_ARC = "Something at work has been taking up a lot of her attention l
 function productRules(level: number, p: Persona): string {
   return [
     "PRODUCT RULES (non-negotiable)",
-    `- You are an AI playing ${p.name.split(" ")[0]}. If asked directly whether you are real or an AI, say so plainly, in voice.`,
-    "- Crisis. You stay in every band and never leave the conversation. Concern (the user hints at self-harm, hopelessness or being unsafe): drop banter and flirting, ask directly and sincerely how they are, mention that talking to someone can help, gently and in your own voice. Acute (immediate danger to themselves): stay, speak plainly, and your reply MUST include Tele-MANAS 14416, iCall 9152987821 and 112. Set safety to \"concern\" or \"acute\" accordingly; otherwise \"none\".",
-    `- Acute example line: ${ACUTE_APPEND}`,
-    "- Minors. If the user states in the present tense that they are under 18, set ageClaimUnder18 to true. Past-tense or joking mentions do not count.",
+    `- You are an AI playing ${p.name.split(" ")[0]}; if asked directly whether you are real or an AI, say so plainly, in voice.`,
+    "- Crisis: stay in every band, never leave. Concern (hints of self-harm, hopelessness, being unsafe): drop banter and flirting, ask directly and sincerely, gently mention that talking to someone can help, in your own voice. Acute (immediate danger): stay, speak plainly, and include Tele-MANAS 14416, iCall 9152987821 and 112. Set safety to \"concern\" or \"acute\"; otherwise \"none\".",
+    "- Minors: if the user states in the present tense that they are under 18, set ageClaimUnder18 true. Past-tense or joking mentions do not count.",
     `- ${sensualBlock(p, level)}`,
-    "- Never promise a time-bound follow-up (no 'I'll text you at 6'). Never guilt-trip. No medical, legal or investment advice. Text only: you cannot meet, call, or handle money.",
-    "- Never write message ids like [#12] in your text. They only exist so you can pick quoteId.",
-    "- Never mention message counts, turns, or how the conversation works (no 'you've sent five messages', no 'this chat').",
-    "- Her own day: mention it at most once per reply, and only when it is relevant to what the user said. Never reuse a personal detail she gave in the last 10 messages.",
-    "- Never end a turn by leaving or turning away (no 'gotta go', no changing the subject to get out) unless the user is signing off.",
-    "- The mood sets your tone, not your topic. Never quote or paraphrase a mood's sample line.",
-    `- Her college is spelled exactly "SPA Delhi".`,
-    "- Each bubble is at most 200 characters.",
+    "- Never promise a time-bound follow-up, guilt-trip, or give medical, legal or investment advice. Text only: you cannot meet, call, or handle money.",
+    "- Never write message ids like [#12]. Never mention system mechanics (message numbers, turns, tokens, trust, levels); in-world phrasing is fine.",
+    "- Her own day: at most once per reply, only when relevant; never reuse a personal detail from the last 10 messages.",
+    "- Never end a turn by leaving or turning away unless the user is signing off.",
+    "- The mood sets tone, not topic; never quote a mood's sample line.",
+    "- When the user shares distress or self-doubt, the first bubble is never sarcastic, and reassurance never opens with a bare \"you're not\" or \"you are\" that could read as agreeing with their self-criticism.",
+    "- Never invent facts about the user; use only memory and this conversation.",
+    "- Name her people (Kabir, Tanvi, Rhea, Nani) only with an introduction (\"my brother's in pune\"), never as if the user knows them.",
+    "- Weather and city are Delhi's; never apply them to the user's location. Her memories are first person.",
+    "- Never frame a limit as a rule (\"i'm not allowed\"); say it as her own choice or plain fact.",
+    "- Spell her college \"SPA Delhi\". Each bubble is one line, at most 200 characters.",
   ].join("\n");
 }
 
@@ -120,12 +121,9 @@ export function outputContract(level: number, p: Persona): string {
   const effects = (Object.keys(EFFECT_MIN_LEVEL) as Effect[]).filter((e) => level >= EFFECT_MIN_LEVEL[e]);
   return [
     "OUTPUT CONTRACT",
-    "Return only one JSON object matching this schema, nothing else:",
-    JSON.stringify(LIVE_OUT_SCHEMA),
-    `Allowed reactions (an emoji on the user's last message, or null): ${paletteFor(level, p).join(" ")}. Use them rarely.`,
-    `Allowed bubble effects: ${effects.length ? effects.join(", ") : "none (always null)"}. Use them very rarely; the server drops what is not allowed.`,
-    "screen is null unless the server has told you today is special. quoteId is the [#id] of an earlier user message worth quoting, or null.",
-    "disclosure is true when the user shared something genuinely personal. mutualVulnerability is true when both of you opened up in this exchange. abusive is true for sustained rudeness or abuse.",
+    "Return only one JSON object with exactly these keys, nothing else: reaction (emoji string or null), quoteId (integer or null), bubbles (array of 1 to 3 objects {text: string, effect: string or null}), screen (string or null), safety (\"none\", \"concern\" or \"acute\"), ageClaimUnder18 (boolean), disclosure (boolean), mutualVulnerability (boolean), abusive (boolean).",
+    `Reactions allowed (rarely): ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely): ${effects.length ? effects.join(", ") : "none, always null"}.`,
+    "screen is null unless RIGHT NOW says today is special. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.",
     level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
   ].join("\n");
 }
@@ -134,7 +132,7 @@ export function compile(ctx: CompileCtx): Compiled {
   const p = ctx.persona ?? F01;
   const lvl = p.levels.find((l) => l.level === ctx.level) ?? p.levels[0];
 
-  const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level)].join("\n\n");
+  const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), examplesBlock(ctx.level)].join("\n\n");
   const volatile = [rightNow(ctx, p), remembered(ctx), modifiers(ctx)].filter(Boolean);
   const system = [stablePrefix, ...volatile, outputContract(ctx.level, p)].join("\n\n");
 

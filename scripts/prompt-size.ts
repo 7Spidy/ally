@@ -1,0 +1,10 @@
+import { compile } from "@/lib/llm/compile";
+import { coreBlock, examplesBlock, faceBlock, levelBlock, playbookBlock } from "@/personas/cores/romantic";
+import { F01 } from "@/personas/persona";
+import * as heart from "@/lib/heart";
+const h = heart.now({ id: "c_eval", createdAt: Date.UTC(2026, 2, 3) }, Date.UTC(2026, 4, 12, 15, 30));
+const c = compile({ level: 3, mode: "reply", userName: "Riya", heart: h, milestone: null, facts: [], weekSummaries: [], daySummaries: [], history: [{ id: 2, who: "me", text: "rough day. everything went wrong at work" }], coolOff: false, safetyMode: false, lowEffort: false });
+const parts = c.system.split("\n\n");
+console.log("total", c.system.length);
+console.log("core", coreBlock(F01).length, "face", faceBlock(F01, 3).length, "level", levelBlock(F01.levels[2]).length, "playbook", playbookBlock(F01, 3).length, "examples", examplesBlock(3).length);
+for (const p of parts) console.log(p.length, p.split("\n")[0].slice(0, 50));

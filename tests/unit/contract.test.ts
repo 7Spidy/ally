@@ -65,6 +65,23 @@ describe("bubbles", () => {
     const text = "Is that what happened? " + "x".repeat(300);
     expect(sanitize(out({ bubbles: [b(text)] }), ctx()).bubbles[0].text).toBe("Is that what happened?");
   });
+  it("splits a bubble containing line breaks into separate bubbles, effect on the first", () => {
+    const r = sanitize(out({ bubbles: [b("first line\nsecond line\n\nthird line", "soft")] }), ctx({ level: 3 }));
+    expect(r.bubbles.map((x) => x.text)).toEqual(["first line", "second line", "third line"]);
+    expect(r.bubbles.map((x) => x.effect)).toEqual(["soft", null, null]);
+  });
+  it("keeps the 3-bubble cap after splitting", () => {
+    const r = sanitize(out({ bubbles: [b("a\nb"), b("c\nd")] }), ctx({ level: 3 }));
+    expect(r.bubbles.map((x) => x.text)).toEqual(["a", "b", "c"]);
+  });
+  it("keeps the L1 single-bubble rule after splitting", () => {
+    const r = sanitize(out({ bubbles: [b("only this\nnot this")] }), ctx({ level: 1 }));
+    expect(r.bubbles.map((x) => x.text)).toEqual(["only this"]);
+  });
+  it("drops blank lines, and a bubble that is only line breaks", () => {
+    const r = sanitize(out({ bubbles: [b("\n\n"), b("x\n \ny")] }), ctx({ level: 3 }));
+    expect(r.bubbles.map((x) => x.text)).toEqual(["x", "y"]);
+  });
   it("strips an echoed [#id] prefix", () => {
     expect(sanitize(out({ bubbles: [b("[#12] hi")] }), ctx()).bubbles[0].text).toBe("hi");
   });
