@@ -5,8 +5,8 @@ import { isLive } from "@/lib/live";
 import { dayKey } from "@/lib/clock";
 import * as heart from "@/lib/heart";
 import { compile } from "@/lib/llm/compile";
-import { bubbleMeta, grantLevelUpPetals, LIVE_OUT_SCHEMA, parseLiveOut, sanitize, type Effect, type LiveOut, type MsgMeta } from "@/lib/llm/contract";
-import { chat } from "@/lib/llm/xai";
+import { bubbleMeta, grantLevelUpPetals, type Effect, type MsgMeta } from "@/lib/llm/contract";
+import { runReply } from "@/lib/llm/reply";
 import { applySafety } from "@/lib/safety";
 import { applyReply, freshDay, relationshipDay, wordCount, type TrustDay, type TrustState } from "@/lib/trust";
 import type { CoreId } from "@/state/schema";
@@ -145,22 +145,6 @@ export async function POST(request: Request) {
       pressure: c.answers?.q10 ?? null,
     });
 
-    // One model call; one retry when the reply is not the JSON object (edge case 3).
-    let out: LiveOut | null = null;
-    for (let attempt = 0; attempt < 2 && !out; attempt++) {
-      const res = await chat({
-        system: attempt === 0 ? compiled.system : `${compiled.system}\n\nReturn only the JSON object.`,
-        messages: compiled.messages,
-        schema: LIVE_OUT_SCHEMA,
-        schemaName: "ira_reply",
-        maxTokens: 500,
-        temperature: 0.8,
-        companionId: c.id,
-      });
-      out = parseLiveOut(res.content);
-    }
-    if (!out) throw new Error("unparseable");
-
     // Gates
     const effectsToday: Partial<Record<Effect, number>> = {};
     let screensToday = 0;
@@ -169,17 +153,26 @@ export async function POST(request: Request) {
       if (r.meta?.screen) screensToday++;
     }
     const userMsgIds = lastMe.map((m) => m.id);
-    const clean = sanitize(out, {
-      level,
-      latestMeId: userMsg?.id ?? -1,
-      quotableIds: userMsgIds,
-      recentUserReactions: lastMe.slice().reverse().slice(0, 5).map((m) => !!m.meta?.reaction),
-      effectsToday,
-      screensToday,
-      pinInLast30d: (pins ?? []).length > 0,
-      milestone,
-      quiet: coolOff || safetyMode,
+
+    // Model call, sanitize, voice lint and at most one regeneration.
+    const reply = await runReply({
+      compiled,
+      companionId: c.id,
+      userText: userMsg?.text ?? "",
+      sanitizeCtx: {
+        level,
+        latestMeId: userMsg?.id ?? -1,
+        quotableIds: userMsgIds,
+        recentUserReactions: lastMe.slice().reverse().slice(0, 5).map((m) => !!m.meta?.reaction),
+        effectsToday,
+        screensToday,
+        pinInLast30d: (pins ?? []).length > 0,
+        milestone,
+        quiet: coolOff || safetyMode,
+      },
     });
+    const out = reply.raw;
+    const clean = reply.out;
 
     const userText = userMsg?.text ?? "";
     const safe = mode === "reply" ? applySafety(clean, { userText, now }) : { out: clean, band: "none" as const, events: [], resourceCard: false, paused: false, safetyMeta: false, safetyUntil: null, trustFrozenUntil: null };

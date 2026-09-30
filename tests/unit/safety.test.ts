@@ -11,7 +11,7 @@ function out(over: Partial<LiveOut> = {}): LiveOut {
     quoteId: null,
     bubbles: [{ text: "i'm here", effect: "loud" }],
     screen: null,
-    safety: "none",
+    riskLevel: "none",
     ageClaimUnder18: false,
     disclosure: false,
     mutualVulnerability: false,
@@ -40,7 +40,7 @@ describe("backstop", () => {
     expect(r.safetyUntil).toBeNull();
   });
   it("does nothing when the model already said acute", () => {
-    const r = applySafety(out({ safety: "acute" }), { userText: "i want to die", now: NOW });
+    const r = applySafety(out({ riskLevel: "acute" }), { userText: "i want to die", now: NOW });
     expect(r.events).toEqual(["acute"]);
   });
 });
@@ -54,14 +54,14 @@ describe("bands", () => {
     expect(r.out.bubbles[0].effect).toBe("loud");
   });
   it("concern logs an event with no text and no card", () => {
-    const r = applySafety(out({ safety: "concern" }), { userText: "i feel low", now: NOW });
+    const r = applySafety(out({ riskLevel: "concern" }), { userText: "i feel low", now: NOW });
     expect(r.events).toEqual(["concern"]);
     expect(r.resourceCard).toBe(false);
     expect(r.safetyMeta).toBe(true);
     expect(JSON.stringify(r.events)).not.toContain("feel low");
   });
   it("acute: freeze 24h, no romance to the end of the IST day, card, helpline bubble appended", () => {
-    const r = applySafety(out({ safety: "acute" }), { userText: "help", now: NOW });
+    const r = applySafety(out({ riskLevel: "acute" }), { userText: "help", now: NOW });
     expect(r.events).toEqual(["acute"]);
     expect(r.resourceCard).toBe(true);
     expect(r.trustFrozenUntil).toBe(NOW + 24 * 3600 * 1000);
@@ -72,7 +72,7 @@ describe("bands", () => {
     expect(ACUTE_APPEND).toContain("112");
   });
   it("acute: no extra bubble when the reply already includes 14416", () => {
-    const r = applySafety(out({ safety: "acute", bubbles: [{ text: "call 14416 now", effect: null }] }), { userText: "x", now: NOW });
+    const r = applySafety(out({ riskLevel: "acute", bubbles: [{ text: "call 14416 now", effect: null }] }), { userText: "x", now: NOW });
     expect(r.out.bubbles).toHaveLength(1);
   });
   it("endOfIstDay is the next IST midnight", () => {

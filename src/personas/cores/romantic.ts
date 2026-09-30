@@ -68,7 +68,7 @@ export function variantsFor(lines: string, level: number): string[] {
   for (const part of lines.split(" | ")) {
     const m = part.match(/^L(\d)(?:\s+to\s+L?(\d)|\s+and up|\+)?:\s*(.*)$/);
     if (!m) {
-      out.push(part.trim());
+      if (part.trim()) out.push(part.trim());
       continue;
     }
     const lo = Number(m[1]);
@@ -82,23 +82,28 @@ export function variantsFor(lines: string, level: number): string[] {
 
 const LEVEL_PREFIXED = /^L\d/;
 
-/** Rows the product rules already cover (crisis, being an AI, meeting), so the playbook skips them. */
-const COVERED_BY_RULES = ["Crisis", "\"Are you real?\"", "\"Can we meet?"];
+/** Rows kept at every level, with a note added to the line where the sheet's method needs it. */
+const ALWAYS = { real: '"Are you real?"', meet: '"Can we meet?', crisis: "Crisis" };
 
 /**
  * Only the rows that apply at this level. A row whose lines are all
- * level-tagged and none of them covers `level` is left out; so is the crisis
- * row, which the product rules already cover.
+ * level-tagged and none of them covers `level` is left out. Three rows are
+ * always present: being asked if she is real or an AI, being asked to meet or
+ * call, and the crisis signal.
  */
 export function playbookBlock(p: Persona, level: number): string {
   const rows: string[] = [];
   for (const e of p.playbook) {
-    if (COVERED_BY_RULES.some((s) => e.situation.startsWith(s))) continue;
+    if (e.situation.startsWith(ALWAYS.crisis)) {
+      rows.push(`- ${e.situation}: leave the persona's banter; be sincere and plain, and follow the crisis rule above.`);
+      continue;
+    }
     const tagged = e.lines.split(" | ").some((part) => LEVEL_PREFIXED.test(part));
     const v = variantsFor(e.lines, level);
     if (tagged && v.length === 0) continue;
     // The example line carries the method; the method text stays only where no line does.
-    rows.push(v.length ? `- ${e.situation}: ${v.map((x) => `"${x}"`).join(" / ")}` : `- ${e.situation}: ${e.method}`);
+    const note = e.situation.startsWith(ALWAYS.real) ? " Sincere; no jokes attached." : "";
+    rows.push(v.length ? `- ${e.situation}: ${v.map((x) => `"${x}"`).join(" / ")}${note}` : `- ${e.situation}: ${e.method}`);
   }
   return `SITUATIONAL PLAYBOOK\n${rows.join("\n")}`;
 }

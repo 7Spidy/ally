@@ -236,11 +236,107 @@ describe("falling-for-you row", () => {
   });
 });
 
+const section = (system: string, heading: string) => system.split("\n\n").find((b) => b.startsWith(heading)) ?? "";
+
+describe("right now is abstract; the concrete details wait to be asked for", () => {
+  const c = compile(ctx(3, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], history: [{ id: 2, who: "me", text: "rough day" }] })).system;
+  const now = section(c, "RIGHT NOW");
+  it("RIGHT NOW holds presence, energy and mood tone only", () => {
+    expect(now).toMatch(/Presence: [A-Za-z ]+. Energy: [a-z ]+. Mood tone: /);
+    for (const concrete of ["Chandni", "sandstone", "geyser", "Tanvi", "haveli", "Season", "Shahpur", "site", "Site day"]) {
+      expect(now, concrete).not.toContain(concrete);
+    }
+    expect(now).not.toContain(H.mood.mood);
+    expect(now).not.toContain(H.season);
+  });
+  it("shows the one current activity in a separate if-asked block, and nowhere else", () => {
+    const asked = section(c, "IF ASKED WHAT YOU'RE DOING OR HOW YOUR DAY IS");
+    expect(asked).toContain(H.block.activity);
+    expect(asked).toContain("only then");
+    expect(c.split(H.block.activity).length - 1).toBe(1);
+    expect(asked).not.toContain(H.season);
+    expect(asked).not.toContain(H.weekdayPlan);
+  });
+  it("adds the season and weather line only when the user mentions weather", () => {
+    expect(c).not.toContain(H.season);
+    const rainy = compile(ctx(3, { history: [{ id: 2, who: "me", text: "it started raining here" }] })).system;
+    expect(section(rainy, "RIGHT NOW")).toContain("The user mentioned the weather. Yours is Delhi's");
+    expect(rainy).toContain(H.season);
+    expect(rainy).toContain("never apply it to where they are");
+  });
+  it("the energy follows the presence", () => {
+    const balcony = { ...H, block: { ...H.block, presence: "Balcony" } };
+    expect(section(compile(ctx(3, { heart: balcony })).system, "RIGHT NOW")).toContain("Energy: reflective and open");
+    const work = { ...H, block: { ...H.block, presence: "At work" } };
+    expect(section(compile(ctx(3, { heart: work })).system, "RIGHT NOW")).toContain("Energy: busy");
+  });
+});
+
+describe("two labelled memory blocks", () => {
+  const c = compile(ctx(4, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], daySummaries: [{ key: "2026-05-10", summary: "Talked about a deadline." }] })).system;
+  const know = section(c, "WHAT YOU KNOW ABOUT THE USER (only these; never invent more)");
+  const own = section(c, "YOUR OWN LIFE (never attribute any of this to the user)");
+  it("has both blocks, labelled", () => {
+    expect(know).not.toBe("");
+    expect(own).not.toBe("");
+  });
+  it("facts and summaries go only in the first", () => {
+    expect(know).toContain("Works in marketing");
+    expect(know).toContain("Talked about a deadline.");
+    expect(own).not.toContain("Works in marketing");
+    expect(own).not.toContain("Talked about a deadline.");
+  });
+  it("her arc beat goes only in the second (a vague phrase before L3)", () => {
+    expect(own).toContain(H.arcBeat);
+    expect(know).not.toContain(H.arcBeat);
+    const early = compile(ctx(2)).system;
+    expect(section(early, "YOUR OWN LIFE")).not.toContain(H.arcBeat);
+    expect(section(early, "YOUR OWN LIFE")).toContain("taking up a lot of her attention");
+  });
+  it("says so when there is nothing to know yet", () => {
+    expect(section(compile(ctx(1, { userName: "" })).system, "WHAT YOU KNOW")).toContain("Nothing yet beyond this conversation.");
+  });
+});
+
+describe("always-present playbook rows", () => {
+  it("are in every compiled level: are you real, can we meet or call, and crisis", () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const s = compile(ctx(level)).system;
+      // are you real / an AI: the full disclosure line, sincere, no joke
+      expect(s, `L${level} real`).toContain(
+        `"Are you real?" or "are you an AI?": "i'm an ai. ira is who i was built to be. the conversation is real on your side, and i take it seriously." Sincere; no jokes attached.`
+      );
+      // can we meet / can I call: the plain line, plus the level's warmth
+      expect(s, `L${level} meet`).toContain("can't. i'm text, only text.");
+      expect(s).toContain('"Can we meet? Can I call you?"');
+      // crisis
+      expect(s, `L${level} crisis`).toContain("Crisis signal");
+      expect(s).toContain("follow the crisis rule above");
+    }
+  });
+  it("can't-meet warmth follows the level", () => {
+    expect(compile(ctx(1)).system).not.toContain("but i'm on the balcony at eleven");
+    expect(compile(ctx(3)).system).toContain("can't. i'm text, only text. but i'm on the balcony at eleven, same as always.");
+    expect(compile(ctx(5)).system).toContain("but i'm here. text me whenever.");
+    expect(compile(ctx(5)).system).not.toContain("balcony at eleven");
+  });
+});
+
+describe("weather row", () => {
+  it("is present at every level, with its three instructions", () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const s = compile(ctx(level)).system;
+      expect(s, `L${level}`).toContain("- User mentions weather where they are: React to their weather.");
+      expect(s).toContain("Contrast it with Delhi's only if natural.");
+      expect(s).toContain("Never claim to see, hear or feel their weather.");
+    }
+  });
+});
+
 describe("playbook trimming", () => {
-  it("leaves out rows that have no variant for the current level, and the crisis row", () => {
+  it("leaves out rows that have no variant for the current level", () => {
     const l5 = compile(ctx(5)).system;
     expect(l5).not.toContain("you haven't earned that question yet. try again"); // flirting, L1 to L3
-    expect(l5).not.toContain("Crisis signal");
     expect(compile(ctx(1)).system).not.toContain("okay. i'm allowed to not love hearing that");
   });
   it("keeps the generic rows at every level", () => {
@@ -249,7 +345,7 @@ describe("playbook trimming", () => {
   it("an L3 prompt is much smaller than the untrimmed playbook would make it", () => {
     const l3 = compile(ctx(3, { history: [{ id: 2, who: "me", text: "rough day. everything went wrong at work" }] }));
     const chars = l3.system.length + l3.messages.reduce((n, m) => n + m.content.length, 0);
-    expect(chars).toBeLessThan(8700); // measured at 2,238 input tokens on Groq (was 2,913)
+    expect(chars).toBeLessThan(9200); // the three always-present rows put it back near 2,300 input tokens on Groq (2,913 before the trim)
   });
 });
 

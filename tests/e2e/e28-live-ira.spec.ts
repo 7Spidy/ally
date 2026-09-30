@@ -190,6 +190,42 @@ test.describe("E28 live chat with Ira", () => {
     expect((await serverSnapshot(userId)).messages.filter((m) => m.who === "them")).toHaveLength(2);
   });
 
+  test("E28.11: a reply that breaks the voice lint is regenerated once; only the second is stored", async ({ page }) => {
+    const { userId, health } = await open(page, { id: "c_e28_11" });
+    await send(page, "lint please");
+    await expect(page.getByText("my flatmate tanvi is fine now")).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText("tanvi says hi")).toHaveCount(0);
+    const snap = await serverSnapshot(userId);
+    const them = snap.messages.filter((m) => m.who === "them").map((m) => m.text);
+    expect(them).toEqual(["Hey.", "my flatmate tanvi is fine now"]);
+    assertHealthy(health);
+  });
+
+  test("E28.12: the JSON retry ladder recovers from prose, a provider 400, and a 400 that only json_object survives", async ({ page }) => {
+    const { userId, health } = await open(page, { id: "c_e28_12" });
+    for (const trigger of ["json please", "invalid please", "ladder please"]) {
+      const before = (await serverSnapshot(userId)).messages.filter((m) => m.who === "them").length;
+      await send(page, trigger);
+      await expect.poll(async () => (await serverSnapshot(userId)).messages.filter((m) => m.who === "them").length, { timeout: 25000, message: trigger }).toBe(before + 1);
+      await expect(page.getByText(/couldn't reach ira/i)).toHaveCount(0);
+    }
+    await expect(page.getByText("got there in the end")).toHaveCount(3);
+    assertHealthy(health);
+  });
+
+  test("E28.13: when all three attempts fail the user gets a 502 and the retry prompt, and the message stays", async ({ page }) => {
+    const { userId } = await open(page, { id: "c_e28_13" });
+    await send(page, "dead please");
+    await expect(page.getByRole("button", { name: "Couldn't reach Ira. Tap to retry." })).toBeVisible({ timeout: 30000 });
+    const snap = await serverSnapshot(userId);
+    expect(snap.messages.filter((m) => m.who === "me").map((m) => m.text)).toEqual(["dead please"]);
+    expect(snap.messages.filter((m) => m.who === "them")).toHaveLength(1); // only the seeded "Hey."
+    expect(snap.companions[0].last_replied_msg).toBe(0); // the lock was released, so a retry can run
+    const res = await page.request.post("/api/chat/reply", { data: { companionId: "c_e28_13", mode: "reply" } });
+    expect(res.status()).toBe(502);
+    expect(await res.json()).toEqual({ error: "reply_failed" });
+  });
+
   test("E28.9: a cookie-less POST to /api/cron/vault gets a 401 JSON, never a redirect", async ({ playwright, baseURL }) => {
     const api = await playwright.request.newContext({ baseURL });
     for (const headers of [{}, { Authorization: "Bearer wrong" }]) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { grantLevelUpPetals, parseLiveOut, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
+import { LIVE_OUT_SCHEMA, grantLevelUpPetals, parseLiveOut, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
 
 function out(over: Partial<LiveOut> = {}): LiveOut {
   return {
@@ -7,7 +7,7 @@ function out(over: Partial<LiveOut> = {}): LiveOut {
     quoteId: null,
     bubbles: [{ text: "hello there", effect: null }],
     screen: null,
-    safety: "none",
+    riskLevel: "none",
     ageClaimUnder18: false,
     disclosure: false,
     mutualVulnerability: false,
@@ -186,9 +186,9 @@ describe("safety and quiet stripping", () => {
     expect(r.screen).toBeNull();
   });
   it("acute strips effects and keeps the reaction only if it is 👀", () => {
-    expect(sanitize({ ...loud, safety: "acute" }, ctx({ level: 5 })).reaction).toBe("👀");
-    expect(sanitize({ ...loud, safety: "acute", reaction: "☕" }, ctx({ level: 5 })).reaction).toBeNull();
-    expect(sanitize({ ...loud, safety: "acute" }, ctx({ level: 5 })).bubbles[0].effect).toBeNull();
+    expect(sanitize({ ...loud, riskLevel: "acute" }, ctx({ level: 5 })).reaction).toBe("👀");
+    expect(sanitize({ ...loud, riskLevel: "acute", reaction: "☕" }, ctx({ level: 5 })).reaction).toBeNull();
+    expect(sanitize({ ...loud, riskLevel: "acute" }, ctx({ level: 5 })).bubbles[0].effect).toBeNull();
   });
   it("never throws on junk", () => {
     expect(() => sanitize({ bubbles: null } as unknown as LiveOut, ctx())).not.toThrow();
@@ -196,9 +196,9 @@ describe("safety and quiet stripping", () => {
 });
 
 describe("parseLiveOut", () => {
-  const good = JSON.stringify(out({ bubbles: [b("hi", "soft")], safety: "concern", disclosure: true }));
+  const good = JSON.stringify(out({ bubbles: [b("hi", "soft")], riskLevel: "concern", disclosure: true }));
   it("parses the object, also inside prose or fences", () => {
-    expect(parseLiveOut(good)?.safety).toBe("concern");
+    expect(parseLiveOut(good)?.riskLevel).toBe("concern");
     expect(parseLiveOut("```json\n" + good + "\n```")?.disclosure).toBe(true);
     expect(parseLiveOut("Sure! " + good + " done")?.bubbles[0].text).toBe("hi");
   });
@@ -207,10 +207,37 @@ describe("parseLiveOut", () => {
     expect(parseLiveOut(JSON.stringify({ bubbles: [{ text: "  ", effect: null }] }))).toBeNull();
   });
   it("coerces unknown enums to safe values", () => {
-    const r = parseLiveOut(JSON.stringify({ bubbles: [{ text: "x", effect: "sparkle" }], screen: "fireworks", safety: "panic" }));
+    const r = parseLiveOut(JSON.stringify({ bubbles: [{ text: "x", effect: "sparkle" }], screen: "fireworks", riskLevel: "panic" }));
     expect(r?.bubbles[0].effect).toBeNull();
     expect(r?.screen).toBeNull();
-    expect(r?.safety).toBe("none");
+    expect(r?.riskLevel).toBe("none");
+  });
+});
+
+describe("schema and prompt order", () => {
+  const ORDER = ["bubbles", "reaction", "quoteId", "screen", "riskLevel", "ageClaimUnder18", "disclosure", "mutualVulnerability", "abusive"];
+  it("puts bubbles first, then reaction, quoteId, screen, then the flags", () => {
+    expect(LIVE_OUT_SCHEMA.required).toEqual(ORDER);
+    expect(Object.keys(LIVE_OUT_SCHEMA.properties)).toEqual(ORDER);
+  });
+  it("names the risk field riskLevel, not safety", () => {
+    expect(Object.keys(LIVE_OUT_SCHEMA.properties)).not.toContain("safety");
+    expect(LIVE_OUT_SCHEMA.properties.riskLevel.enum).toEqual(["none", "concern", "acute"]);
+  });
+  it("still reads an old \"safety\" key from a model that uses it", () => {
+    expect(parseLiveOut(JSON.stringify({ bubbles: [{ text: "x", effect: null }], safety: "acute" }))?.riskLevel).toBe("acute");
+    expect(parseLiveOut(JSON.stringify({ bubbles: [{ text: "x", effect: null }], riskLevel: "concern", safety: "acute" }))?.riskLevel).toBe("concern");
+  });
+  it("the compiled prompt lists the keys in the same order", async () => {
+    const { compile } = await import("@/lib/llm/compile");
+    const heart = await import("@/lib/heart");
+    const h = heart.now({ id: "c", createdAt: 0 }, 86400000 * 40);
+    const sys = compile({ level: 1, mode: "reply", userName: "", heart: h, milestone: null, facts: [], weekSummaries: [], daySummaries: [], history: [{ id: 1, who: "me", text: "hi" }], coolOff: false, safetyMode: false, lowEffort: false }).system;
+    const idx = ORDER.map((k) => sys.indexOf(k + " ("));
+    expect(idx.every((i) => i > 0)).toBe(true);
+    expect([...idx].sort((x, y) => x - y)).toEqual(idx);
+    expect(sys).toContain('Set riskLevel to "concern" or "acute"');
+    expect(sys).not.toContain("safety (");
   });
 });
 

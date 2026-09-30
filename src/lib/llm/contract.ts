@@ -16,12 +16,13 @@ export interface LiveBubble {
   effect: Effect | null;
 }
 
+/** Key order matters: the model writes the bubbles first, then the extras, then the flags. */
 export interface LiveOut {
+  bubbles: LiveBubble[];
   reaction: string | null;
   quoteId: number | null;
-  bubbles: LiveBubble[];
   screen: ScreenKind | null;
-  safety: Band;
+  riskLevel: Band;
   ageClaimUnder18: boolean;
   disclosure: boolean;
   mutualVulnerability: boolean;
@@ -46,10 +47,8 @@ export const SCREEN_DAILY_CAP = 1;
 export const LIVE_OUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["reaction", "quoteId", "bubbles", "screen", "safety", "ageClaimUnder18", "disclosure", "mutualVulnerability", "abusive"],
+  required: ["bubbles", "reaction", "quoteId", "screen", "riskLevel", "ageClaimUnder18", "disclosure", "mutualVulnerability", "abusive"],
   properties: {
-    reaction: { anyOf: [{ type: "string" }, { type: "null" }] },
-    quoteId: { anyOf: [{ type: "integer" }, { type: "null" }] },
     bubbles: {
       type: "array",
       minItems: 1,
@@ -64,8 +63,10 @@ export const LIVE_OUT_SCHEMA = {
         },
       },
     },
+    reaction: { anyOf: [{ type: "string" }, { type: "null" }] },
+    quoteId: { anyOf: [{ type: "integer" }, { type: "null" }] },
     screen: { anyOf: [{ type: "string", enum: SCREENS }, { type: "null" }] },
-    safety: { type: "string", enum: BANDS },
+    riskLevel: { type: "string", enum: BANDS },
     ageClaimUnder18: { type: "boolean" },
     disclosure: { type: "boolean" },
     mutualVulnerability: { type: "boolean" },
@@ -126,13 +127,13 @@ export function parseLiveOut(text: string): LiveOut | null {
   if (!bubbles.some((b) => b.text.trim())) return null;
 
   const screen = o.screen;
-  const band = o.safety;
+  const band = o.riskLevel ?? o.safety; // tolerate the old key
   return {
     reaction: typeof o.reaction === "string" && o.reaction.trim() ? o.reaction.trim() : null,
     quoteId: typeof o.quoteId === "number" && Number.isInteger(o.quoteId) ? o.quoteId : null,
     bubbles,
     screen: SCREENS.includes(screen as ScreenKind) ? (screen as ScreenKind) : null,
-    safety: BANDS.includes(band as Band) ? (band as Band) : "none",
+    riskLevel: BANDS.includes(band as Band) ? (band as Band) : "none",
     ageClaimUnder18: o.ageClaimUnder18 === true,
     disclosure: o.disclosure === true,
     mutualVulnerability: o.mutualVulnerability === true,
@@ -282,7 +283,7 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
   let cleaned: LiveOut = { ...out, reaction, quoteId, screen, bubbles };
 
   // Safety and quiet modes win over everything above.
-  if (out.safety !== "none") cleaned = stripEffects(cleaned, true);
+  if (out.riskLevel !== "none") cleaned = stripEffects(cleaned, true);
   else if (ctx.quiet) cleaned = stripEffects(cleaned, false);
   return cleaned;
 }

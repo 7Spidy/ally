@@ -66,7 +66,7 @@ export interface SafetyResult {
 
 export function applySafety(out: LiveOut, args: { userText: string; now: number }): SafetyResult {
   const events: SafetyKind[] = [];
-  let band: Band = out.safety;
+  let band: Band = out.riskLevel;
   let resourceCard = false;
   let safetyUntil: number | null = null;
   let trustFrozenUntil: number | null = null;
@@ -87,7 +87,7 @@ export function applySafety(out: LiveOut, args: { userText: string; now: number 
     trustFrozenUntil = args.now + TRUST_FREEZE_MS;
   }
 
-  if (band !== "none") next = stripEffects({ ...next, safety: band }, true);
+  if (band !== "none") next = stripEffects({ ...next, riskLevel: band }, true);
 
   let paused = false;
   if (out.ageClaimUnder18) {

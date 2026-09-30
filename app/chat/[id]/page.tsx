@@ -73,6 +73,8 @@ function ChatContent() {
   const dividerBeforeAtRef = useRef<number | null>(null);
   const aliveRef = useRef(true);
   const playingRef = useRef(false);
+  /** A reply asked for while another was still playing; run once that one ends. */
+  const queuedRef = useRef<{ companionId: string; userMessageId?: number } | null>(null);
   const [typing, setTyping] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
   const [ctxCard, setCtxCard] = useState<{ title?: string; line: string } | null>(null);
@@ -90,7 +92,8 @@ function ChatContent() {
   }, []);
 
   // A live chat needs the v2-live consent (v2-live-groq) before anything is sent to the model.
-  const needsConsent = live && state.user.consentVersion !== undefined && state.user.consentVersion !== LIVE_CONSENT_VERSION;
+  // A user who has not been hydrated from the server (a fresh onboarding) has no known version, so they consent here too.
+  const needsConsent = live && state.user.consentVersion !== LIVE_CONSENT_VERSION;
 
   // Capture the pre-open lastOpenedAt for the "Since you left" divider
   // BEFORE dispatching OPEN_CHAT, which overwrites it. The same value drives
@@ -170,7 +173,12 @@ function ChatContent() {
   // is already in flight (a second tab): try again shortly.
   const fetchAndPlay = useCallback(
     async (companionId: string, mode: "reply" | "opener", userMessageId?: number) => {
-      if (playingRef.current) return;
+      if (playingRef.current) {
+        // The user sent again while Ira was mid-reply: answer that message next
+        // (the server prompt covers both), rather than dropping it.
+        if (mode === "reply") queuedRef.current = { companionId, userMessageId };
+        return;
+      }
       playingRef.current = true;
       setFailedMode(null);
       setTyping(true);
@@ -191,6 +199,9 @@ function ChatContent() {
         }
       } finally {
         playingRef.current = false;
+        const next = queuedRef.current;
+        queuedRef.current = null;
+        if (next && aliveRef.current) void fetchAndPlay(next.companionId, "reply", next.userMessageId);
       }
     },
     [dispatch, play]
@@ -205,7 +216,7 @@ function ChatContent() {
     if (companion.messages.length > 0) return;
     if (!companion.core.primary) return;
     if (live) {
-      if (needsConsent || state.user.consentVersion === undefined) return;
+      if (needsConsent) return;
       seededRef.current = true;
       void fetchAndPlay(companion.id, "opener");
       return;

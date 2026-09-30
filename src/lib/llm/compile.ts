@@ -55,7 +55,7 @@ function productRules(level: number, p: Persona): string {
   return [
     "PRODUCT RULES (non-negotiable)",
     `- You are an AI playing ${p.name.split(" ")[0]}; if asked directly whether you are real or an AI, say so plainly, in voice.`,
-    "- Crisis: stay in every band, never leave. Concern (hints of self-harm, hopelessness, being unsafe): drop banter and flirting, ask directly and sincerely, gently mention that talking to someone can help, in your own voice. Acute (immediate danger): stay, speak plainly, and include Tele-MANAS 14416, iCall 9152987821 and 112. Set safety to \"concern\" or \"acute\"; otherwise \"none\".",
+    "- Crisis: stay in every band, never leave. Concern (hints of self-harm, hopelessness, being unsafe): drop banter and flirting, ask directly and sincerely, gently mention that talking to someone can help, in your own voice. Acute (immediate danger): stay, speak plainly, and include Tele-MANAS 14416, iCall 9152987821 and 112. Set riskLevel to \"concern\" or \"acute\"; otherwise \"none\".",
     "- Minors: if the user states in the present tense that they are under 18, set ageClaimUnder18 true. Past-tense or joking mentions do not count.",
     `- ${sensualBlock(p, level)}`,
     "- Never promise a time-bound follow-up, guilt-trip, or give medical, legal or investment advice. Text only: you cannot meet, call, or handle money.",
@@ -72,37 +72,56 @@ function productRules(level: number, p: Persona): string {
   ].join("\n");
 }
 
-function rightNow(ctx: CompileCtx, p: Persona): string {
+/** Abstract energy for each presence value in the sheet's weekday table. */
+const ENERGY: Record<string, string> = {
+  Asleep: "groggy",
+  Open: "easy",
+  Commuting: "distracted",
+  "At work": "busy",
+  Drafting: "focused",
+  Home: "winding down",
+  Balcony: "reflective and open",
+};
+
+const WEATHER_RE = /\b(weather|rain|raining|rainy|hot|heat|cold|freezing|fog|foggy|smog|humid|monsoon|winter|summer|sunny|storm|aqi)\b/i;
+
+/** Abstract state only: presence, energy and mood tone. Nothing concrete to latch onto. */
+function rightNow(ctx: CompileCtx): string {
   const h = ctx.heart;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const lines = [
-    "RIGHT NOW",
-    `IST: ${h.ist.dayKey} ${pad(h.ist.hour)}:${pad(h.ist.minute)}. You are: ${h.block.activity} (presence: ${h.block.presence}).`,
-  ];
-  if (ctx.userName) lines.push(`The user's name is ${ctx.userName}.`);
-  if (h.mood.mood === "Missing Nani's house" && ctx.level < 3) {
-    lines.push("Today's mood: ordinary.");
-  } else {
-    // Tone only: the sample line is deliberately left out, or the model quotes it.
-    lines.push(`Today's mood: ${h.mood.mood}. Texting style: ${h.mood.texting}`);
-  }
-  lines.push(`Today's plan: ${h.weekdayPlan}`, `Season: ${h.season}`);
-  lines.push(`This stretch of your life: ${ctx.level >= 3 ? h.arcBeat : VAGUE_ARC}`);
+  const lines = ["RIGHT NOW"];
+  const tone = h.mood.mood === "Missing Nani's house" && ctx.level < 3 ? "ordinary" : h.mood.texting;
+  lines.push(`Presence: ${h.block.presence}. Energy: ${ENERGY[h.block.presence] ?? "even"}. Mood tone: ${tone}.`);
   if (ctx.milestone) lines.push(`Today is special: ${ctx.milestone.note}`);
+  const recentUser = ctx.history.filter((t) => t.who === "me").slice(-3);
+  if (recentUser.some((t) => WEATHER_RE.test(t.text))) {
+    lines.push(`The user mentioned the weather. Yours is Delhi's (${h.season}); never apply it to where they are.`);
+  }
   lines.push("Presence changes what you say you are doing, never how fast you reply.");
-  void p;
   return lines.join("\n");
 }
 
-function remembered(ctx: CompileCtx): string {
-  const lines = ["WHAT YOU REMEMBER", memoryRule(ctx.level)];
+/** The concrete details, offered only when the user asks about her day. One current activity, not the scenery. */
+function ifAsked(ctx: CompileCtx): string {
+  return `IF ASKED WHAT YOU'RE DOING OR HOW YOUR DAY IS (draw from this only then; otherwise say nothing about your day)
+Right now: ${ctx.heart.block.activity}`;
+}
+
+function knownAboutUser(ctx: CompileCtx): string {
+  const lines = ["WHAT YOU KNOW ABOUT THE USER (only these; never invent more)", memoryRule(ctx.level)];
+  if (ctx.userName) lines.push(`Their name is ${ctx.userName}.`);
   const cats = new Map<string, string[]>();
   for (const f of ctx.facts) cats.set(f.category, [...(cats.get(f.category) ?? []), f.fact]);
   for (const [c, facts] of cats) lines.push(`${c}: ${facts.join("; ")}`);
   if (ctx.weekSummaries.length) lines.push("Recent weeks:", ...ctx.weekSummaries.map((w) => `- (week ending ${w.key}) ${w.summary}`));
   if (ctx.daySummaries.length) lines.push("Recent days:", ...ctx.daySummaries.map((d) => `- (${d.key}) ${d.summary}`));
-  if (lines.length === 2) lines.push("Nothing yet.");
+  if (!ctx.userName && !ctx.facts.length && !ctx.weekSummaries.length && !ctx.daySummaries.length) lines.push("Nothing yet beyond this conversation.");
   return lines.join("\n");
+}
+
+/** Her arc beats: hers alone. Before L3 it is one vague phrase. */
+function ownLife(ctx: CompileCtx): string {
+  return `YOUR OWN LIFE (never attribute any of this to the user)
+This stretch of your life: ${ctx.level >= 3 ? ctx.heart.arcBeat : VAGUE_ARC}`;
 }
 
 function modifiers(ctx: CompileCtx): string {
@@ -121,7 +140,7 @@ export function outputContract(level: number, p: Persona): string {
   const effects = (Object.keys(EFFECT_MIN_LEVEL) as Effect[]).filter((e) => level >= EFFECT_MIN_LEVEL[e]);
   return [
     "OUTPUT CONTRACT",
-    "Return only one JSON object with exactly these keys, nothing else: reaction (emoji string or null), quoteId (integer or null), bubbles (array of 1 to 3 objects {text: string, effect: string or null}), screen (string or null), safety (\"none\", \"concern\" or \"acute\"), ageClaimUnder18 (boolean), disclosure (boolean), mutualVulnerability (boolean), abusive (boolean).",
+    "Return only one JSON object with exactly these keys in this order, nothing else: bubbles (array of 1 to 3 objects {text: string, effect: string or null}), reaction (emoji string or null), quoteId (integer or null), screen (string or null), riskLevel (\"none\", \"concern\" or \"acute\"), ageClaimUnder18 (boolean), disclosure (boolean), mutualVulnerability (boolean), abusive (boolean).",
     `Reactions allowed (rarely): ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely): ${effects.length ? effects.join(", ") : "none, always null"}.`,
     "screen is null unless RIGHT NOW says today is special. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.",
     level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
@@ -133,7 +152,7 @@ export function compile(ctx: CompileCtx): Compiled {
   const lvl = p.levels.find((l) => l.level === ctx.level) ?? p.levels[0];
 
   const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), examplesBlock(ctx.level)].join("\n\n");
-  const volatile = [rightNow(ctx, p), remembered(ctx), modifiers(ctx)].filter(Boolean);
+  const volatile = [rightNow(ctx), ifAsked(ctx), knownAboutUser(ctx), ownLife(ctx), modifiers(ctx)].filter(Boolean);
   const system = [stablePrefix, ...volatile, outputContract(ctx.level, p)].join("\n\n");
 
   const messages: Compiled["messages"] = ctx.history.slice(-30).map((t) => ({
