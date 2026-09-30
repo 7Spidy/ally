@@ -500,9 +500,9 @@ export function adminClient() {
   });
 }
 
-/** B2: records the v2-live consent, so a live chat opens without the update sheet. */
+/** B2: records the v2-live-groq consent, so a live chat opens without the update sheet. */
 export async function grantLiveConsent(userId: string) {
-  const { error } = await adminClient().from("consents").insert({ user_id: userId, version: "v2-live", marketing: false });
+  const { error } = await adminClient().from("consents").insert({ user_id: userId, version: "v2-live-groq", marketing: false });
   if (error) throw new Error(`consent: ${error.message}`);
 }
 

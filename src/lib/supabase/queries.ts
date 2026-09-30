@@ -123,7 +123,7 @@ export function clearAgeCheck(companionId: string, dob: string): Promise<{ pause
   return call("clear_age_check", { companion_id: companionId, dob });
 }
 
-/** Records the v2-live consent (the consents table allows a user's own insert). */
+/** Records the v2-live-groq consent (the consents table allows a user's own insert). */
 export async function insertConsent(userId: string, version: string): Promise<void> {
   const { error } = await getBrowserClient().from("consents").insert({ user_id: userId, version, marketing: false });
   if (error) throw error;

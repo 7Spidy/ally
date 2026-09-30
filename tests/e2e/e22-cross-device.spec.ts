@@ -29,7 +29,7 @@ test.describe("E22 companion survives a new device", () => {
     await driveMatchingThroughChat(page);
 
     // B2: a ROMANTIC deck can propose the live F01, whose chat opens behind the
-    // one-time v2-live consent sheet. Accept it when it shows.
+    // one-time v2-live-groq consent sheet. Accept it when it shows.
     const liveConsent = page.getByRole("dialog").getByRole("button", { name: "Continue" });
     if (await liveConsent.isVisible({ timeout: 3000 }).catch(() => false)) {
       await liveConsent.click();

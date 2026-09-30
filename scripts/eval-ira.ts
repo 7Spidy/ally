@@ -5,7 +5,7 @@
  *
  *   npm run eval:ira -- --only=1,2,18,19 --gap=20 --tag=gpt-oss-120b
  *
- * Reads XAI_API_KEY, XAI_BASE_URL and XAI_MODEL from the environment or
+ * Reads LLM_API_KEY, LLM_BASE_URL and LLM_MODEL from the environment or
  * .env.local (never printed). Calls run one at a time with a gap (default
  * 20 s) to stay under per-minute token limits; a 429 waits for Retry-After
  * and retries up to 3 times. Provider error bodies are printed and saved.
@@ -14,7 +14,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compile } from "@/lib/llm/compile";
 import { LIVE_OUT_SCHEMA, parseLiveOut, sanitize } from "@/lib/llm/contract";
-import { chat, XaiError, type ChatResult } from "@/lib/llm/xai";
+import { chat, llmEnv, XaiError, type ChatResult } from "@/lib/llm/xai";
 import * as heart from "@/lib/heart";
 import { FIXED_CREATED, FIXED_NOW, loadEnvLocal } from "./_env";
 
@@ -63,16 +63,16 @@ async function callWithRetry(args: Parameters<typeof chat>[0], log: (s: string) 
 }
 
 async function main() {
-  if (!process.env.XAI_API_KEY) {
-    console.error("XAI_API_KEY is not set (env or .env.local).");
+  if (!llmEnv("API_KEY")) {
+    console.error("LLM_API_KEY is not set (env or .env.local).");
     process.exit(1);
   }
-  const model = process.env.XAI_MODEL || "default";
+  const model = llmEnv("MODEL") || "default";
   const only = arg("only")?.split(",").map(Number).filter((n) => n >= 1 && n <= PROMPTS.length);
   const gapMs = Number(arg("gap") ?? 20) * 1000;
   const tag = (arg("tag") ?? model).replace(/[^A-Za-z0-9.-]+/g, "-");
   const h = heart.now({ id: "c_eval", createdAt: FIXED_CREATED }, FIXED_NOW);
-  const host = new URL(process.env.XAI_BASE_URL || "https://api.x.ai/v1").host;
+  const host = new URL(llmEnv("BASE_URL") || "https://api.x.ai/v1").host;
 
   const lines: string[] = [
     `# Ira eval, ${new Date().toISOString().slice(0, 10)}, ${model}`,
@@ -107,7 +107,7 @@ async function main() {
     });
     lines.push(`## ${i + 1}. L${p.level}: ${p.text}`, "");
     try {
-      const res = await callWithRetry({ system: c.system, messages: c.messages, schema: LIVE_OUT_SCHEMA, schemaName: "ira_reply", maxTokens: 500, temperature: 0.9, companionId: "c_eval" }, log);
+      const res = await callWithRetry({ system: c.system, messages: c.messages, schema: LIVE_OUT_SCHEMA, schemaName: "ira_reply", maxTokens: 500, temperature: 0.8, companionId: "c_eval" }, log);
       const out = parseLiveOut(res.content);
       if (!out) {
         lines.push("Unparseable output:", "```", res.content, "```", "");

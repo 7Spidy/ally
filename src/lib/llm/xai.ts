@@ -1,17 +1,23 @@
 /**
  * LLM client (D2): OpenAI-compatible Chat Completions over fetch, no SDK.
- * Written for xAI, but the request shape is per-provider configurable so
- * Groq and others work with no code change:
- *   XAI_BASE_URL, XAI_MODEL, XAI_API_KEY   endpoint, model, key
+ * The provider is chosen by env, so Groq, xAI and others need no code change:
+ *   LLM_API_KEY, LLM_BASE_URL, LLM_MODEL   key, endpoint, model
+ *     (the older XAI_API_KEY / XAI_BASE_URL / XAI_MODEL still work as fallbacks;
+ *      unset, the endpoint and model default to xAI)
  *   LLM_RESPONSE_FORMAT   json_schema (default) | json_object
  *   LLM_MAX_TOKENS_PARAM  max_tokens (default) | max_completion_tokens
  *   LLM_MAX_TOKENS        overrides the caller's cap (reasoning models spend it on thinking)
- *   LLM_REASONING_EFFORT  low | medium | high, sent as reasoning_effort when set
+ *   LLM_REASONING_EFFORT  none | low | medium | high, sent as reasoning_effort when set
  *   LLM_STRICT            false sends json_schema with strict:false
  * Env is read inside chat(), never at import time, so `next build` works
  * with no variables set. Logs model, token counts, latency and companion id;
  * never message text.
  */
+
+/** LLM_<name>, falling back to the legacy XAI_<name>. */
+export function llmEnv(name: 'API_KEY' | 'BASE_URL' | 'MODEL'): string | undefined {
+  return process.env[`LLM_${name}`] || process.env[`XAI_${name}`] || undefined;
+}
 
 export const DEFAULT_MODEL = "grok-4.20-0309-non-reasoning";
 export const DEFAULT_BASE_URL = "https://api.x.ai/v1";
@@ -101,7 +107,7 @@ export function buildBody(args: ChatArgs, model: string): Record<string, unknown
   const body: Record<string, unknown> = {
     model,
     messages: [{ role: "system", content: args.system }, ...args.messages],
-    temperature: args.temperature ?? 0.9,
+    temperature: args.temperature ?? 0.8,
   };
   if (shape.maxTokensParam !== "omit") body[shape.maxTokensParam] = shape.maxTokens ?? args.maxTokens ?? 500;
   if (shape.reasoningEffort) body.reasoning_effort = shape.reasoningEffort;
@@ -114,10 +120,10 @@ export function buildBody(args: ChatArgs, model: string): Record<string, unknown
 }
 
 async function once(args: ChatArgs): Promise<ChatResult> {
-  const key = process.env.XAI_API_KEY;
-  if (!key) throw new XaiError("XAI_API_KEY is not set", null, false);
-  const base = (process.env.XAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const model = process.env.XAI_MODEL || DEFAULT_MODEL;
+  const key = llmEnv('API_KEY');
+  if (!key) throw new XaiError("LLM_API_KEY is not set", null, false);
+  const base = (llmEnv('BASE_URL') || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const model = llmEnv('MODEL') || DEFAULT_MODEL;
   const doFetch = args.fetchImpl ?? fetch;
 
   const started = Date.now();
@@ -174,9 +180,9 @@ export async function chat(args: ChatArgs): Promise<ChatResult> {
 
 /** GET {base}/models: the ids the provider offers this key. */
 export async function listModels(): Promise<string[]> {
-  const key = process.env.XAI_API_KEY;
-  if (!key) throw new XaiError("XAI_API_KEY is not set", null, false);
-  const base = (process.env.XAI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const key = llmEnv('API_KEY');
+  if (!key) throw new XaiError("LLM_API_KEY is not set", null, false);
+  const base = (llmEnv('BASE_URL') || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
   if (!res.ok) throw new XaiError(`xai_http_${res.status}`, res.status, false, (await res.text().catch(() => "")).trim().slice(0, BODY_LIMIT) || null);
   const json = (await res.json()) as { data?: { id: string }[] };

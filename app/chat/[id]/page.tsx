@@ -89,7 +89,7 @@ function ChatContent() {
     };
   }, []);
 
-  // A live chat needs the v2-live consent before anything is sent to the model.
+  // A live chat needs the v2-live consent (v2-live-groq) before anything is sent to the model.
   const needsConsent = live && state.user.consentVersion !== undefined && state.user.consentVersion !== LIVE_CONSENT_VERSION;
 
   // Capture the pre-open lastOpenedAt for the "Since you left" divider

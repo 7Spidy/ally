@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildBody, chat, listModels, requestShape, XaiError } from "@/lib/llm/xai";
 
-const ENV_KEYS = ["XAI_API_KEY", "XAI_BASE_URL", "XAI_MODEL", "LLM_RESPONSE_FORMAT", "LLM_MAX_TOKENS_PARAM", "LLM_MAX_TOKENS", "LLM_REASONING_EFFORT", "LLM_STRICT"];
+const ENV_KEYS = ["XAI_API_KEY", "XAI_BASE_URL", "XAI_MODEL", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_RESPONSE_FORMAT", "LLM_MAX_TOKENS_PARAM", "LLM_MAX_TOKENS", "LLM_REASONING_EFFORT", "LLM_STRICT"];
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -9,7 +9,7 @@ beforeEach(() => {
     saved[k] = process.env[k];
     delete process.env[k];
   }
-  process.env.XAI_API_KEY = "test-key-not-real";
+  process.env.LLM_API_KEY = "test-key-not-real";
 });
 afterEach(() => {
   for (const k of ENV_KEYS) {
@@ -99,9 +99,36 @@ describe("errors carry the provider's body", () => {
   });
 });
 
+describe("env names", () => {
+  it("reads LLM_*, and falls back to the legacy XAI_* names", async () => {
+    const seen: { url?: string; body?: Record<string, unknown> }[] = [];
+    const ok = { status: 200, body: { choices: [{ message: { content: "{}" } }] } };
+    delete process.env.LLM_API_KEY;
+    process.env.XAI_API_KEY = "legacy-key";
+    process.env.XAI_BASE_URL = "https://legacy.example/v1";
+    process.env.XAI_MODEL = "legacy-model";
+    await chat({ ...args, fetchImpl: fakeFetch(ok, seen) });
+    expect(seen[0].url).toBe("https://legacy.example/v1/chat/completions");
+    expect(seen[0].body?.model).toBe("legacy-model");
+    process.env.LLM_API_KEY = "new-key";
+    process.env.LLM_BASE_URL = "https://api.groq.com/openai/v1";
+    process.env.LLM_MODEL = "qwen/qwen3.8-27b";
+    await chat({ ...args, fetchImpl: fakeFetch(ok, seen) });
+    expect(seen[1].url).toBe("https://api.groq.com/openai/v1/chat/completions");
+    expect(seen[1].body?.model).toBe("qwen/qwen3.8-27b");
+  });
+
+  it("defaults the temperature to 0.8 and passes reasoning_effort none", () => {
+    process.env.LLM_REASONING_EFFORT = "none";
+    const b = buildBody(args, "m");
+    expect(b.temperature).toBe(0.8);
+    expect(b.reasoning_effort).toBe("none");
+  });
+});
+
 describe("success and models", () => {
   it("returns content and usage, and posts to {base}/chat/completions", async () => {
-    process.env.XAI_BASE_URL = "https://api.groq.com/openai/v1/";
+    process.env.LLM_BASE_URL = "https://api.groq.com/openai/v1/";
     const seen: { url?: string; body?: Record<string, unknown> }[] = [];
     const res = await chat({
       ...args,
@@ -112,8 +139,8 @@ describe("success and models", () => {
   });
 
   it("fails clearly without a key", async () => {
-    delete process.env.XAI_API_KEY;
-    await expect(chat({ ...args })).rejects.toThrow("XAI_API_KEY is not set");
-    await expect(listModels()).rejects.toThrow("XAI_API_KEY is not set");
+    delete process.env.LLM_API_KEY;
+    await expect(chat({ ...args })).rejects.toThrow("LLM_API_KEY is not set");
+    await expect(listModels()).rejects.toThrow("LLM_API_KEY is not set");
   });
 });

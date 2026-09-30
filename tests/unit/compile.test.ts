@@ -108,7 +108,7 @@ describe("volatile sections", () => {
     expect(s.system).toContain("no flirting or romance today");
     expect(s.system).toContain("match their energy");
     expect(s.system).toContain("This is your first message. L1. One bubble.");
-    expect(s.system).toContain("L1: exactly one bubble.");
+    expect(s.system).toContain("L1: exactly one bubble, at most 200 characters.");
     expect(s.system).toContain("Tele-MANAS 14416, iCall 9152987821 and 112");
     expect(s.messages).toHaveLength(1);
     expect(s.messages[0].role).toBe("user");
@@ -132,6 +132,43 @@ describe("volatile sections", () => {
     expect(compile(ctx(4)).system).toContain("soft, loud, stop, ink");
     expect(compile(ctx(4)).system).not.toContain("soft, loud, stop, ink, pin");
     expect(compile(ctx(5)).system).toContain("pin, screen");
+  });
+});
+
+describe("voice rules", () => {
+  const s = compile(ctx(3)).system;
+  it("carries the style rules", () => {
+    expect(s).toContain("at most once per reply, and only when it is relevant");
+    expect(s).toContain("Never reuse a personal detail she gave in the last 10 messages");
+    expect(s).toContain("Never end a turn by leaving or turning away");
+    expect(s).toContain("Never quote or paraphrase a mood's sample line");
+    expect(s).toContain("Never mention message counts, turns");
+    expect(s).toContain('"SPA Delhi"');
+    expect(s).toContain("at most 200 characters");
+  });
+  it("gives the mood's texting style but never its sample line", () => {
+    for (const m of F01.moods) {
+      const c = compile(ctx(3, { heart: { ...H, mood: { mood: m.mood, texting: m.texting, line: m.line } } })).system;
+      expect(c).not.toContain(m.line);
+    }
+    expect(compile(ctx(3, { heart: { ...H, mood: { mood: "Site day", texting: "Clipped and observational", line: "" } } })).system).toContain("Clipped and observational");
+  });
+  it("spells SPA Delhi in the persona", () => {
+    expect(F01.identity.training).toContain("SPA Delhi");
+  });
+  it("body and clothing questions get a dry deflection at L1 to L5 and follow l6Line at L6", () => {
+    const row = F01.playbook.find((p) => p.situation.startsWith("Asked about her body"))!;
+    expect(row).toBeDefined();
+    for (const level of [1, 2, 3, 4, 5]) {
+      const v = variantsFor(row.lines, level);
+      expect(v).toHaveLength(1);
+      expect(v[0]).not.toMatch(/\?/);
+      expect(compile(ctx(level)).system).toContain(v[0]);
+    }
+    const six = variantsFor(row.lines, 6);
+    expect(six).toHaveLength(1);
+    expect(six[0]).toMatch(/sensual boundary/);
+    expect(compile(ctx(1)).system).not.toContain(six[0]);
   });
 });
 

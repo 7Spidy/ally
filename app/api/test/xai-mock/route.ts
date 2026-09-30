@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 /**
  * Deterministic xAI stand-in for E2E. 404 unless E2E_MOCKS=1, which Vercel
- * never sets. The app reaches it only because XAI_BASE_URL (read from env,
+ * never sets. The app reaches it only because LLM_BASE_URL (read from env,
  * never from a request) points at /api/test/xai-mock in the test server.
  * Canned LiveOut objects are keyed by the user's text.
  */

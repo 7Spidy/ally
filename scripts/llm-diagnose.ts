@@ -7,7 +7,7 @@
  */
 import { compile } from "@/lib/llm/compile";
 import { LIVE_OUT_SCHEMA } from "@/lib/llm/contract";
-import { buildBody, listModels, XaiError, type RequestShape } from "@/lib/llm/xai";
+import { buildBody, listModels, llmEnv, XaiError, type RequestShape } from "@/lib/llm/xai";
 import * as heart from "@/lib/heart";
 import { FIXED_CREATED, FIXED_NOW, loadEnvLocal } from "./_env";
 
@@ -38,11 +38,11 @@ function l3Prompt() {
 
 async function attempt(label: string, model: string, shape: Partial<RequestShape>, withSchema: boolean) {
   const c = l3Prompt();
-  const base = (process.env.XAI_BASE_URL || "").replace(/\/+$/, "");
+  const base = (llmEnv("BASE_URL") || "").replace(/\/+$/, "");
   const body = buildBody({ system: c.system, messages: c.messages, schema: withSchema ? LIVE_OUT_SCHEMA : undefined, schemaName: "ira_reply", shape }, model);
   const res = await fetch(`${base}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.XAI_API_KEY}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${llmEnv("API_KEY")}` },
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -57,11 +57,11 @@ async function attempt(label: string, model: string, shape: Partial<RequestShape
 }
 
 async function main() {
-  if (!process.env.XAI_API_KEY || !process.env.XAI_BASE_URL) {
-    console.error("XAI_API_KEY and XAI_BASE_URL must be set (env or .env.local).");
+  if (!llmEnv("API_KEY") || !llmEnv("BASE_URL")) {
+    console.error("LLM_API_KEY and LLM_BASE_URL must be set (env or .env.local).");
     process.exit(1);
   }
-  console.log(`Provider: ${new URL(process.env.XAI_BASE_URL).host}`);
+  console.log(`Provider: ${new URL(llmEnv("BASE_URL")!).host}`);
 
   try {
     const ids = await listModels();

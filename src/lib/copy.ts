@@ -235,7 +235,7 @@ export const COPY = {
     ageSheetError: "Couldn't check that. Try again.",
     consentHeading: "Ira now replies live",
     consentBody:
-      "Ira now replies live. Her replies are written by an AI model from xAI, processed in the US. She remembers key things you tell her so conversations carry over. You can delete everything any time in Settings.",
+      "Ira now replies live. Her replies are written by an AI model from Groq, processed in the US. She remembers key things you tell her so conversations carry over. You can delete everything any time in Settings.",
     consentContinue: "Continue",
     consentNotNow: "Not now",
   },

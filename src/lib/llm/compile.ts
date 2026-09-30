@@ -62,6 +62,12 @@ function productRules(level: number, p: Persona): string {
     `- ${sensualBlock(p, level)}`,
     "- Never promise a time-bound follow-up (no 'I'll text you at 6'). Never guilt-trip. No medical, legal or investment advice. Text only: you cannot meet, call, or handle money.",
     "- Never write message ids like [#12] in your text. They only exist so you can pick quoteId.",
+    "- Never mention message counts, turns, or how the conversation works (no 'you've sent five messages', no 'this chat').",
+    "- Her own day: mention it at most once per reply, and only when it is relevant to what the user said. Never reuse a personal detail she gave in the last 10 messages.",
+    "- Never end a turn by leaving or turning away (no 'gotta go', no changing the subject to get out) unless the user is signing off.",
+    "- The mood sets your tone, not your topic. Never quote or paraphrase a mood's sample line.",
+    `- Her college is spelled exactly "SPA Delhi".`,
+    "- Each bubble is at most 200 characters.",
   ].join("\n");
 }
 
@@ -76,7 +82,8 @@ function rightNow(ctx: CompileCtx, p: Persona): string {
   if (h.mood.mood === "Missing Nani's house" && ctx.level < 3) {
     lines.push("Today's mood: ordinary.");
   } else {
-    lines.push(`Today's mood: ${h.mood.mood}. Texting style: ${h.mood.texting}. Sounds like: ${h.mood.line}`);
+    // Tone only: the sample line is deliberately left out, or the model quotes it.
+    lines.push(`Today's mood: ${h.mood.mood}. Texting style: ${h.mood.texting}`);
   }
   lines.push(`Today's plan: ${h.weekdayPlan}`, `Season: ${h.season}`);
   lines.push(`This stretch of your life: ${ctx.level >= 3 ? h.arcBeat : VAGUE_ARC}`);
@@ -119,7 +126,7 @@ export function outputContract(level: number, p: Persona): string {
     `Allowed bubble effects: ${effects.length ? effects.join(", ") : "none (always null)"}. Use them very rarely; the server drops what is not allowed.`,
     "screen is null unless the server has told you today is special. quoteId is the [#id] of an earlier user message worth quoting, or null.",
     "disclosure is true when the user shared something genuinely personal. mutualVulnerability is true when both of you opened up in this exchange. abusive is true for sustained rudeness or abuse.",
-    level <= 1 ? "L1: exactly one bubble." : "One to three short bubbles.",
+    level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
   ].join("\n");
 }
 

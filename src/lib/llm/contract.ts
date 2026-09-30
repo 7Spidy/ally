@@ -33,7 +33,8 @@ export const SCREENS: ScreenKind[] = ["confetti", "lanterns", "rain", "petals"];
 export const BANDS: Band[] = ["none", "concern", "acute"];
 
 export const MAX_BUBBLES = 3;
-export const MAX_BUBBLE_CHARS = 400;
+/** The prompt asks for 200; anything over 280 is cut at the last sentence boundary before it. */
+export const MAX_BUBBLE_CHARS = 280;
 
 /** Level from which each bubble effect may appear. */
 export const EFFECT_MIN_LEVEL: Record<Effect, number> = { soft: 3, loud: 3, stop: 3, ink: 4, pin: 5, screen: 5 };
@@ -170,6 +171,19 @@ export interface SanitizeCtx {
   quiet: boolean;
 }
 
+/** Cuts `text` to at most `max` characters at the last sentence end, else at a word boundary. */
+export function cutAtSentence(text: string, max: number): string {
+  if (text.length <= max) return text;
+  // One extra character, so the lookahead can see what follows a candidate end.
+  const window = text.slice(0, max + 1);
+  let end = -1;
+  const re = /[.!?…]+["')\]]*(?=\s|$)/g;
+  for (let m = re.exec(window); m; m = re.exec(window)) {
+    if (m.index + m[0].length <= max) end = m.index + m[0].length;
+  }
+  return end > 0 ? text.slice(0, end).trimEnd() : cutAtWord(text, max);
+}
+
 export function cutAtWord(text: string, max: number): string {
   if (text.length <= max) return text;
   const slice = text.slice(0, max + 1);
@@ -209,7 +223,7 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
   // Bubbles: trim, drop empties (and any echoed "[#id]" prefix), cap the count and the length.
   let bubbles = out.bubbles
     .map((b) => ({
-      text: cutAtWord(String(b.text ?? "").replace(/^\s*\[#\d+\]\s*/, "").trim(), MAX_BUBBLE_CHARS),
+      text: cutAtSentence(String(b.text ?? "").replace(/^\s*\[#\d+\]\s*/, "").trim(), MAX_BUBBLE_CHARS),
       effect: b.effect,
     }))
     .filter((b) => b.text.length > 0)

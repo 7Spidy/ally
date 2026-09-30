@@ -154,7 +154,7 @@ export async function POST(request: Request) {
         schema: LIVE_OUT_SCHEMA,
         schemaName: "ira_reply",
         maxTokens: 500,
-        temperature: 0.9,
+        temperature: 0.8,
         companionId: c.id,
       });
       out = parseLiveOut(res.content);

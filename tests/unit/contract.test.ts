@@ -42,10 +42,28 @@ describe("bubbles", () => {
     const r = sanitize(out({ bubbles: [b("a"), b("b")] }), ctx({ level: 1 }));
     expect(r.bubbles).toHaveLength(1);
   });
-  it("cuts a long bubble at a word boundary within 400 chars", () => {
+  it("leaves a bubble of up to 280 characters alone, even past the 200 the prompt asks for", () => {
+    const text = "a".repeat(279) + ".";
+    expect(sanitize(out({ bubbles: [b(text)] }), ctx()).bubbles[0].text).toBe(text);
+  });
+  it("cuts an over-length bubble at the last sentence boundary before 280 characters", () => {
+    const first = "This is the first sentence and it is fairly long. ".repeat(4).trim(); // 4 sentences, 199 chars
+    const text = `${first} ${"tail words without a stop ".repeat(10)}end.`;
+    const cut = sanitize(out({ bubbles: [b(text)] }), ctx()).bubbles[0].text;
+    expect(cut.length).toBeLessThanOrEqual(280);
+    expect(cut.endsWith("long.")).toBe(true);
+    expect(text.startsWith(cut)).toBe(true);
+    // the last full sentence that still fits is kept, nothing after it
+    expect(cut).toBe(first);
+  });
+  it("falls back to a word boundary when there is no sentence end to cut at", () => {
     const r = sanitize(out({ bubbles: [b("word ".repeat(200))] }), ctx());
-    expect(r.bubbles[0].text.length).toBeLessThanOrEqual(400);
+    expect(r.bubbles[0].text.length).toBeLessThanOrEqual(280);
     expect(r.bubbles[0].text.endsWith("word")).toBe(true);
+  });
+  it("treats ? and ! as sentence ends", () => {
+    const text = "Is that what happened? " + "x".repeat(300);
+    expect(sanitize(out({ bubbles: [b(text)] }), ctx()).bubbles[0].text).toBe("Is that what happened?");
   });
   it("strips an echoed [#id] prefix", () => {
     expect(sanitize(out({ bubbles: [b("[#12] hi")] }), ctx()).bubbles[0].text).toBe("hi");
