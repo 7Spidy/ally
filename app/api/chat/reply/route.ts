@@ -243,7 +243,9 @@ export async function POST(request: Request) {
       resourceCard: safe.resourceCard,
       paused: safe.paused,
     });
-  } catch {
+  } catch (e) {
+    // Never message text: the error's name and message (for the LLM client, the provider's error code and body).
+    console.error(JSON.stringify({ evt: "reply.fail", name: (e as Error)?.name ?? "unknown", message: String((e as Error)?.message ?? e).slice(0, 400), status: (e as { status?: number })?.status ?? null, companion: c.id }));
     await release();
     return json({ error: "reply_failed" }, 502);
   }
