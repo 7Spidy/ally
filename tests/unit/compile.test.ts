@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compile, type CompileCtx } from "@/lib/llm/compile";
+import { compile, JSON_REMINDER, type CompileCtx } from "@/lib/llm/compile";
 import * as heart from "@/lib/heart";
 import { F01 } from "@/personas/persona";
 import { GOLDEN, variantsFor } from "@/personas/cores/romantic";
@@ -124,7 +124,7 @@ describe("volatile sections", () => {
     );
     expect(c.messages).toEqual([
       { role: "assistant", content: "[#1] hi" },
-      { role: "user", content: "[#2] hello" },
+      { role: "user", content: `[#2] hello\n\n${JSON_REMINDER}` },
     ]);
   });
   it("allowed reactions and effects follow the level", () => {
@@ -380,6 +380,17 @@ describe("B3: DeepSeek JSON mode, prefix cache order, emoji", () => {
     const out = parseLiveOut(m![1]);
     expect(out?.bubbles[0].text).toBe("<one short line>");
     expect(out?.riskLevel).toBe("none");
+  });
+
+  it("the last user turn ends with the JSON reminder, in reply and opener mode", () => {
+    for (const mode of ["reply", "opener"] as const) {
+      const c = compile(ctx(3, { mode }));
+      const last = c.messages[c.messages.length - 1];
+      expect(last.role).toBe("user");
+      expect(last.content.endsWith(JSON_REMINDER)).toBe(true);
+      expect(last.content).toMatch(/json/i);
+      expect(c.messages.slice(0, -1).some((m) => m.content.includes(JSON_REMINDER))).toBe(false);
+    }
   });
 
   it("the static block, output contract included, comes before every per-turn block", () => {

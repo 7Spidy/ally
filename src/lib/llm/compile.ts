@@ -49,6 +49,9 @@ export interface Compiled {
   messages: { role: "user" | "assistant"; content: string }[];
 }
 
+/** Appended to the final user turn of every request. */
+export const JSON_REMINDER = "(Reply with only the JSON object from the OUTPUT CONTRACT. No text outside it.)";
+
 const VAGUE_ARC = "Something at work has been taking up a lot of her attention lately.";
 
 function productRules(level: number, p: Persona): string {
@@ -164,5 +167,8 @@ export function compile(ctx: CompileCtx): Compiled {
   if (ctx.mode === "opener" || messages.length === 0 || messages[messages.length - 1].role !== "user") {
     messages.push({ role: "user", content: "(The chat has just opened. Write your first message.)" });
   }
+  // DeepSeek's json_object mode is only a hint, and a history of plain-text turns pulls the model back to prose.
+  // A reminder on the last (user) turn, where it carries the most weight, keeps the reply in the JSON contract.
+  messages[messages.length - 1].content += `\n\n${JSON_REMINDER}`;
   return { system, stablePrefix, messages };
 }
