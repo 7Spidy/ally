@@ -346,7 +346,7 @@ describe("playbook trimming", () => {
   it("an L3 prompt is much smaller than the untrimmed playbook would make it", () => {
     const l3 = compile(ctx(3, { history: [{ id: 2, who: "me", text: "rough day. everything went wrong at work" }] }));
     const chars = l3.system.length + l3.messages.reduce((n, m) => n + m.content.length, 0);
-    expect(chars).toBeLessThan(10000); // the three always-present rows, the warmth line and the emoji rule keep it near 2,500 input tokens (2,913 before the trim)
+    expect(chars).toBeLessThan(10500); // the three always-present rows, the warmth line and the emoji rule keep it near 2,500 input tokens (2,913 before the trim)
   });
 });
 
@@ -371,6 +371,15 @@ describe("B3: DeepSeek JSON mode, prefix cache order, emoji", () => {
       expect(s, `L${level}`).toMatch(/json/i);
       for (const k of KEYS) expect(s, `L${level} ${k}`).toContain(k);
     }
+  });
+
+  it("the prompt shows the exact JSON shape, and that example parses as a valid reply", async () => {
+    const { parseLiveOut } = await import("@/lib/llm/contract");
+    const m = compile(ctx(3)).system.match(/Example of the shape[^{]*(\{.*\})/);
+    expect(m).not.toBeNull();
+    const out = parseLiveOut(m![1]);
+    expect(out?.bubbles[0].text).toBe("<one short line>");
+    expect(out?.riskLevel).toBe("none");
   });
 
   it("the static block, output contract included, comes before every per-turn block", () => {

@@ -60,6 +60,16 @@ function logLint(rules: LintRule[], pass: 1 | 2, companionId?: string) {
   console.info(JSON.stringify({ evt: "llm.lint", rules, pass, companion: companionId ?? null }));
 }
 
+/** Logs why a reply was unusable: its length and top-level JSON keys, never its text. */
+function logUnparsed(content: string, attempt: number, companionId?: string) {
+  let keys: string[] | "not_json" = "not_json";
+  try {
+    const o = JSON.parse(content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+    if (o && typeof o === "object") keys = Object.keys(o).slice(0, 12);
+  } catch {}
+  console.warn(JSON.stringify({ evt: "llm.unparsed", attempt, chars: content.length, keys, companion: companionId ?? null }));
+}
+
 export async function runReply(args: RunReplyArgs): Promise<RunReplyResult> {
   const call = args.chatFn ?? chat;
   const usage = { input: 0, output: 0, cached: 0 };
@@ -91,6 +101,7 @@ export async function runReply(args: RunReplyArgs): Promise<RunReplyResult> {
       usage.output += res.usage.output;
       usage.cached += res.usage.cached;
       const out = parseLiveOut(res.content);
+      if (!out) logUnparsed(res.content, attempt, args.companionId);
       if (attempt > 0) stats.retryTokens += usage.input + usage.output - before;
       if (out) return out;
       if (attempt === 0) stats.firstFailed = true;
