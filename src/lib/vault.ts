@@ -12,7 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dayKey } from "@/lib/clock";
 import { istDaysBetween } from "@/lib/trust";
-import type { ChatArgs, ChatResult } from "@/lib/llm/xai";
+import type { ChatArgs, ChatResult } from "@/lib/llm/llm";
 
 export const CATEGORIES = ["people", "work", "schedule", "dates", "tastes", "jokes", "promises", "other"] as const;
 export type Category = (typeof CATEGORIES)[number];

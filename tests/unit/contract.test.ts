@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { LIVE_OUT_SCHEMA, grantLevelUpPetals, parseLiveOut, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
+import { paletteFor } from "@/personas/persona";
+import { LIVE_OUT_SCHEMA, cutAtSentence, cutAtWord, grantLevelUpPetals, parseLiveOut, safePrefix, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
 
 function out(over: Partial<LiveOut> = {}): LiveOut {
   return {
@@ -21,7 +22,6 @@ function ctx(over: Partial<SanitizeCtx> = {}): SanitizeCtx {
     level: 3,
     latestMeId: 10,
     quotableIds: [2, 4, 10],
-    recentUserReactions: [false, false, false, false, false],
     effectsToday: {},
     screensToday: 0,
     pinInLast30d: false,
@@ -92,16 +92,49 @@ describe("reaction", () => {
     expect(sanitize(out({ reaction: "❤️" }), ctx({ level: 3 })).reaction).toBeNull();
     expect(sanitize(out({ reaction: "❤️" }), ctx({ level: 4 })).reaction).toBe("❤️");
     expect(sanitize(out({ reaction: "👀" }), ctx({ level: 1 })).reaction).toBe("👀");
-    expect(sanitize(out({ reaction: "😂" }), ctx({ level: 1 })).reaction).toBeNull();
+    expect(sanitize(out({ reaction: "🙄" }), ctx({ level: 1 })).reaction).toBeNull();
+    expect(sanitize(out({ reaction: "🙄" }), ctx({ level: 2 })).reaction).toBe("🙄");
   });
-  it("L1 to L2: dropped if any of the last 5 user messages has one", () => {
-    const recent = [false, false, false, false, true];
-    expect(sanitize(out({ reaction: "👀" }), ctx({ level: 2, recentUserReactions: recent })).reaction).toBeNull();
-    expect(sanitize(out({ reaction: "👀" }), ctx({ level: 2, recentUserReactions: [false, false, false, false, false, true] })).reaction).toBe("👀");
+  it("is not frequency-limited: the same reaction survives reply after reply", () => {
+    for (let i = 0; i < 10; i++) {
+      for (const level of [1, 2, 3, 6]) expect(sanitize(out({ reaction: "😂" }), ctx({ level })).reaction).toBe("😂");
+    }
   });
-  it("L3 and up: dropped if any of the last 3 has one", () => {
-    expect(sanitize(out({ reaction: "👀" }), ctx({ level: 3, recentUserReactions: [false, false, true, false, false] })).reaction).toBeNull();
-    expect(sanitize(out({ reaction: "👀" }), ctx({ level: 3, recentUserReactions: [false, false, false, true, true] })).reaction).toBe("👀");
+  it("each level's palette is a superset of the one below, and L1 is warm", () => {
+    for (let level = 2; level <= 6; level++) {
+      for (const e of paletteFor(level - 1)) expect(paletteFor(level), `L${level} keeps ${e}`).toContain(e);
+    }
+    expect(paletteFor(1)).toEqual(["👍", "👀", "😂", "😊", "🙈", "🤔", "✨", "😅"]);
+    expect(paletteFor(2)).toEqual(expect.arrayContaining(["🙄", "🤭"]));
+    expect(paletteFor(3)).toEqual(expect.arrayContaining(["🫠", "☕"]));
+    expect(paletteFor(1)).not.toContain("❤️");
+  });
+  it("is stripped in a safety band, except 👀", () => {
+    expect(sanitize(out({ reaction: "😂", riskLevel: "concern" }), ctx()).reaction).toBeNull();
+    expect(sanitize(out({ reaction: "👀", riskLevel: "acute" }), ctx()).reaction).toBe("👀");
+  });
+});
+
+describe("cutting never splits an emoji", () => {
+  it("safePrefix backs off a surrogate pair at the boundary", () => {
+    const t = "ab😂cd"; // 😂 is two UTF-16 units at index 2..3
+    expect(safePrefix(t, 3)).toBe("ab");
+    expect(safePrefix(t, 4)).toBe("ab😂");
+    expect(safePrefix(t, 10)).toBe(t);
+  });
+  it("safePrefix keeps a ZWJ sequence whole", () => {
+    const family = "👨‍👩‍👧"; // 8 UTF-16 units, one grapheme
+    const t = `hi ${family} yo`;
+    expect(safePrefix(t, 3 + family.length - 1)).toBe("hi ");
+    expect(safePrefix(t, 3 + family.length)).toBe(`hi ${family}`);
+  });
+  it("an emoji at the 280 boundary is dropped whole, with no lone surrogate left behind", () => {
+    const text = "a".repeat(279) + "😂 and then some more words";
+    const bubble = sanitize(out({ bubbles: [b(text)] }), ctx()).bubbles[0].text;
+    expect(bubble.length).toBeLessThanOrEqual(280);
+    expect(bubble).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/);
+    expect(cutAtWord("a".repeat(279) + "😂xyz", 280)).not.toMatch(/[\ud800-\udbff]$/);
+    expect(cutAtSentence("x".repeat(279) + "👨‍👩‍👧 end", 285)).not.toMatch(/\u200d$/);
   });
 });
 
@@ -162,10 +195,10 @@ describe("effects", () => {
   });
 
   it("L1 effects never survive", () => {
-    const r = sanitize(out({ reaction: "😂", bubbles: [b("x", "loud")], screen: "confetti" }), ctx({ level: 1 }));
+    const r = sanitize(out({ reaction: "❤️", bubbles: [b("x", "loud")], screen: "confetti" }), ctx({ level: 1 }));
     expect(r.bubbles[0].effect).toBeNull();
     expect(r.screen).toBeNull();
-    expect(r.reaction).toBeNull();
+    expect(r.reaction).toBeNull(); // romantic reactions are not in the L1 palette
   });
 
   it("level-up to L6 grants petals server-side, once a day, never in a safety band", () => {

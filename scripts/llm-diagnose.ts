@@ -3,11 +3,11 @@
  * measures one compiled L3 prompt, and walks the request shape one change at
  * a time, printing each provider error body. Never prints the key.
  *
- *   npm run llm:diagnose -- --model=openai/gpt-oss-120b
+ *   npm run llm:diagnose -- --model=deepseek-v4-pro
  */
 import { compile } from "@/lib/llm/compile";
 import { LIVE_OUT_SCHEMA } from "@/lib/llm/contract";
-import { buildBody, listModels, llmEnv, XaiError, type RequestShape } from "@/lib/llm/xai";
+import { buildBody, listModels, llmEnv, LlmError, type RequestShape } from "@/lib/llm/llm";
 import * as heart from "@/lib/heart";
 import { FIXED_CREATED, FIXED_NOW, loadEnvLocal } from "./_env";
 
@@ -68,7 +68,7 @@ async function main() {
     console.log(`\nAvailable models (${ids.length}):`);
     for (const id of ids) console.log(`  ${id}`);
   } catch (e) {
-    console.log(`models: ${(e as XaiError).message}`);
+    console.log(`models: ${(e as LlmError).message}`);
   }
 
   const c = l3Prompt();
@@ -81,13 +81,10 @@ async function main() {
   const gap = Number(arg("gap") ?? 5) * 1000;
   const steps: [string, Partial<RequestShape>, boolean][] = [
     ["(a) bare request, no token cap, no response_format", { maxTokensParam: "omit", responseFormat: "none" }, false],
-    ["(b1) + max_tokens", { maxTokensParam: "max_tokens", responseFormat: "none" }, false],
-    ["(b2) + max_completion_tokens", { maxTokensParam: "max_completion_tokens", responseFormat: "none" }, false],
-    ["(c) + json_schema strict:true", { maxTokensParam: "max_completion_tokens", responseFormat: "json_schema", strict: true }, true],
-    ["(c2) same, cap raised to 2000 (reasoning tokens count toward it)", { maxTokensParam: "max_completion_tokens", responseFormat: "json_schema", strict: true, maxTokens: 2000 }, true],
-    ["(c3) same, cap 2000 + reasoning_effort low", { maxTokensParam: "max_completion_tokens", responseFormat: "json_schema", strict: true, maxTokens: 2000, reasoningEffort: "low" }, true],
-    ["(d) json_schema strict:false", { maxTokensParam: "max_completion_tokens", responseFormat: "json_schema", strict: false, maxTokens: 2000, reasoningEffort: "low" }, true],
-    ["(e) json_object, schema described in the prompt", { maxTokensParam: "max_completion_tokens", responseFormat: "json_object", maxTokens: 2000, reasoningEffort: "low" }, true],
+    ["(b) + max_tokens", { maxTokensParam: "max_tokens", responseFormat: "none" }, false],
+    ["(c) + json_object, schema described in the prompt, thinking disabled", { maxTokensParam: "max_tokens", responseFormat: "json_object", thinking: "disabled" }, true],
+    ["(d) same, thinking enabled, cap raised to 2000 (reasoning tokens count toward it)", { maxTokensParam: "max_tokens", responseFormat: "json_object", thinking: "enabled", maxTokens: 2000 }, true],
+    ["(e) json_schema strict (not supported by DeepSeek; expect a 400)", { maxTokensParam: "max_tokens", responseFormat: "json_schema", thinking: "disabled" }, true],
   ];
   for (const [label, shape, withSchema] of steps) {
     let r = await attempt(label, model, shape, withSchema);

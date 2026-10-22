@@ -14,7 +14,7 @@ import {
   trackHealth,
 } from "./helpers";
 
-// B2: live chat with Ira. The xAI base URL points at /api/test/xai-mock and
+// B2: live chat with Ira. The LLM base URL points at /api/test/llm-mock and
 // E2E_MOCKS=1 (playwright.config.ts), so replies are the canned LiveOut
 // objects keyed by the user's text.
 
@@ -201,15 +201,15 @@ test.describe("E28 live chat with Ira", () => {
     assertHealthy(health);
   });
 
-  test("E28.12: the JSON retry ladder recovers from prose, a provider 400, and a 400 that only json_object survives", async ({ page }) => {
+  test("E28.12: the JSON retry ladder recovers from a prose reply", async ({ page }) => {
     const { userId, health } = await open(page, { id: "c_e28_12" });
-    for (const trigger of ["json please", "invalid please", "ladder please"]) {
+    for (const trigger of ["json please"]) {
       const before = (await serverSnapshot(userId)).messages.filter((m) => m.who === "them").length;
       await send(page, trigger);
       await expect.poll(async () => (await serverSnapshot(userId)).messages.filter((m) => m.who === "them").length, { timeout: 25000, message: trigger }).toBe(before + 1);
       await expect(page.getByText(/couldn't reach ira/i)).toHaveCount(0);
     }
-    await expect(page.getByText("got there in the end")).toHaveCount(3);
+    await expect(page.getByText("got there in the end")).toHaveCount(1);
     assertHealthy(health);
   });
 

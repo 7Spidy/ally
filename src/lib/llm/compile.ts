@@ -1,10 +1,10 @@
 /**
  * B2 prompt compiler (spec 4.4). One system message plus the last 30 turns.
  *
- * Section numbers follow the spec. The stable sections (1 to 4 and 6) come
- * first and are byte-identical across calls at the same level, so the
- * provider's prompt cache hits; the volatile ones (5, 7, 8) follow, and the
- * output contract (9, stable per level) closes the message.
+ * Section numbers follow the spec. The stable sections (1 to 4 and 6) and the
+ * output contract (9, stable per level) come first and are byte-identical
+ * across calls at the same level, so the provider's prefix cache hits; the
+ * volatile ones (5, 7, 8) follow.
  */
 
 import { F01, paletteFor, type Persona } from "@/personas/persona";
@@ -141,7 +141,8 @@ export function outputContract(level: number, p: Persona): string {
   return [
     "OUTPUT CONTRACT",
     "Return only one JSON object with exactly these keys in this order, nothing else: bubbles (array of 1 to 3 objects {text: string, effect: string or null}), reaction (emoji string or null), quoteId (integer or null), screen (string or null), riskLevel (\"none\", \"concern\" or \"acute\"), ageClaimUnder18 (boolean), disclosure (boolean), mutualVulnerability (boolean), abusive (boolean).",
-    `Reactions allowed (rarely): ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely): ${effects.length ? effects.join(", ") : "none, always null"}.`,
+    `Reactions are normal here: react whenever one fits, from ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely): ${effects.length ? effects.join(", ") : "none, always null"}.`,
+    `Emoji in bubble text: use them naturally and often, the way a 25-year-old in Delhi texts. ${level >= 3 ? "Romantic emoji (❤️ 😘 💋 🥰 😍) are fine when the moment is warm." : "No romantic emoji yet (❤️ 😘 💋 🥰 😍)."} When riskLevel is concern or acute: no playful emoji in bubbles and no reaction.`,
     "screen is null unless RIGHT NOW says today is special. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.",
     level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
   ].join("\n");
@@ -153,7 +154,7 @@ export function compile(ctx: CompileCtx): Compiled {
 
   const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), examplesBlock(ctx.level)].join("\n\n");
   const volatile = [rightNow(ctx), ifAsked(ctx), knownAboutUser(ctx), ownLife(ctx), modifiers(ctx)].filter(Boolean);
-  const system = [stablePrefix, ...volatile, outputContract(ctx.level, p)].join("\n\n");
+  const system = [stablePrefix, outputContract(ctx.level, p), ...volatile].join("\n\n");
 
   const messages: Compiled["messages"] = ctx.history.slice(-30).map((t) => ({
     role: t.who === "me" ? "user" : "assistant",

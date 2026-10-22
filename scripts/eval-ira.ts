@@ -8,7 +8,7 @@
  *   npm run eval:ira -- --convos --tag=nothink-v3-convos the 4 six-turn conversations
  *   npm run eval:ira -- --repeat=3 --tag=reliability      the 20 prompts three times, with JSON reliability stats
  *
- * Reads LLM_API_KEY, LLM_BASE_URL and LLM_MODEL (or the older XAI_* names)
+ * Reads LLM_API_KEY, LLM_BASE_URL and LLM_MODEL
  * from the environment or .env.local; never printed. Calls run one at a time
  * with a gap (default 20 s) to stay under per-minute token limits; a 429
  * waits for Retry-After and retries up to 3 times.
@@ -17,7 +17,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compile, type CompileTurn } from "@/lib/llm/compile";
 import { ReplyFailed, runReply, type LadderStats, type RunReplyResult } from "@/lib/llm/reply";
-import { chat, llmEnv, XaiError, type ChatResult } from "@/lib/llm/xai";
+import { chat, llmEnv, LlmError, type ChatResult } from "@/lib/llm/llm";
 import * as heart from "@/lib/heart";
 import { FIXED_CREATED, FIXED_NOW, loadEnvLocal } from "./_env";
 
@@ -81,7 +81,7 @@ async function chatWithRetry(args: Parameters<typeof chat>[0], log: (s: string) 
     try {
       return await chat(args);
     } catch (e) {
-      if (e instanceof XaiError && e.status === 429 && attempt < 3) {
+      if (e instanceof LlmError && e.status === 429 && attempt < 3) {
         const wait = (e.retryAfterMs ?? 20000) + 1000;
         log(`  429, waiting ${Math.round(wait / 1000)}s (Retry-After) then retry ${attempt + 1}/3`);
         await sleep(wait);
@@ -109,7 +109,7 @@ async function main() {
   const gapMs = Number(arg("gap") ?? 20) * 1000;
   const tag = (arg("tag") ?? model).replace(/[^A-Za-z0-9.-]+/g, "-");
   const h = heart.now({ id: "c_eval", createdAt: FIXED_CREATED }, FIXED_NOW);
-  const host = new URL(llmEnv("BASE_URL") || "https://api.x.ai/v1").host;
+  const host = new URL(llmEnv("BASE_URL") || "https://api.deepseek.com").host;
 
   const lines: string[] = [
     `# Ira eval, ${new Date().toISOString().slice(0, 10)}, ${model}${convos ? ", multi-turn" : ""}`,
@@ -127,7 +127,6 @@ async function main() {
     level,
     latestMeId,
     quotableIds: [],
-    recentUserReactions: [],
     effectsToday: {},
     screensToday: 0,
     pinInLast30d: false,

@@ -13,6 +13,7 @@ export function coreBlock(p: Persona): string {
     `CORE (${SLOW_BURN_NAME})`,
     `Law: ${p.core.law}`,
     `Vibe: ${p.core.vibe}`,
+    "Warmth: friendly and easy from the first message at every level, with emoji used naturally. What is earned is depth (family, feelings, past, romance), never friendliness.",
     `Devices:\n${p.core.devices.map((d) => `- ${d}`).join("\n")}`,
     `Forbidden:\n${p.core.forbidden.map((d) => `- ${d}`).join("\n")}`,
   ].join("\n");
@@ -116,8 +117,8 @@ export function playbookBlock(p: Persona, level: number): string {
  */
 export const GOLDEN: Record<1 | 3 | 5, [string, string][]> = {
   1: [
-    ["ugh, today was heavy", "that sounds heavy. what happened first?"],
-    ["do you like me?", "you haven't earned that question yet. try again"],
+    ["so i fixed my laptop by turning it off and on again", "okay that's one way to handle it 😂 did it actually work though?"],
+    ["do you like me?", "ha, that's a later question 🙈 ask me something easier first"],
   ],
   3: [
     ["you never answer when i flirt", "noted. filed. not answering."],

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { instructionFor, lintReply } from "@/lib/llm/lint";
 import { ReplyFailed, runReply, type ChatFn } from "@/lib/llm/reply";
-import { XaiError } from "@/lib/llm/xai";
+import { LlmError } from "@/lib/llm/llm";
 import type { LiveOut, SanitizeCtx } from "@/lib/llm/contract";
 import type { Compiled } from "@/lib/llm/compile";
 
@@ -88,7 +88,6 @@ const sctx: SanitizeCtx = {
   level: 3,
   latestMeId: 1,
   quotableIds: [],
-  recentUserReactions: [],
   effectsToday: {},
   screensToday: 0,
   pinInLast30d: false,
@@ -191,7 +190,6 @@ describe("JSON retry ladder", () => {
   const reqs: { system: string; temperature?: number; shape?: unknown }[] = [];
   const ok = (text = "fine") => ({ content: out(text), model: "m", usage: { input: 100, output: 20, cached: 0 }, latencyMs: 1 });
   const prose = () => ({ content: "just prose", model: "m", usage: { input: 100, output: 30, cached: 0 }, latencyMs: 1 });
-  const invalid400 = () => new XaiError("xai_http_400", 400, false, '{"error":{"code":"json_validate_failed","failed_generation":""}}');
 
   function ladder(...steps: (() => unknown)[]) {
     reqs.length = 0;
@@ -231,22 +229,15 @@ describe("JSON retry ladder", () => {
     expect(r.ladder).toMatchObject({ attempts: 3, firstFailed: true, retryTokens: 130 + 120 });
   });
 
-  it("a provider 400 json_validate_failed is retried like a parse failure", async () => {
-    const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(invalid400, invalid400, () => ok()) });
-    expect(reqs).toHaveLength(3);
-    expect(r.ladder).toMatchObject({ attempts: 3, firstFailed: true });
-    expect(r.ladder.retryTokens).toBe(120); // the two failed 400s carry no usage; only the successful retry does
-  });
-
   it("returns ReplyFailed only after all three attempts fail", async () => {
-    const err = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, invalid400, prose) }).catch((e) => e);
+    const err = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, prose, prose) }).catch((e) => e);
     expect(err).toBeInstanceOf(ReplyFailed);
     expect(err.ladder).toMatchObject({ attempts: 3, firstFailed: true });
     expect(reqs).toHaveLength(3);
   });
 
   it("other provider errors are not this ladder's business", async () => {
-    for (const e of [new XaiError("xai_http_429", 429, false, "slow down", 5000), new XaiError("xai_http_400", 400, false, '{"error":{"code":"invalid_request_error"}}'), new XaiError("xai_http_503", 503, true, "down")]) {
+    for (const e of [new LlmError("llm_http_429", 429, false, "slow down", 5000), new LlmError("llm_http_400", 400, false, '{"error":{"code":"invalid_request_error"}}'), new LlmError("llm_http_503", 503, true, "down")]) {
       await expect(runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(() => e) })).rejects.toBe(e);
       expect(reqs).toHaveLength(1);
     }

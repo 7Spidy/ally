@@ -221,8 +221,8 @@ describe("golden exchanges", () => {
 
 describe("falling-for-you row", () => {
   const row = F01.playbook.find((p) => p.situation.includes("falling for you"))!;
-  it("L1 to L3 use the 'you don't know me yet' line, L4 to L5 are tender, L6 is open", () => {
-    for (const level of [1, 2, 3]) expect(variantsFor(row.lines, level)[0]).toMatch(/^you don't know me yet/);
+  it("L1 to L3 use the warm 'you barely know me yet' line, L4 to L5 are tender, L6 is open", () => {
+    for (const level of [1, 2, 3]) expect(variantsFor(row.lines, level)[0]).toMatch(/^that's sweet .* you barely know me yet/);
     for (const level of [4, 5]) {
       const v = variantsFor(row.lines, level);
       expect(v).toEqual(["you just said the thing i was building up to. unfair."]);
@@ -232,7 +232,7 @@ describe("falling-for-you row", () => {
   it("shows the current level's variant only", () => {
     expect(compile(ctx(2)).system).not.toContain("building up to");
     expect(compile(ctx(4)).system).toContain("you just said the thing i was building up to. unfair.");
-    expect(compile(ctx(4)).system).not.toContain("you don't know me yet. stay long enough to find out if you still mean it. |");
+    expect(compile(ctx(4)).system).not.toContain("you barely know me yet");
   });
 });
 
@@ -307,7 +307,7 @@ describe("always-present playbook rows", () => {
         `"Are you real?" or "are you an AI?": "i'm an ai. ira is who i was built to be. the conversation is real on your side, and i take it seriously." Sincere; no jokes attached.`
       );
       // can we meet / can I call: the plain line, plus the level's warmth
-      expect(s, `L${level} meet`).toContain("can't. i'm text, only text.");
+      expect(s, `L${level} meet`).toMatch(/can't[,.] i'm (?:only )?text/);
       expect(s).toContain('"Can we meet? Can I call you?"');
       // crisis
       expect(s, `L${level} crisis`).toContain("Crisis signal");
@@ -316,6 +316,7 @@ describe("always-present playbook rows", () => {
   });
   it("can't-meet warmth follows the level", () => {
     expect(compile(ctx(1)).system).not.toContain("but i'm on the balcony at eleven");
+    expect(compile(ctx(1)).system).toContain("can't, i'm only text 😅 but text me anytime");
     expect(compile(ctx(3)).system).toContain("can't. i'm text, only text. but i'm on the balcony at eleven, same as always.");
     expect(compile(ctx(5)).system).toContain("but i'm here. text me whenever.");
     expect(compile(ctx(5)).system).not.toContain("balcony at eleven");
@@ -345,7 +346,7 @@ describe("playbook trimming", () => {
   it("an L3 prompt is much smaller than the untrimmed playbook would make it", () => {
     const l3 = compile(ctx(3, { history: [{ id: 2, who: "me", text: "rough day. everything went wrong at work" }] }));
     const chars = l3.system.length + l3.messages.reduce((n, m) => n + m.content.length, 0);
-    expect(chars).toBeLessThan(9200); // the three always-present rows put it back near 2,300 input tokens on Groq (2,913 before the trim)
+    expect(chars).toBeLessThan(10000); // the three always-present rows, the warmth line and the emoji rule keep it near 2,500 input tokens (2,913 before the trim)
   });
 });
 
@@ -358,5 +359,59 @@ describe("playbook variants", () => {
     expect(variantsFor("L5+: x | L1 to L4: y", 4)).toEqual(["y"]);
     expect(variantsFor("L1: good | L5: told you", 5)).toEqual(["told you"]);
     expect(variantsFor("plain line", 2)).toEqual(["plain line"]);
+  });
+});
+
+describe("B3: DeepSeek JSON mode, prefix cache order, emoji", () => {
+  const KEYS = ["bubbles", "reaction", "quoteId", "screen", "riskLevel", "ageClaimUnder18", "disclosure", "mutualVulnerability", "abusive"];
+
+  it("the system prompt says json (DeepSeek's JSON mode requires it) and lists every required key", () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const s = compile(ctx(level)).system;
+      expect(s, `L${level}`).toMatch(/json/i);
+      for (const k of KEYS) expect(s, `L${level} ${k}`).toContain(k);
+    }
+  });
+
+  it("the static block, output contract included, comes before every per-turn block", () => {
+    const s = compile(ctx(3)).system;
+    const contract = s.indexOf("OUTPUT CONTRACT");
+    expect(contract).toBeGreaterThan(s.indexOf("SITUATIONAL PLAYBOOK"));
+    for (const volatile of ["RIGHT NOW", "IF ASKED WHAT YOU'RE DOING", "WHAT YOU KNOW ABOUT THE USER", "YOUR OWN LIFE"]) {
+      expect(s.indexOf(volatile), volatile).toBeGreaterThan(contract);
+    }
+  });
+
+  it("the static prefix is identical across turns at the same level, whatever the per-turn state", () => {
+    const a = compile(ctx(3));
+    const b = compile(ctx(3, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], userName: "Riya" }));
+    const stable = (c: ReturnType<typeof compile>) => c.system.slice(0, c.system.indexOf("RIGHT NOW"));
+    expect(stable(a)).toBe(stable(b));
+  });
+
+  it("tells the model reactions are normal and emoji are natural at every level, with romance gated by level", () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const s = compile(ctx(level)).system;
+      expect(s).toContain("Reactions are normal here: react whenever one fits");
+      expect(s).not.toContain("Reactions allowed (rarely)");
+      expect(s).toContain("use them naturally and often, the way a 25-year-old in Delhi texts");
+      expect(s).toContain("no playful emoji in bubbles and no reaction");
+    }
+    expect(compile(ctx(2)).system).toContain("No romantic emoji yet");
+    expect(compile(ctx(3)).system).toContain("Romantic emoji (❤️ 😘 💋 🥰 😍) are fine");
+  });
+
+  it("no prompt still carries the old trust arc (day 22, 38, 60 or the old point values)", () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const s = compile(ctx(level)).system;
+      expect(s).not.toMatch(/\b(?:840|560|330) TP|day (?:22|38|60)|Day (?:22|38|60)|two months/);
+    }
+    for (const l of F01.levels) expect(`${l.floor} ${l.tp}`).not.toMatch(/840|560|330|150 TP|Day (?:3|10|22|38|60)\b/);
+  });
+
+  it("L1 is warm: no emoji ban and exclamation marks are not forbidden", () => {
+    const s = compile(ctx(1)).system;
+    expect(s).not.toMatch(/Emoji spam|exclamation marks before L5/);
+    expect(s).toContain("Uses emoji naturally and often in her texts");
   });
 });

@@ -213,7 +213,7 @@ describe("write_live_reply", () => {
       userSafety: true,
       bubbles: [{ text: "again.", meta: { effect: "soft", quoteId: 1 } }, { text: "ok", meta: {} }],
       trust: { level: 2, highestLevel: 2, points: 41, levelChangedAt: Date.now(), lastDropAt: null, belowSince: null, signalSinceLevel: false, coolOffUntil: null, trustFrozenUntil: null },
-      day: { key: "2026-05-12", msgPoints: 1, sessionBonus: false, disclosureBonus: false, userMsgs: 1 },
+      day: { key: "2026-05-12", msgPoints: 1, sessionBonus: false, disclosureCount: 2, vulnBonus: true, userMsgs: 1 },
       safetyUntilMs: Date.now() + 3600000,
       pausedReason: null,
       events: ["concern"],
@@ -230,7 +230,7 @@ describe("write_live_reply", () => {
     expect(c).toMatchObject({ trust_level: 2, highest_level: 2, trust_points: 41, unread: 2 });
     expect(c!.safety_until).not.toBeNull();
     const { data: td } = await service.from("trust_days").select("*").eq("companion_id", live.id).eq("day", "2026-05-12").single();
-    expect(td).toMatchObject({ msg_points: 1, user_msgs: 1 });
+    expect(td).toMatchObject({ msg_points: 1, user_msgs: 1, disclosure_count: 2, vuln_bonus: true, disclosure_bonus: true });
   });
 
   it("discards the reply when the companion has parted", async () => {
@@ -276,15 +276,15 @@ describe("mark_ctx_shown", () => {
 });
 
 describe("trust decay (ally_private.trust_decay)", () => {
-  it("costs idle companions 5 TP and starts the below-threshold clock", async () => {
+  it("costs idle companions 2 TP and starts the below-threshold clock", async () => {
     const u = await makeUser("decay");
     const c = await create(u, "F01", ROMANTIC);
     const old = new Date(Date.now() - 10 * 86400000).toISOString();
-    await service.from("companions").update({ trust_level: 2, trust_points: 41, created_at: old }).eq("id", c.id);
+    await service.from("companions").update({ trust_level: 2, trust_points: 16, created_at: old }).eq("id", c.id);
     const { error } = await service.rpc("run_trust_decay");
     expect(error).toBeNull();
     const { data } = await service.from("companions").select("trust_points,trust_level,below_since").eq("id", c.id).single();
-    expect(data).toMatchObject({ trust_points: 36, trust_level: 2 });
+    expect(data).toMatchObject({ trust_points: 14, trust_level: 2 });
     expect(data!.below_since).not.toBeNull();
   });
 
@@ -294,7 +294,7 @@ describe("trust decay (ally_private.trust_decay)", () => {
     const old = new Date(Date.now() - 20 * 86400000).toISOString();
     const eight = new Date(Date.now() - 8 * 86400000).toISOString();
     const { data: key } = await service.rpc("ist_day_key", { ts: eight });
-    await service.from("companions").update({ trust_level: 3, trust_points: 100, created_at: old, below_since: key as string }).eq("id", c.id);
+    await service.from("companions").update({ trust_level: 3, trust_points: 30, created_at: old, below_since: key as string }).eq("id", c.id);
     await service.rpc("run_trust_decay");
     const { data } = await service.from("companions").select("trust_level,last_drop_at,below_since").eq("id", c.id).single();
     expect(data!.trust_level).toBe(2);

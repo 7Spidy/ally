@@ -36,6 +36,8 @@ import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
 import { Composer, type ComposerVariant } from "@/components/Composer";
 import { ContextCard } from "@/components/chat/ContextCard";
+import { LevelBadge } from "@/components/chat/LevelBadge";
+import { useLevelBadge } from "@/components/chat/useLevelBadge";
 import { ResourceCard } from "@/components/chat/ResourceCard";
 import { AgeCheckSheet } from "@/components/chat/AgeCheckSheet";
 import { ConsentUpdateSheet } from "@/components/chat/ConsentUpdateSheet";
@@ -83,6 +85,8 @@ function ChatContent() {
   const [screenFx, setScreenFx] = useState<ScreenKind | null>(null);
   const [ageError, setAgeError] = useState(false);
   const accountNudgeRef = useRef<number>(0); // last exchange threshold nudged at
+  // The level badge: one second on every open of a live chat (and on return after 60 s away).
+  const levelBadge = useLevelBadge(live && companion ? companion.id : null);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -362,7 +366,9 @@ function ChatContent() {
         onOverflow={() => setShowOverflow((v) => !v)}
         presenceOverride={presenceOverride}
       />
-      {ctxCard && <ContextCard title={ctxCard.title} line={ctxCard.line} onGone={() => setCtxCard(null)} />}
+      {levelBadge && <LevelBadge name={F01.levels[Math.min(5, Math.max(0, (companion.trustLevel ?? 1) - 1))].name} level={companion.trustLevel ?? 1} />}
+      {/* The badge goes first; a due context card waits until it has gone. */}
+      {ctxCard && !levelBadge && <ContextCard title={ctxCard.title} line={ctxCard.line} onGone={() => setCtxCard(null)} />}
       {showOverflow && (
         <div className={styles.overflowMenu} role="menu">
           <button

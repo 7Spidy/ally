@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { getAdminClient } from "@/lib/supabase/admin";
-import { chat } from "@/lib/llm/xai";
+import { chat } from "@/lib/llm/llm";
 import { runDaily, runWeekly } from "@/lib/vault";
 
 export const dynamic = "force-dynamic";

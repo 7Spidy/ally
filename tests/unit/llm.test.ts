@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildBody, chat, listModels, requestShape, XaiError } from "@/lib/llm/xai";
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, buildBody, chat, listModels, requestShape, LlmError } from "@/lib/llm/llm";
 
-const ENV_KEYS = ["XAI_API_KEY", "XAI_BASE_URL", "XAI_MODEL", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_RESPONSE_FORMAT", "LLM_MAX_TOKENS_PARAM", "LLM_MAX_TOKENS", "LLM_REASONING_EFFORT", "LLM_STRICT"];
+const ENV_KEYS = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_RESPONSE_FORMAT", "LLM_MAX_TOKENS_PARAM", "LLM_MAX_TOKENS", "LLM_THINKING"];
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -29,35 +29,39 @@ function fakeFetch(res: { status: number; body: unknown; headers?: Record<string
   }) as unknown as typeof fetch;
 }
 
-describe("request shape (per provider, from env)", () => {
-  it("defaults to xAI: json_schema strict, max_tokens", () => {
-    const b = buildBody(args, "m") as { max_tokens: number; response_format: { type: string; json_schema: { strict: boolean } } };
+describe("request shape (DeepSeek V4 Pro defaults, env overrides)", () => {
+  it("defaults to json_object, max_tokens and thinking disabled", () => {
+    const b = buildBody(args, "m") as { max_tokens: number; thinking: { type: string }; response_format: { type: string } };
     expect(b.max_tokens).toBe(500);
+    expect(b.response_format).toEqual({ type: "json_object" });
+    expect(b.thinking).toEqual({ type: "disabled" });
+    expect(requestShape()).toMatchObject({ responseFormat: "json_object", maxTokensParam: "max_tokens", thinking: "disabled" });
+  });
+
+  it("always sends thinking, and LLM_THINKING=enabled flips it", () => {
+    expect(buildBody({ ...args, schema: undefined }, "m").thinking).toEqual({ type: "disabled" });
+    process.env.LLM_THINKING = "enabled";
+    expect(buildBody(args, "m").thinking).toEqual({ type: "enabled" });
+    process.env.LLM_THINKING = "bogus";
+    expect(buildBody(args, "m").thinking).toEqual({ type: "disabled" });
+  });
+
+  it("json_schema is reachable only through LLM_RESPONSE_FORMAT=json_schema", () => {
+    process.env.LLM_RESPONSE_FORMAT = "json_schema";
+    const b = buildBody(args, "m") as { response_format: { type: string; json_schema: { strict: boolean } } };
     expect(b.response_format.type).toBe("json_schema");
     expect(b.response_format.json_schema.strict).toBe(true);
-    expect(requestShape()).toMatchObject({ responseFormat: "json_schema", maxTokensParam: "max_tokens" });
   });
 
-  it("LLM_RESPONSE_FORMAT=json_object sends json_object and no schema", () => {
-    process.env.LLM_RESPONSE_FORMAT = "json_object";
-    const b = buildBody(args, "m") as { response_format: Record<string, unknown> };
-    expect(b.response_format).toEqual({ type: "json_object" });
-  });
-
-  it("LLM_MAX_TOKENS_PARAM, LLM_MAX_TOKENS and LLM_REASONING_EFFORT reach the body", () => {
+  it("LLM_MAX_TOKENS_PARAM and LLM_MAX_TOKENS reach the body, and reasoning_effort is never sent", () => {
     process.env.LLM_MAX_TOKENS_PARAM = "max_completion_tokens";
     process.env.LLM_MAX_TOKENS = "2000";
     process.env.LLM_REASONING_EFFORT = "low";
     const b = buildBody({ ...args, maxTokens: 500 }, "m");
     expect(b.max_completion_tokens).toBe(2000);
     expect(b).not.toHaveProperty("max_tokens");
-    expect(b.reasoning_effort).toBe("low");
-  });
-
-  it("LLM_STRICT=false sends strict:false", () => {
-    process.env.LLM_STRICT = "false";
-    const b = buildBody(args, "m") as { response_format: { json_schema: { strict: boolean } } };
-    expect(b.response_format.json_schema.strict).toBe(false);
+    expect(b).not.toHaveProperty("reasoning_effort");
+    delete process.env.LLM_REASONING_EFFORT;
   });
 
   it("no schema means no response_format", () => {
@@ -67,13 +71,13 @@ describe("request shape (per provider, from env)", () => {
 
 describe("errors carry the provider's body", () => {
   it("puts the response body in the thrown error and never the key", async () => {
-    const body = { error: { message: "Failed to validate JSON.", code: "json_validate_failed" } };
+    const body = { error: { message: "Invalid request body.", code: "invalid_request_error" } };
     const err = await chat({ ...args, fetchImpl: fakeFetch({ status: 400, body }) }).catch((e) => e);
-    expect(err).toBeInstanceOf(XaiError);
+    expect(err).toBeInstanceOf(LlmError);
     expect(err.status).toBe(400);
-    expect(err.message).toContain("xai_http_400");
-    expect(err.message).toContain("json_validate_failed");
-    expect(err.body).toContain("Failed to validate JSON");
+    expect(err.message).toContain("llm_http_400");
+    expect(err.message).toContain("invalid_request_error");
+    expect(err.body).toContain("Invalid request body");
     expect(JSON.stringify(err.message)).not.toContain("test-key-not-real");
   });
 
@@ -99,43 +103,51 @@ describe("errors carry the provider's body", () => {
   });
 });
 
-describe("env names", () => {
-  it("reads LLM_*, and falls back to the legacy XAI_* names", async () => {
+describe("env names and defaults", () => {
+  it("defaults to DeepSeek V4 Pro, and reads only LLM_* (XAI_* is ignored)", async () => {
     const seen: { url?: string; body?: Record<string, unknown> }[] = [];
     const ok = { status: 200, body: { choices: [{ message: { content: "{}" } }] } };
-    delete process.env.LLM_API_KEY;
-    process.env.XAI_API_KEY = "legacy-key";
+    expect(DEFAULT_BASE_URL).toBe("https://api.deepseek.com");
+    expect(DEFAULT_MODEL).toBe("deepseek-v4-pro");
     process.env.XAI_BASE_URL = "https://legacy.example/v1";
     process.env.XAI_MODEL = "legacy-model";
     await chat({ ...args, fetchImpl: fakeFetch(ok, seen) });
-    expect(seen[0].url).toBe("https://legacy.example/v1/chat/completions");
-    expect(seen[0].body?.model).toBe("legacy-model");
-    process.env.LLM_API_KEY = "new-key";
-    process.env.LLM_BASE_URL = "https://api.groq.com/openai/v1";
-    process.env.LLM_MODEL = "qwen/qwen3.8-27b";
+    delete process.env.XAI_BASE_URL;
+    delete process.env.XAI_MODEL;
+    expect(seen[0].url).toBe("https://api.deepseek.com/chat/completions");
+    expect(seen[0].body?.model).toBe("deepseek-v4-pro");
+    process.env.LLM_BASE_URL = "https://llm.example/v1";
+    process.env.LLM_MODEL = "other-model";
     await chat({ ...args, fetchImpl: fakeFetch(ok, seen) });
-    expect(seen[1].url).toBe("https://api.groq.com/openai/v1/chat/completions");
-    expect(seen[1].body?.model).toBe("qwen/qwen3.8-27b");
+    expect(seen[1].url).toBe("https://llm.example/v1/chat/completions");
+    expect(seen[1].body?.model).toBe("other-model");
   });
 
-  it("defaults the temperature to 0.8 and passes reasoning_effort none", () => {
-    process.env.LLM_REASONING_EFFORT = "none";
-    const b = buildBody(args, "m");
-    expect(b.temperature).toBe(0.8);
-    expect(b.reasoning_effort).toBe("none");
+  it("defaults the temperature to 0.8", () => {
+    expect(buildBody(args, "m").temperature).toBe(0.8);
   });
 });
 
 describe("success and models", () => {
   it("returns content and usage, and posts to {base}/chat/completions", async () => {
-    process.env.LLM_BASE_URL = "https://api.groq.com/openai/v1/";
+    process.env.LLM_BASE_URL = "https://api.deepseek.com/";
     const seen: { url?: string; body?: Record<string, unknown> }[] = [];
     const res = await chat({
       ...args,
       fetchImpl: fakeFetch({ status: 200, body: { model: "m", choices: [{ message: { content: "{}" } }], usage: { prompt_tokens: 7, completion_tokens: 3, prompt_tokens_details: { cached_tokens: 2 } } } }, seen),
     });
-    expect(seen[0].url).toBe("https://api.groq.com/openai/v1/chat/completions");
+    expect(seen[0].url).toBe("https://api.deepseek.com/chat/completions");
     expect(res).toMatchObject({ content: "{}", usage: { input: 7, output: 3, cached: 2 } });
+  });
+
+  it("reads DeepSeek's prompt_cache_hit_tokens as the cached count", async () => {
+    const res = await chat({
+      ...args,
+      fetchImpl: fakeFetch({ status: 200, body: { choices: [{ message: { content: "{}" } }], usage: { prompt_tokens: 100, completion_tokens: 5, prompt_cache_hit_tokens: 64, prompt_cache_miss_tokens: 36 } } }),
+    });
+    expect(res.usage).toEqual({ input: 100, output: 5, cached: 64 });
+    const none = await chat({ ...args, fetchImpl: fakeFetch({ status: 200, body: { choices: [{ message: { content: "{}" } }], usage: { prompt_tokens: 1, completion_tokens: 1 } } }) });
+    expect(none.usage.cached).toBe(0);
   });
 
   it("fails clearly without a key", async () => {

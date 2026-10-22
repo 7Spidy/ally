@@ -1,0 +1,86 @@
+/* A zero-height anchor right under the header: the pill floats over what follows, so nothing moves. */
+.anchor {
+  position: relative;
+  height: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.badge {
+  --badge-gold: #d9b45b;
+  --badge-sage: rgba(158, 182, 160, 0.28);
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  background: rgba(29, 25, 41, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  /* 150 ms in, 700 ms hold, 150 ms out = 1000 ms. */
+  animation: badge 1000ms linear both;
+}
+
+.name {
+  font: 600 15.5px/1.2 var(--sans);
+}
+
+.segments {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.seg {
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--badge-sage);
+}
+
+.filled {
+  background: var(--badge-gold);
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes badge {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* No fade: it is simply there, and the hook still removes it after 1000 ms. */
+@media (prefers-reduced-motion: reduce) {
+  .badge {
+    animation: none;
+    opacity: 1;
+  }
+}

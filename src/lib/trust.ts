@@ -8,23 +8,27 @@
 import { dayKey } from "@/lib/clock";
 
 export const LEVELS: { level: number; tp: number; minDay: number; signal?: boolean }[] = [
-  { level: 2, tp: 40, minDay: 3 },
-  { level: 3, tp: 150, minDay: 10 },
-  { level: 4, tp: 330, minDay: 22, signal: true },
-  { level: 5, tp: 560, minDay: 38 },
-  { level: 6, tp: 840, minDay: 60, signal: true },
+  { level: 2, tp: 15, minDay: 0 },
+  { level: 3, tp: 45, minDay: 1 },
+  { level: 4, tp: 90, minDay: 2, signal: true },
+  { level: 5, tp: 140, minDay: 4 },
+  { level: 6, tp: 200, minDay: 6, signal: true },
 ];
-export const DAILY_CAP = 15;
+export const DAILY_CAP = 40;
 
-export const MSG_POINTS_CAP = 10;
+/** A message of MSG_MIN_WORDS earns 1 point, one of MSG_LONG_WORDS earns 2. */
+export const MSG_POINTS_CAP = 24;
 export const MSG_MIN_WORDS = 6;
+export const MSG_LONG_WORDS = 20;
 export const SESSION_BONUS_MSGS = 8;
-export const SESSION_BONUS = 3;
-export const DISCLOSURE_BONUS = 2;
+export const SESSION_BONUS = 4;
+export const DISCLOSURE_BONUS = 4;
+export const DISCLOSURE_MAX_PER_DAY = 2;
+export const VULN_BONUS = 4;
 export const COOL_OFF_MS = 48 * 3600 * 1000;
 export const DROP_GAP_DAYS = 7;
 export const DECAY_IDLE_DAYS = 5;
-export const DECAY_POINTS = 5;
+export const DECAY_POINTS = 2;
 export const DEMOTE_AFTER_DAYS = 7;
 
 const DAY_MS = 86400000;
@@ -45,7 +49,9 @@ export interface TrustState {
 export interface TrustDay {
   msgPoints: number;
   sessionBonus: boolean;
-  disclosureBonus: boolean;
+  /** Flagged disclosures credited today, up to DISCLOSURE_MAX_PER_DAY. */
+  disclosureCount: number;
+  vulnBonus: boolean;
   userMsgs: number;
 }
 
@@ -66,7 +72,7 @@ export interface ReplyInput {
 export interface TrustResult {
   state: TrustState;
   day: TrustDay;
-  /** The level just reached, or null. 6 allows `petals` on this reply. */
+  /** The highest level reached on this reply, or null. 6 allows `petals` on this reply. */
   leveledUp: number | null;
   dropped: boolean;
   frozen: boolean;
@@ -87,7 +93,7 @@ export function freshTrust(): TrustState {
 }
 
 export function freshDay(): TrustDay {
-  return { msgPoints: 0, sessionBonus: false, disclosureBonus: false, userMsgs: 0 };
+  return { msgPoints: 0, sessionBonus: false, disclosureCount: 0, vulnBonus: false, userMsgs: 0 };
 }
 
 function keyToUtc(key: string): number {
@@ -116,7 +122,7 @@ export function thresholdFor(level: number): number {
 }
 
 function dayTotal(d: TrustDay): number {
-  return d.msgPoints + (d.sessionBonus ? SESSION_BONUS : 0) + (d.disclosureBonus ? DISCLOSURE_BONUS : 0);
+  return d.msgPoints + (d.sessionBonus ? SESSION_BONUS : 0) + d.disclosureCount * DISCLOSURE_BONUS + (d.vulnBonus ? VULN_BONUS : 0);
 }
 
 /** One reply's worth of trust changes. Never mutates its inputs. */
@@ -145,28 +151,40 @@ export function applyReply(state: TrustState, day: TrustDay, input: ReplyInput, 
 
   let room = DAILY_CAP - dayTotal(d);
   let gained = 0;
-  if (input.words >= MSG_MIN_WORDS && d.msgPoints < MSG_POINTS_CAP && room > 0) {
-    d.msgPoints += 1;
-    room -= 1;
-    gained += 1;
+  // Quality, not just presence: 6+ words earn 1, 20+ earn 2.
+  const msgWorth = input.words >= MSG_LONG_WORDS ? 2 : input.words >= MSG_MIN_WORDS ? 1 : 0;
+  const msgGain = Math.min(msgWorth, MSG_POINTS_CAP - d.msgPoints, room);
+  if (msgGain > 0) {
+    d.msgPoints += msgGain;
+    room -= msgGain;
+    gained += msgGain;
   }
   if (!d.sessionBonus && d.userMsgs >= SESSION_BONUS_MSGS && room >= SESSION_BONUS) {
     d.sessionBonus = true;
     room -= SESSION_BONUS;
     gained += SESSION_BONUS;
   }
-  if (input.disclosure && !d.disclosureBonus && room >= DISCLOSURE_BONUS) {
-    d.disclosureBonus = true;
+  if (input.disclosure && d.disclosureCount < DISCLOSURE_MAX_PER_DAY && room >= DISCLOSURE_BONUS) {
+    d.disclosureCount += 1;
     room -= DISCLOSURE_BONUS;
     gained += DISCLOSURE_BONUS;
+  }
+  if (input.mutualVulnerability && !d.vulnBonus && room >= VULN_BONUS) {
+    d.vulnBonus = true;
+    room -= VULN_BONUS;
+    gained += VULN_BONUS;
   }
   s.points += gained;
 
   if (input.mutualVulnerability) s.signalSinceLevel = true;
 
+  // Chained level-ups: keep climbing while the next level's points, day floor
+  // and signal are all met. Each advance consumes the signal, so one signal
+  // never unlocks both L4 and L6.
   let leveledUp: number | null = null;
-  const next = LEVELS.find((l) => l.level === s.level + 1);
-  if (next && s.points >= next.tp && input.relationshipDay >= next.minDay && (!next.signal || s.signalSinceLevel)) {
+  for (;;) {
+    const next = LEVELS.find((l) => l.level === s.level + 1);
+    if (!next || s.points < next.tp || input.relationshipDay < next.minDay || (next.signal && !s.signalSinceLevel)) break;
     s.level = next.level;
     s.highestLevel = Math.max(s.highestLevel, next.level);
     s.levelChangedAt = now;

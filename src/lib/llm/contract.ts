@@ -159,8 +159,6 @@ export interface SanitizeCtx {
   latestMeId: number;
   /** ids of the `me` messages among the last 30. */
   quotableIds: number[];
-  /** Whether each of the user's recent messages carries a reaction, newest first, current one included. */
-  recentUserReactions: boolean[];
   /** Effects Ira has already used today (IST), from stored meta. */
   effectsToday: Partial<Record<Effect, number>>;
   /** Screen effects already run today. */
@@ -172,11 +170,32 @@ export interface SanitizeCtx {
   quiet: boolean;
 }
 
+const segmenter = typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+
+/**
+ * The longest prefix of `text` that is at most `max` UTF-16 units and ends on a
+ * grapheme boundary, so a surrogate pair or a ZWJ emoji sequence is never split.
+ */
+export function safePrefix(text: string, max: number): string {
+  if (text.length <= max) return text;
+  if (segmenter) {
+    let end = 0;
+    for (const { segment, index } of segmenter.segment(text)) {
+      if (index + segment.length > max) break;
+      end = index + segment.length;
+    }
+    return text.slice(0, end);
+  }
+  // No Segmenter: at least never end on half a surrogate pair.
+  const code = text.charCodeAt(max - 1);
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
+}
+
 /** Cuts `text` to at most `max` characters at the last sentence end, else at a word boundary. */
 export function cutAtSentence(text: string, max: number): string {
   if (text.length <= max) return text;
   // One extra character, so the lookahead can see what follows a candidate end.
-  const window = text.slice(0, max + 1);
+  const window = safePrefix(text, max + 1);
   let end = -1;
   const re = /[.!?…]+["')\]]*(?=\s|$)/g;
   for (let m = re.exec(window); m; m = re.exec(window)) {
@@ -187,9 +206,9 @@ export function cutAtSentence(text: string, max: number): string {
 
 export function cutAtWord(text: string, max: number): string {
   if (text.length <= max) return text;
-  const slice = text.slice(0, max + 1);
+  const slice = safePrefix(text, max + 1);
   const space = slice.lastIndexOf(" ");
-  const cut = space > max * 0.5 ? slice.slice(0, space) : text.slice(0, max);
+  const cut = space > max * 0.5 ? slice.slice(0, space) : safePrefix(text, max);
   return cut.trimEnd();
 }
 
@@ -239,12 +258,9 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
   // Quote: an earlier user message among the last 30, never the latest one.
   const quoteId = out.quoteId !== null && ctx.quotableIds.includes(out.quoteId) && out.quoteId !== ctx.latestMeId ? out.quoteId : null;
 
-  // Reaction: in this level's palette, and not too often.
+  // Reaction: in this level's palette. Not frequency-limited.
   let reaction = out.reaction;
-  if (reaction !== null) {
-    const window = level <= 2 ? 5 : 3;
-    if (!paletteFor(level, F01).includes(reaction) || ctx.recentUserReactions.slice(0, window).some(Boolean)) reaction = null;
-  }
+  if (reaction !== null && !paletteFor(level, F01).includes(reaction)) reaction = null;
 
   // Screen effect: level, milestone, one per day, and petals only at L6.
   let screen = out.screen;

@@ -108,7 +108,7 @@ export async function POST(request: Request) {
       db.from("memory_summaries").select("period_key,summary").eq("companion_id", c.id).eq("period", "day").neq("summary", "").order("period_key", { ascending: false }).limit(7),
       db.from("memory_summaries").select("period_key,summary").eq("companion_id", c.id).eq("period", "week").neq("summary", "").order("period_key", { ascending: false }).limit(4),
       db.from("profiles").select("display_name").eq("id", c.user_id).maybeSingle(),
-      db.from("trust_days").select("msg_points,session_bonus,disclosure_bonus,user_msgs").eq("companion_id", c.id).eq("day", today).maybeSingle(),
+      db.from("trust_days").select("msg_points,session_bonus,disclosure_count,vuln_bonus,user_msgs").eq("companion_id", c.id).eq("day", today).maybeSingle(),
       db.from("messages").select("meta").eq("companion_id", c.id).eq("who", "them").gte("created_at", todayStart),
       db.from("messages").select("id").eq("companion_id", c.id).eq("who", "them").eq("meta->>effect", "pin").gte("created_at", new Date(now - 30 * 86400000).toISOString()).limit(1),
     ]);
@@ -163,7 +163,6 @@ export async function POST(request: Request) {
         level,
         latestMeId: userMsg?.id ?? -1,
         quotableIds: userMsgIds,
-        recentUserReactions: lastMe.slice().reverse().slice(0, 5).map((m) => !!m.meta?.reaction),
         effectsToday,
         screensToday,
         pinInLast30d: (pins ?? []).length > 0,
@@ -190,7 +189,7 @@ export async function POST(request: Request) {
       trustFrozenUntil: safe.trustFrozenUntil ?? ms(c.trust_frozen_until),
     };
     const dayBefore: TrustDay = tdRow
-      ? { msgPoints: tdRow.msg_points, sessionBonus: tdRow.session_bonus, disclosureBonus: tdRow.disclosure_bonus, userMsgs: tdRow.user_msgs }
+      ? { msgPoints: tdRow.msg_points, sessionBonus: tdRow.session_bonus, disclosureCount: tdRow.disclosure_count, vulnBonus: tdRow.vuln_bonus, userMsgs: tdRow.user_msgs }
       : freshDay();
     let day: TrustDay | null = null;
     let leveledUp: number | null = null;

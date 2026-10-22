@@ -49,7 +49,7 @@ export default defineConfig({
       // B2: live chat talks to the in-app mock instead of the LLM provider.
       E2E_MOCKS: "1",
       LLM_API_KEY: "e2e-mock-key",
-      LLM_BASE_URL: "http://127.0.0.1:3100/api/test/xai-mock",
+      LLM_BASE_URL: "http://127.0.0.1:3100/api/test/llm-mock",
       NEXT_PUBLIC_TURNSTILE_BYPASS: "1",
     },
   },
