@@ -1,14 +1,25 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { ScreenKind } from "@/lib/heart";
+import { isNewScreen, makeScene } from "./screenScenes";
 import styles from "./ScreenFx.module.css";
 
-export type ScreenKind = "confetti" | "lanterns" | "rain" | "petals";
+export type { ScreenKind };
 
 const DURATION_MS = 4200;
 const WASH_MS = 400;
-const TINT: Record<ScreenKind, string> = { confetti: "#f4c95d", lanterns: "#ff9a3c", rain: "#6fa8dc", petals: "#e88ea0" };
-const COLORS: Record<ScreenKind, string[]> = {
+const TINT: Record<ScreenKind, string> = {
+  confetti: "#f4c95d",
+  lanterns: "#ff9a3c",
+  rain: "#6fa8dc",
+  petals: "#e88ea0",
+  balloons: "#e88ea0",
+  fireworks: "#ff9a3c",
+  shootingstar: "#a9c7e8",
+  sparkles: "#f4c95d",
+};
+const COLORS: Record<"confetti" | "lanterns" | "rain" | "petals", string[]> = {
   confetti: ["#f4c95d", "#e88ea0", "#6fa8dc", "#9ad1a0", "#f4efe6"],
   lanterns: ["#ffb347", "#ff9a3c", "#ffd08a"],
   rain: ["#a9c7e8", "#6fa8dc"],
@@ -48,6 +59,23 @@ export function ScreenFx({ kind, onDone }: { kind: ScreenKind; onDone: () => voi
     }
     const w = (canvas.width = window.innerWidth);
     const h = (canvas.height = window.innerHeight);
+    if (isNewScreen(kind)) {
+      const scene = makeScene(kind, w, h);
+      const t0 = performance.now();
+      let id = 0;
+      const tick = (t: number) => {
+        const p = (t - t0) / DURATION_MS;
+        ctx.clearRect(0, 0, w, h);
+        // Fade the whole scene out over the last fifth, as the older effects do.
+        const fade = p > 0.8 ? Math.max(0, (1 - p) / 0.2) : 1;
+        ctx.globalAlpha = fade;
+        scene.draw(ctx, Math.min(1, p), fade);
+        if (t - t0 < DURATION_MS) id = requestAnimationFrame(tick);
+        else doneRef.current();
+      };
+      id = requestAnimationFrame(tick);
+      return () => cancelAnimationFrame(id);
+    }
     const colors = COLORS[kind];
     const n = kind === "rain" ? 90 : 60;
     const ps: P[] = Array.from({ length: n }, (_, i) => ({

@@ -41,6 +41,8 @@ export type AllyAction =
   | { type: "SEND_MESSAGE"; companionId: string; message: Message; exchanges: number; ledger: Ledger }
   | { type: "RECEIVE_REPLY"; companionId: string; message: Message }
   | { type: "SEED_OPENER"; companionId: string; message: Message }
+  /** B3: an edited or deleted message, exactly as the server returned it. */
+  | { type: "REPLACE_MESSAGE"; companionId: string; message: Message }
   | { type: "SET_CONSENT_VERSION"; version: string }
   | { type: "SET_REACTION"; companionId: string; messageId: number; reaction: string }
   | { type: "LIVE_SYNC"; companionId: string; patch: Pick<Partial<Companion>, "trustLevel" | "levelChangedAt" | "pausedReason" | "lastCtxDay"> }
@@ -216,6 +218,12 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
         if (action.message.id !== undefined && c.messages.some((m) => m.id === action.message.id)) return c;
         return { ...c, messages: [...c.messages, action.message], unread: c.unread + 1 };
       });
+
+    case "REPLACE_MESSAGE":
+      return updateCompanion(state, action.companionId, (c) => ({
+        ...c,
+        messages: c.messages.map((m) => (m.id !== undefined && m.id === action.message.id ? { ...m, ...action.message } : m)),
+      }));
 
     case "SET_CONSENT_VERSION":
       return { ...state, user: { ...state.user, consentVersion: action.version } };

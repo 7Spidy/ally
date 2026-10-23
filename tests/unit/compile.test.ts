@@ -544,3 +544,34 @@ describe("B3: DeepSeek JSON mode, prefix cache order, emoji", () => {
     expect(s).toContain("Uses emoji naturally and often in her texts");
   });
 });
+
+describe("B3 quotes, edits and effect hints", () => {
+  const lastUser = (c: ReturnType<typeof compile>) => c.messages[c.messages.length - 1].content;
+  it("a user turn that replies to her message says so, with the quoted text", () => {
+    const c = compile(ctx(3, { history: [{ id: 4, who: "them", text: "how was the pitch?" }, { id: 5, who: "me", text: "it went okay", quote: { who: "them", text: "how was the pitch?" } }] }));
+    expect(lastUser(c)).toContain('[#5] (replying to your earlier message: "how was the pitch?") it went okay');
+  });
+  it("a reply to their own earlier message is worded differently", () => {
+    const c = compile(ctx(3, { history: [{ id: 5, who: "me", text: "also", quote: { who: "me", text: "I got the job" } }] }));
+    expect(lastUser(c)).toContain("replying to their own earlier message");
+  });
+  it("a long quote is cut, and an edited message is marked", () => {
+    const long = "word ".repeat(100).trim();
+    const c = compile(ctx(3, { history: [{ id: 5, who: "me", text: "fixed", edited: true, quote: { who: "them", text: long } }] }));
+    expect(lastUser(c)).toContain("…");
+    expect(lastUser(c)).toContain("(edited) fixed");
+    expect(lastUser(c)).not.toContain(long);
+  });
+  it("assistant turns never carry a quote or an id", () => {
+    const c = compile(ctx(3, { history: [{ id: 4, who: "them", text: "hey you", quote: { who: "me", text: "x" } }, { id: 5, who: "me", text: "hi" }] }));
+    expect(c.messages.find((m) => m.role === "assistant" && m.content.includes("hey you"))?.content).toBe("hey you");
+  });
+  it("the contract tells the model what each allowed effect is for, only for the ones its level allows", () => {
+    const l3 = compile(ctx(3)).system;
+    expect(l3).toContain("shake, the bubble trembles");
+    expect(l3).toContain("sparkle, glitter on the bubble");
+    expect(l3).not.toContain("heartbeat, the bubble pulses");
+    expect(compile(ctx(5)).system).toContain("heartbeat, the bubble pulses");
+    expect(compile(ctx(2)).system).not.toContain("What each is for");
+  });
+});

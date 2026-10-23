@@ -8,7 +8,7 @@
 import { F01, paletteFor } from "@/personas/persona";
 import type { Milestone, ScreenKind } from "@/lib/heart";
 
-export type Effect = "soft" | "loud" | "stop" | "ink" | "pin" | "screen";
+export type Effect = "soft" | "loud" | "stop" | "ink" | "pin" | "screen" | "shake" | "sparkle" | "echo" | "bloom" | "heartbeat";
 export type Band = "none" | "concern" | "acute";
 
 export interface LiveBubble {
@@ -29,8 +29,8 @@ export interface LiveOut {
   abusive: boolean;
 }
 
-export const EFFECTS: Effect[] = ["soft", "loud", "stop", "ink", "pin", "screen"];
-export const SCREENS: ScreenKind[] = ["confetti", "lanterns", "rain", "petals"];
+export const EFFECTS: Effect[] = ["soft", "loud", "stop", "ink", "pin", "screen", "shake", "sparkle", "echo", "bloom", "heartbeat"];
+export const SCREENS: ScreenKind[] = ["confetti", "lanterns", "rain", "petals", "balloons", "fireworks", "shootingstar", "sparkles"];
 export const BANDS: Band[] = ["none", "concern", "acute"];
 
 export const MAX_BUBBLES = 3;
@@ -38,10 +38,30 @@ export const MAX_BUBBLES = 3;
 export const MAX_BUBBLE_CHARS = 280;
 
 /** Level from which each bubble effect may appear. */
-export const EFFECT_MIN_LEVEL: Record<Effect, number> = { soft: 3, loud: 3, stop: 3, ink: 4, pin: 5, screen: 5 };
+export const EFFECT_MIN_LEVEL: Record<Effect, number> = { soft: 3, loud: 3, stop: 3, ink: 4, pin: 5, screen: 5, shake: 3, sparkle: 3, echo: 4, bloom: 4, heartbeat: 5 };
 /** Daily caps per IST day, counted from stored meta. Pin is 1 per 30 days instead. */
-export const EFFECT_DAILY_CAP: Partial<Record<Effect, number>> = { soft: 2, loud: 1, stop: 1, ink: 1 };
+export const EFFECT_DAILY_CAP: Partial<Record<Effect, number>> = { soft: 2, loud: 1, stop: 1, ink: 1, shake: 1, sparkle: 2, echo: 1, bloom: 1, heartbeat: 1 };
+/** Across every capped bubble effect together, so a wide palette never turns into a busy chat. */
+export const EFFECT_TOTAL_DAILY_CAP = 4;
 export const SCREEN_DAILY_CAP = 1;
+
+/** What each effect is for, told to the model next to the names it may use. */
+export const EFFECT_HINTS: Record<Effect, string> = {
+  soft: "a whisper, small and quiet: something tender or said low",
+  loud: "a shout: real excitement or mock outrage",
+  stop: "a held beat of dots before the line lands",
+  ink: "hidden text the user has to swipe to reveal: a secret or a confession",
+  pin: "pins the line to the chat: only for something to keep",
+  screen: "marks the bubble that carries a screen effect",
+  shake: "the bubble trembles: giddy laughter, nerves, exasperation",
+  sparkle: "glitter on the bubble: a compliment, good news, a small win",
+  echo: "the line fades into repeating ghosts: something that lingers or trails off",
+  bloom: "the bubble swells softly and warm: an affectionate line",
+  heartbeat: "the bubble pulses like a heartbeat: a rare tender or romantic beat",
+};
+
+/** The bubble effects that count towards EFFECT_TOTAL_DAILY_CAP. */
+const COUNTED_EFFECTS: Effect[] = ["soft", "loud", "stop", "ink", "shake", "sparkle", "echo", "bloom", "heartbeat"];
 
 /** The JSON Schema sent to the provider (strict: every key present, nullable via anyOf). */
 export const LIVE_OUT_SCHEMA = {
@@ -275,6 +295,7 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
 
   // Bubble effects: unlock level, then daily caps counted from stored meta and this reply.
   const used: Partial<Record<Effect, number>> = { ...ctx.effectsToday };
+  let usedTotal = COUNTED_EFFECTS.reduce((n, e) => n + (used[e] ?? 0), 0);
   let pinUsed = ctx.pinInLast30d;
   let screenBubbleUsed = false;
   bubbles = bubbles.map((b) => {
@@ -291,8 +312,9 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
       return b;
     }
     const cap = EFFECT_DAILY_CAP[e] ?? 0;
-    if ((used[e] ?? 0) >= cap) return { ...b, effect: null };
+    if ((used[e] ?? 0) >= cap || usedTotal >= EFFECT_TOTAL_DAILY_CAP) return { ...b, effect: null };
     used[e] = (used[e] ?? 0) + 1;
+    usedTotal += 1;
     return b;
   });
 
@@ -304,15 +326,43 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
   return cleaned;
 }
 
+/** The screen effect a level-up earns. The model cannot know a level-up is coming, so the server adds it. */
+export const LEVELUP_SCREEN: Partial<Record<number, ScreenKind>> = { 3: "sparkles", 4: "shootingstar", 5: "fireworks", 6: "petals" };
+
 /**
- * Promotion to L6 allows `petals` on that same reply. The model cannot know
- * a level-up is coming, so the server adds it after the trust engine has run.
- * Respects the one-screen-per-day cap, and never in a safety band.
+ * Celebrations the server grants after the trust engine has run: the screen a
+ * level-up earns, or the screen of a count milestone (the 100th message).
+ * Neither needs L5 the way a model-chosen screen does. One screen a day, and
+ * never in a safety band.
  */
-export function grantLevelUpPetals(out: LiveOut, args: { level: number; leveledUp: number | null; screensToday: number; band: Band }): LiveOut {
-  if (args.leveledUp !== 6 || args.level < 6 || args.band !== "none" || args.screensToday >= SCREEN_DAILY_CAP) return out;
-  const bubbles = out.bubbles.slice();
-  return { ...out, screen: "petals", bubbles };
+export function grantCelebration(
+  out: LiveOut,
+  args: { level: number; leveledUp: number | null; milestone: Milestone | null; screensToday: number; band: Band }
+): LiveOut {
+  if (args.band !== "none" || args.screensToday >= SCREEN_DAILY_CAP) return out;
+  if (args.leveledUp !== null && args.level >= args.leveledUp) {
+    const screen = LEVELUP_SCREEN[args.leveledUp];
+    if (screen) return { ...out, screen };
+  }
+  if (args.milestone?.kind === "msg100" && out.screen === null) return { ...out, screen: args.milestone.screen };
+  return out;
+}
+
+/** QA only: what to force onto a reply, whatever the level or the daily caps would allow. */
+export interface QaForce {
+  effect?: Effect | null;
+  screen?: ScreenKind | null;
+  reaction?: string | null;
+}
+
+/** Applies a QA force after sanitize(). Pure; the caller has already proved the caller is QA. */
+export function applyQaForce(out: LiveOut, force: QaForce | null | undefined): LiveOut {
+  if (!force) return out;
+  const next: LiveOut = { ...out, bubbles: out.bubbles.map((b) => ({ ...b })) };
+  if (force.effect && EFFECTS.includes(force.effect) && force.effect !== "screen" && next.bubbles[0]) next.bubbles[0].effect = force.effect;
+  if (force.screen && SCREENS.includes(force.screen)) next.screen = force.screen;
+  if (typeof force.reaction === "string" && force.reaction.trim()) next.reaction = force.reaction.trim();
+  return next;
 }
 
 /** The `meta` stored on a `them` bubble. */

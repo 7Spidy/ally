@@ -22,6 +22,8 @@ import {
   clearAgeCheck,
   insertConsent,
   markCtxShown,
+  deleteMessage,
+  editMessage,
   openChat,
   receiveReply,
   requestLiveReply,
@@ -31,7 +33,7 @@ import {
   LiveReplyError,
   type LiveReply,
 } from "@/lib/supabase/queries";
-import type { Pressure } from "@/state/schema";
+import type { Message, Pressure } from "@/state/schema";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
 import { Composer, type ComposerVariant } from "@/components/Composer";
@@ -42,6 +44,10 @@ import { ResourceCard } from "@/components/chat/ResourceCard";
 import { AgeCheckSheet } from "@/components/chat/AgeCheckSheet";
 import { ConsentUpdateSheet } from "@/components/chat/ConsentUpdateSheet";
 import { ScreenFx, type ScreenKind } from "@/components/chat/ScreenFx";
+import { MessageActions } from "@/components/chat/MessageActions";
+import { QaSheet, type QaForce, type QaPreviewRequest } from "@/components/qa/QaSheet";
+import { useQaAccess } from "@/components/qa/useQaAccess";
+import { PREVIEW_TEXT, previewId } from "@/components/qa/qaPreview";
 import styles from "./page.module.css";
 
 const REACTION_DELAY_MS = 700;
@@ -84,6 +90,20 @@ function ChatContent() {
   const [failedMode, setFailedMode] = useState<"reply" | "opener" | null>(null);
   const [screenFx, setScreenFx] = useState<ScreenKind | null>(null);
   const [ageError, setAgeError] = useState(false);
+  // B3: the message menu, the reply and edit being written.
+  const [actionsFor, setActionsFor] = useState<Message | null>(null);
+  const [replyTo, setReplyTo] = useState<{ id: number } | null>(null);
+  const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
+  // B3 QA tools. Previews are local bubbles that never reach the server.
+  const qaAccess = useQaAccess(auth.user?.id);
+  const [qaOpen, setQaOpen] = useState(false);
+  const [qaIgnoreCaps, setQaIgnoreCaps] = useState(false);
+  const [qaForce, setQaForce] = useState<QaForce | null>(null);
+  const [previews, setPreviews] = useState<Message[]>([]);
+  const qaRef = useRef<{ ignoreCaps: boolean; force: QaForce | null }>({ ignoreCaps: false, force: null });
+  qaRef.current = { ignoreCaps: qaAccess.qa && qaIgnoreCaps, force: qaAccess.qa ? qaForce : null };
+  // The message being replied to, as it stands now (a deleted one is no longer a target).
+  const replyTarget = replyTo && companion ? (companion.messages.find((m) => m.id === replyTo.id && !m.deleted) ?? null) : null;
   const accountNudgeRef = useRef<number>(0); // last exchange threshold nudged at
   // The level badge: one second on every open of a live chat (and on return after 60 s away).
   const levelBadge = useLevelBadge(live && companion ? companion.id : null);
@@ -188,10 +208,14 @@ function ChatContent() {
       setTyping(true);
       try {
         let r: LiveReply | null = null;
+        const opts = qaRef.current;
+        const qaBody = opts.ignoreCaps || opts.force ? { ignoreCaps: opts.ignoreCaps, force: opts.force } : null;
         for (let i = 0; i < 6 && !r && aliveRef.current; i++) {
-          r = await requestLiveReply(companionId, mode);
+          r = await requestLiveReply(companionId, mode, qaBody);
           if (!r) await sleep(2000);
         }
+        // "Next reply" means one reply: the forced effects are spent once it has come back.
+        if (r && opts.force) setQaForce(null);
         setTyping(false);
         if (r) await play(companionId, userMessageId, r);
       } catch (e) {
@@ -274,12 +298,15 @@ function ChatContent() {
     const companionId = companion!.id;
     const primary = companion!.core.primary;
     let res;
+    const quoteId = replyTarget?.id;
     try {
-      res = await sendMessage(companionId, text);
+      res = await sendMessage(companionId, text, quoteId);
     } catch (e) {
+      if ((e as { message?: string })?.message === "quote_not_found") setReplyTo(null);
       showToast(rpcErrorMessage(e));
       return;
     }
+    setReplyTo(null);
     if (res.blocked || !res.message) {
       // Out of messages server-side: show the matching bar or paywall state.
       dispatch({ type: "LEDGER_SYNC", ledger: res.ledger });
@@ -310,6 +337,92 @@ function ChatContent() {
     }
     const lastMe = [...c.messages].reverse().find((m) => m.who === "me");
     void fetchAndPlay(c.id, "reply", lastMe?.id);
+  }
+
+  // ---- B3: message actions -------------------------------------------------
+  function openActions(m: Message) {
+    if (typeof m.id === "number" && m.id > 0) setActionsFor(m);
+  }
+
+  function startReply(m: Message) {
+    if (typeof m.id !== "number" || m.id <= 0) return;
+    setActionsFor(null);
+    setEditing(null);
+    setReplyTo({ id: m.id });
+  }
+
+  function startEdit(m: Message) {
+    if (typeof m.id !== "number") return;
+    setActionsFor(null);
+    setReplyTo(null);
+    setEditing({ id: m.id, text: m.text });
+  }
+
+  async function saveEdit(text: string) {
+    const target = editing;
+    setEditing(null);
+    if (!target || text === target.text) return;
+    try {
+      const r = await editMessage(companion!.id, target.id, text);
+      dispatch({ type: "REPLACE_MESSAGE", companionId: companion!.id, message: r.message });
+    } catch (e) {
+      showToast(rpcErrorMessage(e));
+    }
+  }
+
+  async function removeMessage(m: Message) {
+    setActionsFor(null);
+    if (typeof m.id !== "number") return;
+    try {
+      const r = await deleteMessage(companion!.id, m.id);
+      dispatch({ type: "REPLACE_MESSAGE", companionId: companion!.id, message: r.message });
+      if (replyTo?.id === m.id) setReplyTo(null);
+      if (editing?.id === m.id) setEditing(null);
+    } catch (e) {
+      showToast(rpcErrorMessage(e));
+    }
+  }
+
+  function copyMessage(m: Message) {
+    setActionsFor(null);
+    navigator.clipboard
+      ?.writeText(m.text)
+      .then(() => showToast(COPY.chat.copied))
+      .catch(() => {});
+  }
+
+  // ---- B3: QA effect previews (local bubbles, nothing is sent) -------------
+  function runPreview(p: QaPreviewRequest) {
+    if (p.screen) {
+      setScreenFx(p.screen as ScreenKind);
+      return;
+    }
+    if (p.reaction) {
+      const id = previewId();
+      const reaction = p.reaction;
+      setPreviews((x) => [...x, { id, who: "me", text: "a message of mine, for the preview", at: Date.now() }]);
+      setTimeout(() => setPreviews((x) => x.map((m) => (m.id === id ? { ...m, meta: { reaction } } : m))), REACTION_DELAY_MS);
+      return;
+    }
+    const effect = p.effect;
+    if (!effect) return;
+    const add = () => setPreviews((x) => [...x, { id: previewId(), who: "them", text: PREVIEW_TEXT[effect], at: Date.now(), meta: { effect } }]);
+    if (effect === "stop") {
+      setTyping(true);
+      void sleep(1800)
+        .then(() => setTyping(false))
+        .then(() => sleep(900))
+        .then(() => {
+          setTyping(true);
+          return sleep(900);
+        })
+        .then(() => {
+          setTyping(false);
+          add();
+        });
+      return;
+    }
+    add();
   }
 
   async function onConsentContinue() {
@@ -365,6 +478,7 @@ function ChatContent() {
         onLongPressAvatar={() => openSheet("switcher", { currentId: companion.id })}
         onOverflow={() => setShowOverflow((v) => !v)}
         presenceOverride={presenceOverride}
+        onQa={qaAccess.qa && live ? () => setQaOpen(true) : undefined}
       />
       {levelBadge && <LevelBadge name={F01.levels[Math.min(5, Math.max(0, (companion.trustLevel ?? 1) - 1))].name} level={companion.trustLevel ?? 1} />}
       {/* The badge goes first; a due context card waits until it has gone. */}
@@ -396,14 +510,56 @@ function ChatContent() {
         </div>
       )}
       <MessageList
-        messages={companion.messages}
+        messages={previews.length ? [...companion.messages, ...previews] : companion.messages}
+        personaName={firstName}
+        onOpenActions={openActions}
+        onReply={startReply}
         dividerBeforeAt={dividerBeforeAtRef.current}
         typing={typing}
         companionColor={template.palette}
         footer={live && resourceOpen ? <ResourceCard onDismiss={() => setResourceOpen(false)} /> : undefined}
         onRetry={failedMode ? retry : null}
       />
-      {!paused && <Composer variant={variant} persona={firstName} onSend={(text) => void handleSend(text)} onOpenPaywall={() => openSheet("paywall")} />}
+      {!paused && (
+        <Composer
+          variant={variant}
+          persona={firstName}
+          onSend={(text) => void handleSend(text)}
+          onOpenPaywall={() => openSheet("paywall")}
+          replyingTo={replyTarget ? { label: replyTarget.who === "me" ? COPY.chat.quoteYou : firstName, text: replyTarget.text } : null}
+          onCancelReply={() => setReplyTo(null)}
+          editing={editing}
+          onSaveEdit={(text) => void saveEdit(text)}
+          onCancelEdit={() => setEditing(null)}
+        />
+      )}
+      {actionsFor && (
+        <MessageActions
+          message={actionsFor}
+          nowMs={Date.now()}
+          onReply={() => startReply(actionsFor)}
+          onCopy={() => copyMessage(actionsFor)}
+          onEdit={() => startEdit(actionsFor)}
+          onDelete={() => void removeMessage(actionsFor)}
+          onClose={() => setActionsFor(null)}
+        />
+      )}
+      {qaOpen && qaAccess.qa && live && (
+        <QaSheet
+          companionId={companion.id}
+          level={companion.trustLevel ?? 1}
+          admin={qaAccess.admin}
+          ignoreCaps={qaIgnoreCaps}
+          force={qaForce}
+          onIgnoreCaps={setQaIgnoreCaps}
+          onForce={setQaForce}
+          onPreview={runPreview}
+          onLevel={(trustLevel, levelChangedAt) => dispatch({ type: "LIVE_SYNC", companionId: companion.id, patch: { trustLevel, levelChangedAt } })}
+          onLedger={(ledger) => dispatch({ type: "LEDGER_SYNC", ledger })}
+          onClose={() => setQaOpen(false)}
+          onToast={showToast}
+        />
+      )}
       {paused && <AgeCheckSheet error={ageError} onAdult={(dob) => void onAgeAdult(dob)} onUnder18={() => void onAgeUnder18()} />}
       {needsConsent && <ConsentUpdateSheet onContinue={() => void onConsentContinue()} onNotNow={() => router.push("/home")} />}
       {screenFx && <ScreenFx kind={screenFx} onDone={() => setScreenFx(null)} />}

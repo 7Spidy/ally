@@ -23,7 +23,7 @@ export interface AdminUserRow {
   created_at: string;
   last_sign_in_at: string | null;
   display_name: string | null;
-  role: "user" | "admin" | null;
+  role: "user" | "admin" | "qa" | null;
   status: "active" | "suspended" | null;
   companion_count: number;
   message_count: number;

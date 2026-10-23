@@ -25,9 +25,10 @@ export interface Core {
 /** B2: what the server stamped on a message (reaction, effect, quote). */
 export interface MessageMeta {
   reaction?: string;
-  effect?: "soft" | "loud" | "stop" | "ink" | "pin" | "screen";
+  effect?: "soft" | "loud" | "stop" | "ink" | "pin" | "screen" | "shake" | "sparkle" | "echo" | "bloom" | "heartbeat";
+  /** The message this one replies to. Set by the server: by the model on her bubbles, by send_message on the user's. */
   quoteId?: number;
-  screen?: "confetti" | "lanterns" | "rain" | "petals";
+  screen?: "confetti" | "lanterns" | "rain" | "petals" | "balloons" | "fireworks" | "shootingstar" | "sparkles";
   safety?: boolean;
 }
 
@@ -39,6 +40,10 @@ export interface Message {
   at: number;
   meta?: MessageMeta;
   inReplyTo?: number | null;
+  /** B3: set when the user edited their message. */
+  editedAt?: number | null;
+  /** B3: a tombstone. The text is erased server-side; only the slot remains. */
+  deleted?: boolean;
 }
 
 export interface Companion {

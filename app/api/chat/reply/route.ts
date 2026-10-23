@@ -5,7 +5,7 @@ import { isLive } from "@/lib/live";
 import { dayKey } from "@/lib/clock";
 import * as heart from "@/lib/heart";
 import { compile } from "@/lib/llm/compile";
-import { bubbleMeta, grantLevelUpPetals, type Effect, type MsgMeta } from "@/lib/llm/contract";
+import { applyQaForce, bubbleMeta, EFFECTS, grantCelebration, SCREENS, type Effect, type MsgMeta, type QaForce } from "@/lib/llm/contract";
 import { runReply } from "@/lib/llm/reply";
 import { applySafety } from "@/lib/safety";
 import { applyReply, freshDay, relationshipDay, wordCount, type TrustDay, type TrustState } from "@/lib/trust";
@@ -43,6 +43,27 @@ interface MsgRow {
   created_at: string;
   meta: MsgMeta | null;
   in_reply_to: number | null;
+  edited_at?: string | null;
+}
+
+/** What a QA session may ask of one reply. Checked against the caller's role before it is used. */
+interface QaRequest {
+  ignoreCaps: boolean;
+  force: QaForce | null;
+}
+
+function parseQa(raw: unknown): QaRequest | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as { ignoreCaps?: unknown; force?: unknown };
+  const f = o.force && typeof o.force === "object" ? (o.force as Record<string, unknown>) : null;
+  const force: QaForce | null = f
+    ? {
+        effect: EFFECTS.includes(f.effect as Effect) ? (f.effect as Effect) : null,
+        screen: SCREENS.includes(f.screen as never) ? (f.screen as QaForce["screen"]) : null,
+        reaction: typeof f.reaction === "string" && f.reaction.length <= 16 ? f.reaction : null,
+      }
+    : null;
+  return { ignoreCaps: o.ignoreCaps === true, force };
 }
 
 const ms = (s: string | null) => (s ? Date.parse(s) : null);
@@ -53,7 +74,7 @@ function bubblesOf(rows: MsgRow[]) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => null)) as { companionId?: unknown; mode?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { companionId?: unknown; mode?: unknown; qa?: unknown } | null;
   const companionId = typeof body?.companionId === "string" ? body.companionId : "";
   const mode = body?.mode === "opener" ? "opener" : body?.mode === "reply" ? "reply" : null;
   if (!companionId || !mode) return json({ error: "bad_request" }, 400);
@@ -63,6 +84,14 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return json({ error: "unauthorized" }, 401);
+
+  // QA options are honoured only for a QA or admin profile; anyone else sending them is refused.
+  let qa: QaRequest | null = null;
+  if (body?.qa !== undefined && body.qa !== null) {
+    const { data: isQa } = await supabase.rpc("is_qa");
+    if (isQa !== true) return json({ error: "forbidden" }, 403);
+    qa = parseQa(body.qa);
+  }
 
   // RLS proves ownership.
   const { data: own } = await supabase.from("companions").select("*").eq("id", companionId).maybeSingle();
@@ -78,7 +107,7 @@ export async function POST(request: Request) {
   // Idempotency lock (spec 4.3 step 2).
   let userMsg: MsgRow | null = null;
   if (mode === "reply") {
-    const { data } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).eq("who", "me").order("id", { ascending: false }).limit(1);
+    const { data } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).eq("who", "me").is("deleted_at", null).order("id", { ascending: false }).limit(1);
     userMsg = ((data ?? []) as MsgRow[])[0] ?? null;
     if (!userMsg) return json({ error: "no_message" }, 409);
     const { data: claimed } = await db.from("companions").update({ last_replied_msg: userMsg.id }).eq("id", c.id).lt("last_replied_msg", userMsg.id).select("id");
@@ -97,13 +126,25 @@ export async function POST(request: Request) {
 
   try {
     // Context
-    const { data: histDesc } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).order("id", { ascending: false }).limit(40);
+    const { data: histDesc } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to,edited_at").eq("companion_id", c.id).is("deleted_at", null).order("id", { ascending: false }).limit(40);
     const history = ((histDesc ?? []) as MsgRow[]).reverse();
+
+    // A reply the user quoted from outside the 40-message window still needs its text.
+    const inWindow = new Map(history.map((m) => [m.id, m]));
+    const missingQuoteIds = [...new Set(history.flatMap((m) => (m.who === "me" && typeof m.meta?.quoteId === "number" && !inWindow.has(m.meta.quoteId) ? [m.meta.quoteId] : [])))];
+    if (missingQuoteIds.length) {
+      const { data: extra } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).is("deleted_at", null).in("id", missingQuoteIds);
+      for (const m of (extra ?? []) as MsgRow[]) inWindow.set(m.id, m);
+    }
+    const quoteFor = (m: MsgRow) => {
+      const q = m.who === "me" && typeof m.meta?.quoteId === "number" ? inWindow.get(m.meta.quoteId) : undefined;
+      return q ? { who: q.who, text: q.text } : null;
+    };
     const messageAt = userMsg ? Date.parse(userMsg.created_at) : now;
     const today = dayKey(messageAt);
     const todayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
 
-    const [{ data: factRows }, { data: dayRows }, { data: weekRows }, { data: profile }, { data: tdRow }, { data: todayThem }, { data: pins }, { count: totalMsgs }] = await Promise.all([
+    const [{ data: factRows }, { data: dayRows }, { data: weekRows }, { data: profile }, { data: tdRow }, { data: todayThem }, { data: pins }, { count: totalMsgs }, { count: meCount }] = await Promise.all([
       db.from("memory_facts").select("id,category,fact").eq("companion_id", c.id).eq("active", true).order("last_used_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).limit(40),
       db.from("memory_summaries").select("period_key,summary").eq("companion_id", c.id).eq("period", "day").neq("summary", "").order("period_key", { ascending: false }).limit(7),
       db.from("memory_summaries").select("period_key,summary").eq("companion_id", c.id).eq("period", "week").neq("summary", "").order("period_key", { ascending: false }).limit(4),
@@ -112,6 +153,8 @@ export async function POST(request: Request) {
       db.from("messages").select("meta").eq("companion_id", c.id).eq("who", "them").gte("created_at", todayStart),
       db.from("messages").select("id").eq("companion_id", c.id).eq("who", "them").eq("meta->>effect", "pin").gte("created_at", new Date(now - 30 * 86400000).toISOString()).limit(1),
       db.from("messages").select("id", { count: "exact", head: true }).eq("companion_id", c.id),
+      // Deleted messages stay as tombstones, so this only ever grows and a count milestone fires once.
+      db.from("messages").select("id", { count: "exact", head: true }).eq("companion_id", c.id).eq("who", "me"),
     ]);
     // compile() windows the 40 fetched rows in steps of 10, so it needs where they sit among all the messages.
     const historyOffset = Math.max(0, (totalMsgs ?? history.length) - history.length);
@@ -121,12 +164,17 @@ export async function POST(request: Request) {
     const relDay = relationshipDay(createdAt, messageAt);
     const h = heart.now({ id: c.id, createdAt }, messageAt);
     const lastMe = history.filter((m) => m.who === "me");
+    // The user may have sent several messages while the last reply was in flight, so ask whether 100 was crossed, not hit.
+    const batch = Math.max(1, history.filter((m) => m.who === "me" && m.id > prevReplied).length);
+    const total = meCount ?? 0;
+    const countHit = mode === "reply" && total >= 100 && total - batch < 100 ? 100 : undefined;
     const milestone = heart.milestoneFor({
       ist: h.ist,
       createdDayKey: dayKey(createdAt),
       relationshipDay: relDay,
       rainMentioned: heart.mentionsRain(lastMe.slice(-10).map((m) => m.text)),
       leveledUp: null,
+      userMsgCount: countHit,
     });
     const coolOff = (ms(c.cool_off_until) ?? 0) > now;
     const safetyMode = (ms(c.safety_until) ?? 0) > now;
@@ -141,7 +189,7 @@ export async function POST(request: Request) {
       facts: (factRows ?? []) as { id: number; category: string; fact: string }[],
       weekSummaries: ((weekRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
       daySummaries: ((dayRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
-      history: history.map((m) => ({ id: m.id, who: m.who, text: m.text })),
+      history: history.map((m) => ({ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m) })),
       historyOffset,
       coolOff,
       safetyMode,
@@ -155,6 +203,10 @@ export async function POST(request: Request) {
     for (const r of (todayThem ?? []) as { meta: MsgMeta | null }[]) {
       if (r.meta?.effect) effectsToday[r.meta.effect] = (effectsToday[r.meta.effect] ?? 0) + 1;
       if (r.meta?.screen) screensToday++;
+    }
+    if (qa?.ignoreCaps) {
+      for (const k of Object.keys(effectsToday)) delete effectsToday[k as Effect];
+      screensToday = 0;
     }
     const userMsgIds = lastMe.map((m) => m.id);
 
@@ -178,13 +230,22 @@ export async function POST(request: Request) {
         quotableIds: userMsgIds,
         effectsToday,
         screensToday,
-        pinInLast30d: (pins ?? []).length > 0,
+        pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0,
         milestone,
         quiet: coolOff || safetyMode,
       },
     });
     const out = reply.raw;
-    const clean = reply.out;
+    // QA forcing happens before safety, so a concern or acute band still strips every effect.
+    const clean = applyQaForce(reply.out, qa?.force);
+
+    // The user may have deleted the message while the model was writing: drop the reply, score nothing.
+    if (userMsg) {
+      const { data: still } = await db.from("messages").select("deleted_at").eq("id", userMsg.id).maybeSingle();
+      if (!still || still.deleted_at) {
+        return json({ reaction: null, screen: null, bubbles: [], trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
+      }
+    }
 
     const userText = userMsg?.text ?? "";
     const safe = mode === "reply" ? applySafety(clean, { userText, now }) : { out: clean, band: "none" as const, events: [], resourceCard: false, paused: false, safetyMeta: false, safetyUntil: null, trustFrozenUntil: null };
@@ -222,7 +283,7 @@ export async function POST(request: Request) {
       leveledUp = r.leveledUp;
     }
 
-    const finalOut = grantLevelUpPetals(safe.out, { level: trust.level, leveledUp, screensToday, band: safe.band });
+    const finalOut = grantCelebration(safe.out, { level: trust.level, leveledUp, milestone, screensToday, band: safe.band });
     const bubbles = finalOut.bubbles.map((b, i) => ({ text: b.text, meta: bubbleMeta(finalOut, i, safe.safetyMeta) }));
 
     const { data: written, error } = await db.rpc("write_live_reply", {

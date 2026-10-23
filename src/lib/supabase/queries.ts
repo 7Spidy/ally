@@ -22,9 +22,14 @@ export function isSuspendedError(err: unknown): boolean {
   return (err as { message?: string } | null)?.message === "account_suspended";
 }
 
-/** The toast for a failed RPC: the suspension line, or the network line. */
+/** The toast for a failed RPC: the suspension line, the edit rule that was hit, or the network line. */
 export function rpcErrorMessage(err: unknown): string {
-  return isSuspendedError(err) ? COPY.auth.suspended : COPY.auth.network;
+  if (isSuspendedError(err)) return COPY.auth.suspended;
+  const m = (err as { message?: string } | null)?.message;
+  if (m === "edit_window_closed") return COPY.chat.editWindowClosed;
+  if (m === "edit_limit") return COPY.chat.editLimit;
+  if (m === "message_deleted" || m === "message_not_found" || m === "quote_not_found") return COPY.chat.messageGone;
+  return COPY.auth.network;
 }
 
 export interface ServerState {
@@ -72,8 +77,19 @@ export interface SendResult {
   ledger: Ledger;
 }
 
-export function sendMessage(companionId: string, body: string): Promise<SendResult> {
-  return call<SendResult>("send_message", { companion_id: companionId, body });
+/** `replyTo` is the id of an earlier message in this chat the user is replying to. */
+export function sendMessage(companionId: string, body: string, replyTo?: number | null): Promise<SendResult> {
+  return call<SendResult>("send_message", { companion_id: companionId, body, reply_to: replyTo ?? null });
+}
+
+/** B3: edit one of the user's own messages (15 minutes, 5 edits). Free. */
+export function editMessage(companionId: string, messageId: number, body: string): Promise<{ message: Message }> {
+  return call("edit_message", { companion_id: companionId, message_id: messageId, body });
+}
+
+/** B3: delete either side's message. The server erases the text and keeps a tombstone. */
+export function deleteMessage(companionId: string, messageId: number): Promise<{ message: Message }> {
+  return call("delete_message", { companion_id: companionId, message_id: messageId });
 }
 
 export function receiveReply(companionId: string, body: string): Promise<{ message: Message; unread: number }> {
@@ -88,13 +104,19 @@ export function seedOpener(companionId: string, body: string): Promise<{ message
 /** B2: the reply endpoint's response (app/api/chat/reply). */
 export interface LiveReply {
   reaction: string | null;
-  screen?: "confetti" | "lanterns" | "rain" | "petals" | null;
+  screen?: NonNullable<NonNullable<Message["meta"]>["screen"]> | null;
   bubbles: { id: number; text: string; meta: Message["meta"]; at: number }[];
   trustLevel: number;
   leveledUp: number | null;
   resourceCard: boolean;
   paused: boolean;
   replayed?: boolean;
+}
+
+/** QA only: what to force onto one reply. The server refuses it for anyone who is not QA or admin. */
+export interface QaReplyOptions {
+  ignoreCaps: boolean;
+  force: { effect?: string | null; screen?: string | null; reaction?: string | null } | null;
 }
 
 export class LiveReplyError extends Error {
@@ -104,11 +126,11 @@ export class LiveReplyError extends Error {
 }
 
 /** Asks the server for Ira's reply (or opener). 202 means one is already in flight. */
-export async function requestLiveReply(companionId: string, mode: "reply" | "opener"): Promise<LiveReply | null> {
+export async function requestLiveReply(companionId: string, mode: "reply" | "opener", qa?: QaReplyOptions | null): Promise<LiveReply | null> {
   const res = await fetch("/api/chat/reply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ companionId, mode }),
+    body: JSON.stringify(qa ? { companionId, mode, qa } : { companionId, mode }),
   });
   if (res.status === 202) return null;
   if (!res.ok) throw new LiveReplyError(res.status);
@@ -147,4 +169,53 @@ export function buyPass(): Promise<{ ledger: Ledger }> {
 
 export function setCompanionPrefs(companionId: string, prefs: { notify?: boolean; sound?: boolean }): Promise<{ notify: boolean; sound: boolean }> {
   return call("set_companion_prefs", { companion_id: companionId, notify: prefs.notify ?? null, sound: prefs.sound ?? null });
+}
+
+// ---------------------------------------------------------------------------
+// B3 QA tools (supabase/migrations/20261024000002_chat_actions_qa.sql)
+// ---------------------------------------------------------------------------
+
+/** True for a `qa` or `admin` profile. The server re-checks on every qa_* call. */
+export async function isQa(): Promise<boolean> {
+  const { data, error } = await getBrowserClient().rpc("is_qa");
+  return !error && data === true;
+}
+
+/** Whether the profile is an admin, who also gets the link to the full console. */
+export async function isAdminProfile(userId: string): Promise<boolean> {
+  const { data } = await getBrowserClient().from("profiles").select("role").eq("id", userId).maybeSingle();
+  return data?.role === "admin";
+}
+
+export interface QaState {
+  level: number;
+  highestLevel: number;
+  points: number;
+  nextThreshold: number | null;
+  relationshipDay: number;
+  frozen: boolean;
+  coolOff: boolean;
+  safetyMode: boolean;
+  effectsToday: Record<string, number>;
+  screensToday: number;
+}
+
+export function qaSetLevel(companionId: string, level: number): Promise<{ trustLevel: number; levelChangedAt: number }> {
+  return call("qa_set_level", { companion_id: companionId, lvl: level });
+}
+
+export function qaSetFreeze(companionId: string, freeze: boolean): Promise<{ frozen: boolean }> {
+  return call("qa_set_freeze", { companion_id: companionId, freeze });
+}
+
+export function qaState(companionId: string): Promise<QaState> {
+  return call("qa_state", { companion_id: companionId });
+}
+
+export function qaRefillMessages(): Promise<{ ledger: Ledger }> {
+  return call("qa_refill_messages");
+}
+
+export function qaResetChat(companionId: string): Promise<{ reset: boolean }> {
+  return call("qa_reset_chat", { companion_id: companionId });
 }

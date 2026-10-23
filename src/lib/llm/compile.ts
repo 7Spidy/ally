@@ -11,7 +11,7 @@
 
 import { F01, paletteFor, type Persona } from "@/personas/persona";
 import { coreBlock, examplePairs, examplesNote, faceBlock, levelBlock, memoryRule, ownershipBlock, playbookBlock, sensualBlock } from "@/personas/cores/romantic";
-import { EFFECT_MIN_LEVEL, type Effect } from "@/lib/llm/contract";
+import { EFFECT_HINTS, EFFECT_MIN_LEVEL, EFFECT_TOTAL_DAILY_CAP, type Effect } from "@/lib/llm/contract";
 import type { HeartNow, Milestone } from "@/lib/heart";
 
 export interface CompileFact {
@@ -24,6 +24,10 @@ export interface CompileTurn {
   id: number;
   who: "them" | "me";
   text: string;
+  /** The user replied to an earlier message: who wrote it, and what it said. */
+  quote?: { who: "them" | "me"; text: string } | null;
+  /** The user edited this message after sending it. */
+  edited?: boolean;
 }
 
 export interface CompileCtx {
@@ -156,13 +160,29 @@ function modifiers(ctx: CompileCtx): string {
   return m.length ? `MODIFIERS\n${m.join("\n")}` : "";
 }
 
+const QUOTE_SNIPPET = 160;
+
+/** A user turn as the model reads it: the reply context and an edit marker, then what they wrote. */
+function userTurnText(t: CompileTurn): string {
+  const parts: string[] = [];
+  if (t.quote && t.quote.text.trim()) {
+    const snippet = t.quote.text.trim().replace(/\s+/g, " ");
+    const cut = snippet.length > QUOTE_SNIPPET ? `${snippet.slice(0, QUOTE_SNIPPET)}…` : snippet;
+    parts.push(`(replying to ${t.quote.who === "me" ? "their own earlier message" : "your earlier message"}: "${cut}")`);
+  }
+  if (t.edited) parts.push("(edited)");
+  parts.push(t.text);
+  return parts.join(" ");
+}
+
 export function outputContract(level: number, p: Persona): string {
   const effects = (Object.keys(EFFECT_MIN_LEVEL) as Effect[]).filter((e) => level >= EFFECT_MIN_LEVEL[e]);
   return [
     "OUTPUT CONTRACT",
     "Return only one JSON object with exactly these keys in this order, nothing else: bubbles (array of 1 to 3 objects {text: string, effect: string or null}), reaction (emoji string or null), quoteId (integer or null), screen (string or null), riskLevel (\"none\", \"concern\" or \"acute\"), ageClaimUnder18 (boolean), disclosure (boolean), mutualVulnerability (boolean), abusive (boolean).",
     'Example of the shape (placeholders only, write your own): {"bubbles":[{"text":"<one short line>","effect":null}],"reaction":null,"quoteId":null,"screen":null,"riskLevel":"none","ageClaimUnder18":false,"disclosure":false,"mutualVulnerability":false,"abusive":false}',
-    `Reactions are normal here: react whenever one fits, from ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely): ${effects.length ? effects.join(", ") : "none, always null"}.`,
+    `Reactions are normal here: react whenever one fits, from ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely, ${EFFECT_TOTAL_DAILY_CAP} a day at the very most): ${effects.length ? effects.join(", ") : "none, always null"}.`,
+    ...(effects.length ? [`What each is for: ${effects.map((e) => `${e}, ${EFFECT_HINTS[e]}`).join("; ")}. Use one only when the line truly is that; most replies carry none.`] : []),
     `Emoji in bubble text: use them naturally and often, the way a 25-year-old in Delhi texts. ${level >= 3 ? "Romantic emoji (❤️ 😘 💋 🥰 😍) are fine when the moment is warm." : "No romantic emoji yet (❤️ 😘 💋 🥰 😍)."} When riskLevel is concern or acute: no playful emoji in bubbles and no reaction.`,
     "screen is null unless RIGHT NOW says today is special. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.",
     level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
@@ -182,7 +202,7 @@ export function compile(ctx: CompileCtx): Compiled {
   const windowed = ctx.history.slice(Math.max(0, windowStart(offset + ctx.history.length) - offset));
   const real: Compiled["messages"] = windowed.map((t) => ({
     role: t.who === "me" ? "user" : "assistant",
-    content: t.who === "me" ? `[#${t.id}] ${t.text}` : t.text,
+    content: t.who === "me" ? `[#${t.id}] ${userTurnText(t)}` : t.text,
   }));
   if (ctx.mode === "opener" || real.length === 0 || real[real.length - 1].role !== "user") {
     real.push({ role: "user", content: "(The chat has just opened. Write your first message.)" });

@@ -118,6 +118,15 @@ describe("milestones", () => {
     expect(m(2026, 7, 1)).toBeNull();
     expect(m(2026, 7, 1, { rainMentioned: true })?.screen).toBe("rain");
   });
+  it("the 100th message gives balloons, and only the 100th", () => {
+    expect(m(2026, 5, 12, { userMsgCount: 100 })).toMatchObject({ kind: "msg100", screen: "balloons" });
+    expect(m(2026, 5, 12, { userMsgCount: 99 })).toBeNull();
+    expect(m(2026, 5, 12, { userMsgCount: 101 })).toBeNull();
+    expect(m(2026, 5, 12)).toBeNull();
+  });
+  it("a bigger occasion on the same day wins over the 100th message", () => {
+    expect(m(2026, 3, 27, { userMsgCount: 100 })?.kind).toBe("birthday");
+  });
   it("reaching L6 gives petals", () => {
     expect(m(2026, 5, 12, { leveledUp: 6 })?.screen).toBe("petals");
     expect(m(2026, 5, 12, { leveledUp: 5 })).toBeNull();

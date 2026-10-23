@@ -156,3 +156,27 @@ describe("localOnly", () => {
     expect(out.flow).toBe(s.flow);
   });
 });
+
+describe("B3 REPLACE_MESSAGE", () => {
+  const msgs = [
+    { id: 1, who: "them" as const, text: "hi", at: NOW },
+    { id: 2, who: "me" as const, text: "hello", at: NOW },
+  ];
+  it("replaces the matching message with the server's copy, touching nothing else", () => {
+    const st = stateWith(companion({ messages: msgs }));
+    const next = allyReducer(st, { type: "REPLACE_MESSAGE", companionId: "c_test", message: { id: 2, who: "me", text: "hello there", at: NOW, editedAt: NOW + 5 } });
+    expect(next.companions[0].messages[1]).toMatchObject({ id: 2, text: "hello there", editedAt: NOW + 5 });
+    expect(next.companions[0].messages[0]).toEqual(msgs[0]);
+  });
+  it("turns a message into a tombstone", () => {
+    const st = stateWith(companion({ messages: msgs }));
+    const next = allyReducer(st, { type: "REPLACE_MESSAGE", companionId: "c_test", message: { id: 1, who: "them", text: "", at: NOW, deleted: true } });
+    expect(next.companions[0].messages[0]).toMatchObject({ text: "", deleted: true });
+    expect(next.companions[0].messages).toHaveLength(2);
+  });
+  it("ignores an id it does not hold", () => {
+    const st = stateWith(companion({ messages: msgs }));
+    const next = allyReducer(st, { type: "REPLACE_MESSAGE", companionId: "c_test", message: { id: 99, who: "me", text: "x", at: NOW } });
+    expect(next.companions[0].messages).toEqual(msgs);
+  });
+});

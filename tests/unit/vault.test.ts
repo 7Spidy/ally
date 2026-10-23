@@ -138,6 +138,7 @@ function fakeDb(tables: Record<string, Row[]>) {
     chain.eq = (c: unknown, v: unknown) => (filters.push((r) => getPath(r, c as string) === v), q);
     chain.neq = (c: unknown, v: unknown) => (filters.push((r) => r[c as string] !== v), q);
     chain.in = (c: unknown, v: unknown) => (filters.push((r) => (v as unknown[]).includes(r[c as string])), q);
+    chain.is = (c: unknown, v: unknown) => (filters.push((r) => (r[c as string] ?? null) === v), q);
     chain.gte = (c: unknown, v: unknown) => (filters.push((r) => String(r[c as string]) >= String(v)), q);
     chain.lte = (c: unknown, v: unknown) => (filters.push((r) => String(r[c as string]) <= String(v)), q);
     chain.lt = (c: unknown, v: unknown) => (filters.push((r) => String(r[c as string]) < String(v)), q);
@@ -201,6 +202,20 @@ describe("runDaily", () => {
     }, NOW);
     expect(seen.join("")).not.toContain("private crisis");
     expect(tables.memory_summaries.find((r) => r.companion_id === "c2")?.summary).toBe("");
+  });
+
+  it("never reads a message the user deleted, and a day of only deleted messages is not summarised", async () => {
+    const t = seed();
+    t.messages.push({ id: 5, companion_id: "c1", who: "me", text: "erased words", created_at: DAY_START, meta: {}, deleted_at: DAY_START });
+    t.messages.push({ id: 6, companion_id: "c3", who: "me", text: "gone", created_at: DAY_START, meta: {}, deleted_at: DAY_START });
+    const { db } = fakeDb(t as unknown as Record<string, Row[]>);
+    const seen: string[] = [];
+    await runDaily(db, async (a) => {
+      seen.push(a.messages[0].content);
+      return chatFn(a);
+    }, NOW);
+    expect(seen.join("")).not.toContain("erased words");
+    expect(seen.join("")).toContain("hello");
   });
 
   it("processes at most the batch size and reports the rest", async () => {

@@ -186,10 +186,10 @@ export function arcBeat(relationshipDay: number, persona: Persona = F01): string
   return persona.arc.find((a) => a.month === month)?.beat ?? "";
 }
 
-export type ScreenKind = "confetti" | "lanterns" | "rain" | "petals";
+export type ScreenKind = "confetti" | "lanterns" | "rain" | "petals" | "balloons" | "fireworks" | "shootingstar" | "sparkles";
 
 export interface Milestone {
-  kind: "level6" | "birthday" | "diwali" | "anniversary" | "rain";
+  kind: "level6" | "birthday" | "diwali" | "anniversary" | "rain" | "msg100";
   screen: ScreenKind;
   /** Prompt line for the day, or null when nothing needs saying. */
   note: string;
@@ -213,6 +213,8 @@ export function milestoneFor(args: {
   relationshipDay: number;
   rainMentioned: boolean;
   leveledUp: number | null;
+  /** Every message the user has ever sent this companion, deleted ones included, so it only ever grows. */
+  userMsgCount?: number;
 }): Milestone | null {
   const { ist } = args;
   if (args.leveledUp === 6) return { kind: "level6", screen: "petals", note: "You and the user just became intimate partners. This is a moment." };
@@ -224,6 +226,7 @@ export function milestoneFor(args: {
   if (ist.month === 7 && ist.dom === 1 && args.rainMentioned) {
     return { kind: "rain", screen: "rain", note: "First of July, and the user mentioned rain." };
   }
+  if (args.userMsgCount === 100) return { kind: "msg100", screen: "balloons", note: "That was the 100th message the user has sent you." };
   return null;
 }
 

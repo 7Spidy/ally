@@ -73,3 +73,44 @@
   text-align: center;
   padding: 14px 4px 2px;
 }
+
+.context {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px 10px;
+  padding: 8px 8px 8px 12px;
+  border-left: 3px solid var(--k);
+  background: var(--raised);
+  border-radius: 12px;
+}
+.contextText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.contextLabel {
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.contextBody {
+  font-size: 15.5px;
+  color: var(--mut);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.contextClose {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 18px;
+  background: none;
+  color: var(--mut);
+  font-size: 24px;
+  line-height: 1;
+}

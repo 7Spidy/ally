@@ -36,3 +36,16 @@
 .spacer {
   flex: 1 1 auto;
 }
+
+.qa {
+  min-width: 48px;
+  min-height: 36px;
+  margin-right: 4px;
+  padding: 0 12px;
+  border-radius: 18px;
+  border: 1px solid #d9b45b;
+  background: none;
+  color: #d9b45b;
+  font: 600 15.5px/1 var(--sans);
+  letter-spacing: 0.06em;
+}

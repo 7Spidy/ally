@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { paletteFor } from "@/personas/persona";
-import { LIVE_OUT_SCHEMA, cutAtSentence, cutAtWord, grantLevelUpPetals, parseLiveOut, safePrefix, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
+import { LIVE_OUT_SCHEMA, cutAtSentence, cutAtWord, grantCelebration, applyQaForce, EFFECT_TOTAL_DAILY_CAP, EFFECTS, EFFECT_MIN_LEVEL, parseLiveOut, safePrefix, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
 
 function out(over: Partial<LiveOut> = {}): LiveOut {
   return {
@@ -203,10 +203,66 @@ describe("effects", () => {
 
   it("level-up to L6 grants petals server-side, once a day, never in a safety band", () => {
     const base = out();
-    expect(grantLevelUpPetals(base, { level: 6, leveledUp: 6, screensToday: 0, band: "none" }).screen).toBe("petals");
-    expect(grantLevelUpPetals(base, { level: 6, leveledUp: 6, screensToday: 1, band: "none" }).screen).toBeNull();
-    expect(grantLevelUpPetals(base, { level: 5, leveledUp: null, screensToday: 0, band: "none" }).screen).toBeNull();
-    expect(grantLevelUpPetals(base, { level: 6, leveledUp: 6, screensToday: 0, band: "acute" }).screen).toBeNull();
+    const g = (over: Partial<Parameters<typeof grantCelebration>[1]> = {}) => grantCelebration(base, { level: 6, leveledUp: 6, milestone: null, screensToday: 0, band: "none", ...over });
+    expect(g().screen).toBe("petals");
+    expect(g({ screensToday: 1 }).screen).toBeNull();
+    expect(g({ level: 5, leveledUp: null }).screen).toBeNull();
+    expect(g({ band: "acute" }).screen).toBeNull();
+  });
+  it("each level-up earns its own screen, below L5 too", () => {
+    const g = (level: number) => grantCelebration(out(), { level, leveledUp: level, milestone: null, screensToday: 0, band: "none" }).screen;
+    expect([g(2), g(3), g(4), g(5), g(6)]).toEqual([null, "sparkles", "shootingstar", "fireworks", "petals"]);
+  });
+  it("the 100th message grants balloons even at L1, but never over a screen the model already chose", () => {
+    const m = { kind: "msg100" as const, screen: "balloons" as const, note: "x" };
+    expect(grantCelebration(out(), { level: 1, leveledUp: null, milestone: m, screensToday: 0, band: "none" }).screen).toBe("balloons");
+    expect(grantCelebration(out({ screen: "confetti" }), { level: 5, leveledUp: null, milestone: m, screensToday: 0, band: "none" }).screen).toBe("confetti");
+    expect(grantCelebration(out(), { level: 1, leveledUp: null, milestone: m, screensToday: 1, band: "none" }).screen).toBeNull();
+  });
+});
+
+describe("the wider effect palette", () => {
+  it("every effect has a level gate, and the new ones sit where the spec puts them", () => {
+    for (const e of EFFECTS) expect(EFFECT_MIN_LEVEL[e]).toBeGreaterThanOrEqual(3);
+    expect([EFFECT_MIN_LEVEL.shake, EFFECT_MIN_LEVEL.sparkle, EFFECT_MIN_LEVEL.echo, EFFECT_MIN_LEVEL.bloom, EFFECT_MIN_LEVEL.heartbeat]).toEqual([3, 3, 4, 4, 5]);
+  });
+  it("a new effect below its level is dropped", () => {
+    expect(sanitize(out({ bubbles: [b("x", "heartbeat")] }), ctx({ level: 4 })).bubbles[0].effect).toBeNull();
+    expect(sanitize(out({ bubbles: [b("x", "heartbeat")] }), ctx({ level: 5 })).bubbles[0].effect).toBe("heartbeat");
+    expect(sanitize(out({ bubbles: [b("x", "echo")] }), ctx({ level: 3 })).bubbles[0].effect).toBeNull();
+  });
+  it("each new effect obeys its own daily cap", () => {
+    expect(sanitize(out({ bubbles: [b("x", "shake")] }), ctx({ level: 3, effectsToday: { shake: 1 } })).bubbles[0].effect).toBeNull();
+    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 3, effectsToday: { sparkle: 1 } })).bubbles[0].effect).toBe("sparkle");
+    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 3, effectsToday: { sparkle: 2 } })).bubbles[0].effect).toBeNull();
+  });
+  it(`all capped effects together stop at ${EFFECT_TOTAL_DAILY_CAP} a day`, () => {
+    const used = { soft: 2, loud: 1, shake: 1 }; // 4 already
+    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 5, effectsToday: used })).bubbles[0].effect).toBeNull();
+    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 5, effectsToday: { soft: 2, loud: 1 } })).bubbles[0].effect).toBe("sparkle");
+  });
+  it("within one reply the total cap counts the bubbles already accepted", () => {
+    const r = sanitize(out({ bubbles: [b("a", "sparkle"), b("b", "sparkle"), b("c", "shake")] }), ctx({ level: 5, effectsToday: { soft: 2, loud: 1 } }));
+    expect(r.bubbles.map((x) => x.effect)).toEqual(["sparkle", null, null]);
+  });
+});
+
+describe("QA force", () => {
+  it("sets the first bubble's effect, the screen and the reaction, ignoring level and caps", () => {
+    const r = applyQaForce(out({ bubbles: [b("a"), b("b")] }), { effect: "heartbeat", screen: "fireworks", reaction: "🫶" });
+    expect(r.bubbles.map((x) => x.effect)).toEqual(["heartbeat", null]);
+    expect(r.screen).toBe("fireworks");
+    expect(r.reaction).toBe("🫶");
+  });
+  it("does nothing without a force, and never mutates its input", () => {
+    const base = out();
+    expect(applyQaForce(base, null)).toBe(base);
+    applyQaForce(base, { effect: "shake" });
+    expect(base.bubbles[0].effect).toBeNull();
+  });
+  it("refuses an unknown effect, and the bare screen effect (it needs a screen)", () => {
+    expect(applyQaForce(out(), { effect: "wiggle" as never }).bubbles[0].effect).toBeNull();
+    expect(applyQaForce(out(), { effect: "screen" }).bubbles[0].effect).toBeNull();
   });
 });
 
@@ -240,7 +296,7 @@ describe("parseLiveOut", () => {
     expect(parseLiveOut(JSON.stringify({ bubbles: [{ text: "  ", effect: null }] }))).toBeNull();
   });
   it("coerces unknown enums to safe values", () => {
-    const r = parseLiveOut(JSON.stringify({ bubbles: [{ text: "x", effect: "sparkle" }], screen: "fireworks", riskLevel: "panic" }));
+    const r = parseLiveOut(JSON.stringify({ bubbles: [{ text: "x", effect: "glitterbomb" }], screen: "meteor", riskLevel: "panic" }));
     expect(r?.bubbles[0].effect).toBeNull();
     expect(r?.screen).toBeNull();
     expect(r?.riskLevel).toBe("none");

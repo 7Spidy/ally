@@ -256,7 +256,7 @@ export async function runDaily(db: SupabaseClient, chat: ChatFn, now: number, ba
   if (!live.length) return { processed: 0, remaining: 0 };
   const liveIds = live.map((c) => c.id);
 
-  const { data: msgIds } = await db.from("messages").select("companion_id").in("companion_id", liveIds).gte("created_at", from).lt("created_at", to);
+  const { data: msgIds } = await db.from("messages").select("companion_id").in("companion_id", liveIds).is("deleted_at", null).gte("created_at", from).lt("created_at", to);
   const active = new Set((msgIds ?? []).map((r: { companion_id: string }) => r.companion_id));
   const { data: done } = await db.from("memory_summaries").select("companion_id").eq("period", "day").eq("period_key", day).in("companion_id", liveIds);
   const doneSet = new Set((done ?? []).map((r: { companion_id: string }) => r.companion_id));
@@ -264,7 +264,7 @@ export async function runDaily(db: SupabaseClient, chat: ChatFn, now: number, ba
 
   let processed = 0;
   for (const c of todo.slice(0, batch)) {
-    const { data: msgs } = await db.from("messages").select("who,text,meta").eq("companion_id", c.id).gte("created_at", from).lt("created_at", to).order("id");
+    const { data: msgs } = await db.from("messages").select("who,text,meta").eq("companion_id", c.id).is("deleted_at", null).gte("created_at", from).lt("created_at", to).order("id");
     const usable = ((msgs ?? []) as { who: string; text: string; meta: { safety?: boolean } | null }[]).filter((m) => !m.meta?.safety);
     const { data: factRows } = await db.from("memory_facts").select("id,category,fact,active,last_used_at,created_at").eq("companion_id", c.id).eq("active", true);
     const facts = (factRows ?? []) as Fact[];

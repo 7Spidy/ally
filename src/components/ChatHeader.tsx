@@ -17,6 +17,7 @@ export function ChatHeader({
   onLongPressAvatar,
   onOverflow,
   presenceOverride,
+  onQa,
 }: {
   template: Template;
   onBack: () => void;
@@ -25,6 +26,8 @@ export function ChatHeader({
   onOverflow: () => void;
   /** B2: a live companion's presence line, from her current time block. */
   presenceOverride?: string;
+  /** B3: set only for a QA or admin user. One tap opens the QA drawer over the chat. */
+  onQa?: () => void;
 }) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
@@ -68,6 +71,11 @@ export function ChatHeader({
         </span>
       </button>
       <span className={styles.spacer} />
+      {onQa && (
+        <button type="button" className={styles.qa} aria-label="QA tools" onClick={onQa} data-testid="qa-open">
+          QA
+        </button>
+      )}
       <button type="button" className="icon-btn" aria-label="More" onClick={onOverflow}>
         <svg viewBox="0 0 24 24">
           <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />

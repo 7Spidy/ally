@@ -2,6 +2,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 16px 16px;
   display: flex;
   flex-direction: column;
@@ -126,4 +127,282 @@
   border-radius: 20px;
   border-bottom-left-radius: 6px;
   font-size: 15.5px;
+}
+
+/* ---------------------------------------------------------------------------
+   B3: swipe-to-reply, tombstones, jumbo emoji, the wider effect palette,
+   edited tag and receipt. Entrances play only on a bubble marked data-fresh
+   (one that arrived while the chat was open), so history never replays.
+   --------------------------------------------------------------------------- */
+
+.swipeRow {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  transform: translateX(calc(var(--swipe, 0) * 1px));
+}
+.swipeRow[data-released="true"] {
+  transition: transform 200ms var(--ease);
+}
+
+.bubble {
+  touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.bubble:focus-visible {
+  outline: 2px solid var(--k);
+  outline-offset: 2px;
+}
+
+.replyHint {
+  position: absolute;
+  top: 50%;
+  left: -46px;
+  width: 34px;
+  height: 34px;
+  margin-top: -17px;
+  border-radius: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  color: var(--mut);
+  opacity: var(--pull, 0);
+  pointer-events: none;
+}
+.swipeRow[data-mine="true"] .replyHint {
+  left: auto;
+  right: -46px;
+  transform: scaleX(-1);
+}
+.swipeRow[data-armed="true"] .replyHint {
+  background: var(--k);
+  border-color: var(--k);
+  color: var(--ink);
+}
+.replyHint svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* A deleted message: the slot stays, the text is gone. */
+.tomb,
+.me.tomb,
+.them.tomb {
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--dim);
+  font-style: italic;
+}
+
+/* Nothing but one to three emoji: large, no bubble. */
+.jumbo,
+.me.jumbo,
+.them.jumbo {
+  background: transparent;
+  padding: 2px 6px;
+  font-size: 46px;
+  line-height: 1.12;
+}
+
+.editedTag {
+  margin: 3px 8px 0;
+  font-size: 15.5px;
+  color: var(--dim);
+}
+.swipeRow[data-mine="true"] .editedTag {
+  align-self: flex-end;
+}
+.swipeRow[data-mine="false"] .editedTag {
+  align-self: flex-start;
+}
+
+.receipt {
+  align-self: flex-end;
+  margin: 2px 8px 0;
+  font-size: 15.5px;
+  color: var(--mut);
+}
+
+.bubble[data-flash="true"] {
+  animation: flash 1200ms ease-out;
+}
+@keyframes flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--k) 75%, transparent);
+  }
+  30% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--k) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* shake: giddy laughter, nerves, exasperation */
+.shake[data-fresh="true"] {
+  animation: shake 620ms var(--ease);
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+  12% {
+    transform: translateX(-7px) rotate(-1.4deg);
+  }
+  26% {
+    transform: translateX(7px) rotate(1.4deg);
+  }
+  40% {
+    transform: translateX(-5px) rotate(-1deg);
+  }
+  54% {
+    transform: translateX(5px) rotate(1deg);
+  }
+  70% {
+    transform: translateX(-3px);
+  }
+  85% {
+    transform: translateX(2px);
+  }
+}
+
+/* sparkle: glitter for a compliment, good news, a small win */
+.sparkle {
+  background-image: linear-gradient(110deg, transparent 32%, rgba(255, 236, 176, 0.38) 48%, transparent 64%);
+  background-size: 240% 100%;
+  background-position: 150% 0;
+  box-shadow: 0 0 0 1px rgba(244, 201, 93, 0.5);
+}
+.sparkle::before,
+.sparkle::after {
+  content: "✦";
+  position: absolute;
+  color: #f4c95d;
+  font-size: 16px;
+  line-height: 1;
+  pointer-events: none;
+}
+.sparkle::before {
+  top: -9px;
+  right: 12px;
+}
+.sparkle::after {
+  bottom: -7px;
+  left: 16px;
+  font-size: 18px;
+}
+.sparkle[data-fresh="true"] {
+  animation: sweep 1300ms ease-out;
+}
+.sparkle[data-fresh="true"]::before,
+.sparkle[data-fresh="true"]::after {
+  animation: twinkle 1500ms ease-in-out 2;
+}
+@keyframes sweep {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.6) rotate(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25) rotate(25deg);
+  }
+}
+
+/* echo: a line that lingers or trails off */
+.echo {
+  margin-bottom: 14px;
+  box-shadow:
+    0 7px 0 -3px color-mix(in srgb, currentColor 24%, transparent),
+    0 14px 0 -6px color-mix(in srgb, currentColor 11%, transparent);
+}
+.echo[data-fresh="true"] {
+  animation: echo 900ms var(--ease);
+}
+@keyframes echo {
+  from {
+    box-shadow:
+      0 0 0 0 transparent,
+      0 0 0 0 transparent;
+  }
+}
+
+/* bloom: an affectionate line swells in, soft and warm */
+.bloom {
+  padding: 14px 18px;
+  box-shadow: 0 0 26px color-mix(in srgb, var(--k) 40%, transparent);
+}
+.bloom.them {
+  transform-origin: left center;
+}
+.bloom.me {
+  transform-origin: right center;
+}
+.bloom[data-fresh="true"] {
+  animation: bloom 800ms var(--ease);
+}
+@keyframes bloom {
+  0% {
+    transform: scale(0.6);
+    filter: blur(5px);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+    filter: blur(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* heartbeat: a rare tender beat, two pulses */
+.heartbeat {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--k) 55%, transparent);
+}
+.heartbeat[data-fresh="true"] {
+  animation: heartbeat 1200ms ease-in-out;
+}
+@keyframes heartbeat {
+  0%,
+  28%,
+  56%,
+  100% {
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.09);
+  }
+  42% {
+    transform: scale(1.07);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble[data-fresh="true"],
+  .bubble[data-fresh="true"]::before,
+  .bubble[data-fresh="true"]::after,
+  .bubble[data-flash="true"] {
+    animation: none;
+  }
+  .swipeRow[data-released="true"] {
+    transition: none;
+  }
 }
