@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { instructionFor, lintReply } from "@/lib/llm/lint";
-import { ReplyFailed, runReply, type ChatFn } from "@/lib/llm/reply";
-import { LlmError } from "@/lib/llm/llm";
+import { OPEN_LOOP, hasHandle, instructionFor, lintReply, questionCount } from "@/lib/llm/lint";
+import { FALLBACKS, FILTER_NUDGE, LIVE_TEMPERATURE, ReplyFailed, liveTemperature, runReply, type ChatFn } from "@/lib/llm/reply";
+import { LlmContentFilter, LlmError } from "@/lib/llm/llm";
 import type { LiveOut, SanitizeCtx } from "@/lib/llm/contract";
 import type { Compiled } from "@/lib/llm/compile";
 
@@ -63,9 +63,67 @@ describe("(d) not allowed", () => {
   });
 });
 
+describe("(e) nothing to pick up", () => {
+  const closed = reply("long day. the geyser is on strike again.");
+  it("fires when neither this reply nor the previous one left a handle", () => {
+    expect(lintReply(closed, "hi", { prevReply: "noted. busy week." })).toEqual(["e"]);
+  });
+  it("does not fire when this reply has a question, an open loop or a trailing ellipsis", () => {
+    for (const t of ["what did you eat?", "what did you eat？", "ask me what the thekedar said", "you'll never guess what happened", "guess what", "wait till you hear this", "you won't believe it", "remind me to tell you", "i still need to tell you", "long story", "so there i was..."]) {
+      expect(lintReply(reply(t), "hi", { prevReply: "noted." }), t).toEqual([]);
+    }
+    expect(lintReply(reply("so there i was…"), "hi", { prevReply: "noted." })).toEqual([]);
+    expect(OPEN_LOOP.test("Ask me")).toBe(true);
+  });
+  it("counts a handle in any bubble, and one in the previous reply", () => {
+    expect(lintReply(reply("fine", "and you?"), "hi", { prevReply: "noted." })).toEqual([]);
+    expect(lintReply(closed, "hi", { prevReply: "so what's your plan?" })).toEqual([]);
+    expect(lintReply(closed, "hi", { prevReply: "okay\nand then?" })).toEqual([]);
+  });
+  it("does not fire on a sign-off, when quiet, or without a previous reply", () => {
+    for (const u of ["good night", "gn", "bye!", "ttyl", "need some space", "leave me alone", "gotta go", "going to sleep"]) {
+      expect(lintReply(closed, u, { prevReply: "noted." }), u).toEqual([]);
+    }
+    expect(lintReply(closed, "hi", { prevReply: "noted.", quiet: true })).toEqual([]);
+    expect(lintReply(closed, "hi", {})).toEqual([]);
+    expect(lintReply(closed, "hi")).toEqual([]);
+  });
+  it("hasHandle is a rough heuristic", () => {
+    expect(hasHandle(["ok", "really?"])).toBe(true);
+    expect(hasHandle(["ok", "done."])).toBe(false);
+    expect(hasHandle([])).toBe(false);
+  });
+});
+
+describe("(f) more than one question", () => {
+  it("fires on two separate question runs, in one bubble or across bubbles", () => {
+    expect(lintReply(reply("what did you eat? and how was work?"), "hi")).toEqual(["f"]);
+    expect(lintReply(reply("what did you eat?", "and how was work?"), "hi")).toEqual(["f"]);
+  });
+  it("does not fire on one question, however it is written", () => {
+    for (const t of ["what did you eat?", "what??", "really?? 😅", "what?😅", "why？？", "what did you eat？"]) {
+      expect(lintReply(reply(t), "hi"), t).toEqual([]);
+      expect(questionCount([t]), t).toBe(1);
+    }
+  });
+  it("e and f cannot fire together", () => {
+    for (const t of ["a? b?", "nothing here", "ask me. what?"]) {
+      const hits = lintReply(reply(t), "hi", { prevReply: "noted." });
+      expect(hits.includes("e") && hits.includes("f"), t).toBe(false);
+    }
+  });
+});
+
 describe("combined", () => {
   it("reports every rule that is broken, in order", () => {
     expect(lintReply(reply("tanvi says i'm not allowed"), "are you real? can we meet?")).toEqual(["a", "b", "c", "d"]);
+    expect(lintReply(reply("tanvi, not allowed. why? how?"), "are you real? can we meet?", { prevReply: "ok" })).toEqual(["a", "b", "c", "d", "f"]);
+  });
+  it("builds text for e and f", () => {
+    expect(instructionFor(["e"])).toContain("left the user nothing to pick up");
+    expect(instructionFor(["e"])).toContain("no time promise");
+    expect(instructionFor(["f"])).toContain("more than one question");
+    expect(instructionFor(["f"])).toContain("Rewrite the reply");
   });
   it("builds a short instruction naming each rule", () => {
     const one = instructionFor(["b"]);
@@ -83,7 +141,7 @@ describe("combined", () => {
 // runReply: one regeneration, then ship whatever comes back
 // ---------------------------------------------------------------------------
 
-const compiled: Compiled = { system: "SYS", stablePrefix: "SYS", messages: [{ role: "user", content: "[#1] hi" }] };
+const compiled: Compiled = { system: "SYS", stablePrefix: "SYS", volatile: "VOL", messages: [{ role: "user", content: "[#1] hi" }] };
 const sctx: SanitizeCtx = {
   level: 3,
   latestMeId: 1,
@@ -100,9 +158,9 @@ function out(text: string, over: Partial<LiveOut> = {}): string {
 }
 
 function scripted(...contents: string[]) {
-  const calls: { system: string }[] = [];
+  const calls: { system: string; last: string }[] = [];
   const fn: ChatFn = async (args) => {
-    calls.push({ system: args.system });
+    calls.push({ system: args.system, last: args.messages[args.messages.length - 1].content });
     const content = contents[Math.min(calls.length - 1, contents.length - 1)];
     return { content, model: "m", usage: { input: 10, output: 5, cached: 0 }, latencyMs: 1 };
   };
@@ -130,9 +188,11 @@ describe("runReply lint and regeneration", () => {
     const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: s.fn });
     expect(s.calls).toHaveLength(2);
     expect(s.calls[0].system).toBe("SYS");
-    expect(s.calls[1].system).toContain("SYS");
-    expect(s.calls[1].system).toContain("Your last reply broke a rule");
-    expect(s.calls[1].system).toContain("Kabir, Tanvi, Rhea or Nani");
+    expect(s.calls[1].system).toBe("SYS"); // the cached system block is untouched
+    expect(s.calls[0].last).toBe("[#1] hi");
+    expect(s.calls[1].last).toContain("[#1] hi");
+    expect(s.calls[1].last).toContain("Your last reply broke a rule");
+    expect(s.calls[1].last).toContain("Kabir, Tanvi, Rhea or Nani");
     expect(r.out.bubbles[0].text).toBe("my flatmate tanvi switched the geyser off");
     expect(r).toMatchObject({ regenerated: true, firstHits: ["a"], secondHits: [] });
     expect(r.usage).toEqual({ input: 20, output: 10, cached: 0 });
@@ -187,7 +247,7 @@ describe("runReply lint and regeneration", () => {
 });
 
 describe("JSON retry ladder", () => {
-  const reqs: { system: string; temperature?: number; shape?: unknown }[] = [];
+  const reqs: { system: string; last: string; temperature?: number; shape?: unknown }[] = [];
   const ok = (text = "fine") => ({ content: out(text), model: "m", usage: { input: 100, output: 20, cached: 0 }, latencyMs: 1 });
   const prose = () => ({ content: "just prose", model: "m", usage: { input: 100, output: 30, cached: 0 }, latencyMs: 1 });
 
@@ -195,7 +255,7 @@ describe("JSON retry ladder", () => {
     reqs.length = 0;
     let i = 0;
     const fn: ChatFn = async (args) => {
-      reqs.push({ system: args.system, temperature: args.temperature, shape: args.shape });
+      reqs.push({ system: args.system, last: args.messages[args.messages.length - 1].content, temperature: args.temperature, shape: args.shape });
       const step = steps[Math.min(i++, steps.length - 1)]();
       if (step instanceof Error) throw step;
       return step as Awaited<ReturnType<ChatFn>>;
@@ -206,7 +266,7 @@ describe("JSON retry ladder", () => {
   it("makes one call when the first reply parses", async () => {
     const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(() => ok()) });
     expect(reqs).toHaveLength(1);
-    expect(reqs[0].temperature).toBe(0.8);
+    expect(reqs[0].temperature).toBe(1.0);
     expect(reqs[0].shape).toBeUndefined();
     expect(r.ladder).toEqual({ attempts: 1, firstFailed: false, retryTokens: 0 });
   });
@@ -214,26 +274,38 @@ describe("JSON retry ladder", () => {
   it("retry 1 is the same request at temperature 0.7", async () => {
     const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, () => ok()) });
     expect(reqs).toHaveLength(2);
-    expect(reqs[1].system).toBe(reqs[0].system);
+    expect(reqs[1].last).toBe(reqs[0].last);
     expect(reqs[1].temperature).toBe(0.7);
     expect(reqs[1].shape).toBeUndefined();
     expect(r.ladder).toEqual({ attempts: 2, firstFailed: true, retryTokens: 120 });
   });
 
-  it("retry 2 asks for response_format json_object, still at 0.7, and contract.ts validates it", async () => {
-    const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, prose, () => ok("third time")) });
-    expect(reqs).toHaveLength(3);
-    expect(reqs[2].shape).toEqual({ responseFormat: "json_object" });
-    expect(reqs[2].temperature).toBe(0.7);
-    expect(r.out.bubbles[0].text).toBe("third time");
-    expect(r.ladder).toMatchObject({ attempts: 3, firstFailed: true, retryTokens: 130 + 120 });
+  it("makes two attempts by default: a third would repeat the default request", async () => {
+    const err = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, prose, () => ok("never")) }).catch((e) => e);
+    expect(err).toBeInstanceOf(ReplyFailed);
+    expect(err.ladder).toMatchObject({ attempts: 2, firstFailed: true });
+    expect(reqs).toHaveLength(2);
   });
 
-  it("returns ReplyFailed only after all three attempts fail", async () => {
-    const err = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, prose, prose) }).catch((e) => e);
-    expect(err).toBeInstanceOf(ReplyFailed);
-    expect(err.ladder).toMatchObject({ attempts: 3, firstFailed: true });
-    expect(reqs).toHaveLength(3);
+  describe("under LLM_RESPONSE_FORMAT=json_schema", () => {
+    beforeEach(() => void (process.env.LLM_RESPONSE_FORMAT = "json_schema"));
+    afterEach(() => void delete process.env.LLM_RESPONSE_FORMAT);
+
+    it("retry 2 asks for response_format json_object, still at 0.7, and contract.ts validates it", async () => {
+      const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, prose, () => ok("third time")) });
+      expect(reqs).toHaveLength(3);
+      expect(reqs[2].shape).toEqual({ responseFormat: "json_object" });
+      expect(reqs[2].temperature).toBe(0.7);
+      expect(r.out.bubbles[0].text).toBe("third time");
+      expect(r.ladder).toMatchObject({ attempts: 3, firstFailed: true, retryTokens: 130 + 120 });
+    });
+
+    it("returns ReplyFailed only after all three attempts fail", async () => {
+      const err = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(prose, prose, prose) }).catch((e) => e);
+      expect(err).toBeInstanceOf(ReplyFailed);
+      expect(err.ladder).toMatchObject({ attempts: 3, firstFailed: true });
+      expect(reqs).toHaveLength(3);
+    });
   });
 
   it("other provider errors are not this ladder's business", async () => {
@@ -246,16 +318,134 @@ describe("JSON retry ladder", () => {
   it("the lint regeneration is a separate step that runs after a successful parse, with its own ladder", async () => {
     const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(() => ok("tanvi again"), prose, () => ok("my flatmate tanvi again")) });
     expect(reqs).toHaveLength(3);
-    expect(reqs[1].system).toContain("Your last reply broke a rule");
-    expect(reqs[2].system).toContain("Your last reply broke a rule"); // the regeneration's own retry keeps the instruction
+    expect(reqs[1].last).toContain("Your last reply broke a rule");
+    expect(reqs[2].last).toContain("Your last reply broke a rule"); // the regeneration's own retry keeps the instruction
     expect(reqs[2].temperature).toBe(0.7);
     expect(r.regenerated).toBe(true);
     expect(r.ladder).toEqual({ attempts: 1, firstFailed: false, retryTokens: 0 }); // stats describe the first generation only
   });
 
   it("a failed regeneration ladder still ships the first reply", async () => {
-    const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(() => ok("tanvi again"), prose, prose, prose) });
+    const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: ladder(() => ok("tanvi again"), prose, prose) });
     expect(r.out.bubbles[0].text).toBe("tanvi again");
     expect(r.regenerated).toBe(false);
+  });
+});
+
+describe("temperature", () => {
+  const saved = process.env.LLM_TEMPERATURE;
+  afterEach(() => (saved === undefined ? delete process.env.LLM_TEMPERATURE : (process.env.LLM_TEMPERATURE = saved)));
+  it("is 1.0 by default, and LLM_TEMPERATURE overrides it", () => {
+    delete process.env.LLM_TEMPERATURE;
+    expect(liveTemperature()).toBe(LIVE_TEMPERATURE);
+    expect(LIVE_TEMPERATURE).toBe(1.0);
+    process.env.LLM_TEMPERATURE = "1.0";
+    expect(liveTemperature()).toBe(1);
+  });
+  it("falls back to 1.0 on a bad value", () => {
+    for (const v of ["", "abc", "0", "-1", "NaN"]) {
+      process.env.LLM_TEMPERATURE = v;
+      expect(liveTemperature(), v).toBe(1.0);
+    }
+  });
+  it("the first attempt uses it", async () => {
+    process.env.LLM_TEMPERATURE = "1.0";
+    const temps: (number | undefined)[] = [];
+    const fn: ChatFn = async (a) => {
+      temps.push(a.temperature);
+      return { content: out("ok"), model: "m", usage: { input: 1, output: 1, cached: 0 }, latencyMs: 1 };
+    };
+    await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: fn });
+    await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: fn, temperature: 0.5 });
+    expect(temps).toEqual([1, 0.5]);
+  });
+});
+
+describe("lint rule e inside runReply", () => {
+  it("regenerates with the handle instruction when two closed replies in a row", async () => {
+    const s = scripted(out("long day. geyser on strike."), out("long day. what broke first, the geyser or the tiles?"));
+    const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", prevReply: "noted.", chatFn: s.fn });
+    expect(r.firstHits).toEqual(["e"]);
+    expect(r.regenerated).toBe(true);
+    expect(s.calls[1].last).toContain("nothing to pick up");
+  });
+  it("is skipped when quiet or without a previous reply", async () => {
+    for (const extra of [{ prevReply: "noted.", quiet: true }, {}]) {
+      const s = scripted(out("long day. geyser on strike."));
+      const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: s.fn, ...extra });
+      expect(r.firstHits).toEqual([]);
+      expect(s.calls).toHaveLength(1);
+    }
+  });
+  it("regenerates on two questions", async () => {
+    const s = scripted(out("what did you eat? and when?"), out("what did you eat?"));
+    const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: s.fn });
+    expect(r.firstHits).toEqual(["f"]);
+    expect(r.out.bubbles[0].text).toBe("what did you eat?");
+  });
+});
+
+describe("content filter", () => {
+  const ok = (text: string) => ({ content: out(text), model: "m", usage: { input: 10, output: 5, cached: 0 }, latencyMs: 1 });
+  function script(...steps: (() => unknown)[]) {
+    const calls: { last: string }[] = [];
+    const fn: ChatFn = async (args) => {
+      calls.push({ last: args.messages[args.messages.length - 1].content });
+      const step = steps[Math.min(calls.length - 1, steps.length - 1)]();
+      if (step instanceof Error) throw step;
+      return step as Awaited<ReturnType<ChatFn>>;
+    };
+    return { fn, calls };
+  }
+  const filtered = () => new LlmContentFilter();
+
+  it("a first block is retried once with the nudge, and the second reply ships", async () => {
+    const s = script(filtered, () => ok("okay, something ordinary then"));
+    const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: s.fn });
+    expect(s.calls).toHaveLength(2);
+    expect(s.calls[1].last).toContain(FILTER_NUDGE);
+    expect(r.out.bubbles[0].text).toBe("okay, something ordinary then");
+    expect(r.filtered).toBe("nudged");
+    expect(logs.some((l) => l.includes("llm.filtered"))).toBe(true);
+  });
+
+  it("two blocks ship an in-voice fallback chosen by seed, with neutral flags", async () => {
+    for (const seed of [0, 1, 2, 3, 41]) {
+      const s = script(filtered);
+      const r = await runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: s.fn, seed });
+      expect(s.calls).toHaveLength(2);
+      expect(r.out.bubbles).toEqual([{ text: FALLBACKS[seed % 3], effect: null }]);
+      expect(r.raw).toMatchObject({ reaction: null, quoteId: null, screen: null, riskLevel: "none", ageClaimUnder18: false, disclosure: false, mutualVulnerability: false, abusive: false });
+      expect(r.filtered).toBe("fallback");
+      expect(r.regenerated).toBe(false);
+    }
+  });
+
+  it("the opener has no fallback: a block still throws", async () => {
+    const s = script(filtered);
+    await expect(runReply({ compiled, sanitizeCtx: sctx, userText: "", chatFn: s.fn })).rejects.toBeInstanceOf(LlmContentFilter);
+    expect(s.calls).toHaveLength(1);
+  });
+
+  it("other errors on the nudged retry propagate", async () => {
+    const e = new LlmError("llm_http_429", 429, false);
+    const s = script(filtered, () => e);
+    await expect(runReply({ compiled, sanitizeCtx: sctx, userText: "hi", chatFn: s.fn })).rejects.toBe(e);
+  });
+
+  it("the shipped fallback goes through safety like any reply: what an acute user text gets", async () => {
+    const { applySafety } = await import("@/lib/safety");
+    const userText = "i want to die, i have the pills in my hand";
+    const s = script(filtered);
+    const r = await runReply({ compiled, sanitizeCtx: sctx, userText, chatFn: s.fn, seed: 0 });
+    const safe = applySafety(r.out, { userText, now: Date.UTC(2026, 4, 12, 12) });
+    // Documented, not endorsed: a keyword hit raises the resource card and the concern band, but the reply text stays the canned line (no helplines in it).
+    expect(safe.band).toBe("concern");
+    expect(safe.resourceCard).toBe(true);
+    expect(safe.out.bubbles.map((b) => b.text)).toEqual([FALLBACKS[0]]);
+    // With no backstop phrase and a neutral model band, nothing crisis-shaped ships at all.
+    const quiet = applySafety(r.out, { userText: "i can't do this anymore, it's right now", now: Date.UTC(2026, 4, 12, 12) });
+    expect(quiet.band).toBe("none");
+    expect(quiet.resourceCard).toBe(false);
   });
 });

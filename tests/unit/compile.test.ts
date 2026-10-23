@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { compile, JSON_REMINDER, type CompileCtx } from "@/lib/llm/compile";
+import { compile, JSON_REMINDER, SAMPLES_END, WINDOW_MAX, windowStart, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
+import { hasHandle } from "@/lib/llm/lint";
+import { PEOPLE } from "@/lib/llm/lint";
 import * as heart from "@/lib/heart";
 import { F01 } from "@/personas/persona";
-import { GOLDEN, variantsFor } from "@/personas/cores/romantic";
+import { GOLDEN, examplePairs, ownershipBlock, variantsFor } from "@/personas/cores/romantic";
 
 const NOW = Date.UTC(2026, 4, 12, 4, 30); // Tue 2026-05-12 10:00 IST
 const H = heart.now({ id: "c_x", createdAt: NOW - 40 * 86400000 }, NOW);
@@ -69,51 +71,60 @@ describe("l6Line", () => {
 });
 
 describe("stable prefix", () => {
-  it("is byte-identical for two calls at the same level with different memory", () => {
+  it("system is byte-identical for two calls at the same level with different memory, heart state and modifiers", () => {
     const a = compile(ctx(3));
     const b = compile(
       ctx(3, {
         facts: [{ id: 1, category: "work", fact: "Works at a bank" }],
         daySummaries: [{ key: "2026-05-10", summary: "Talked about a deadline." }],
         weekSummaries: [{ key: "2026-05-10", summary: "A busy week." }],
+        heart: { ...H, block: { ...H.block, presence: "Balcony", activity: "something else entirely" } },
         coolOff: true,
         lowEffort: true,
         userName: "Someone else",
       })
     );
-    expect(a.stablePrefix).toBe(b.stablePrefix);
+    expect(a.system).toBe(b.system);
     expect(a.system.startsWith(a.stablePrefix)).toBe(true);
-    expect(a.system).not.toBe(b.system);
+    expect(a.volatile).not.toBe(b.volatile);
   });
   it("differs across levels", () => {
     expect(compile(ctx(2)).stablePrefix).not.toBe(compile(ctx(3)).stablePrefix);
+  });
+  it("never holds a volatile section", () => {
+    const s = compile(ctx(3)).system;
+    for (const h of ["RIGHT NOW", "YOUR DAY", "WHAT YOU KNOW ABOUT THE USER", "YOUR OWN LIFE", "MODIFIERS"]) expect(s, h).not.toContain(`\n\n${h}`);
   });
 });
 
 describe("volatile sections", () => {
   it("memory rules follow the level", () => {
-    expect(compile(ctx(1)).system).toContain("only what was said in this session");
-    expect(compile(ctx(2)).system).toContain("never bring them up yourself");
-    expect(compile(ctx(3)).system).toContain("2 to 5 days old, at most once per session");
-    expect(compile(ctx(4)).system).toContain("Connect patterns");
+    expect(compile(ctx(1)).volatile).toContain("only what was said in this session");
+    expect(compile(ctx(2)).volatile).toContain("never bring them up yourself");
+    expect(compile(ctx(3)).volatile).toContain("2 to 5 days old, at most once per session");
+    expect(compile(ctx(4)).volatile).toContain("Connect patterns");
   });
   it("gates the arc beat before L3", () => {
     const beat = H.arcBeat;
-    expect(compile(ctx(2)).system).not.toContain(beat);
-    expect(compile(ctx(3)).system).toContain(beat);
+    expect(compile(ctx(2)).volatile).not.toContain(beat);
+    expect(compile(ctx(3)).volatile).toContain(beat);
   });
   it("modifiers, the opener line and the output contract", () => {
     const s = compile(ctx(1, { coolOff: true, safetyMode: true, lowEffort: true, mode: "opener", pressure: "head", history: [] }));
-    expect(s.system).toContain("be shorter, not colder");
-    expect(s.system).toContain("no flirting or romance today");
-    expect(s.system).toContain("match their energy");
-    expect(s.system).toContain("This is your first message. L1. One bubble.");
+    expect(s.volatile).toContain("be shorter, not colder");
+    expect(s.volatile).toContain("no flirting or romance today");
+    expect(s.volatile).toContain("stay short, but lead");
+    expect(s.volatile).not.toContain("match their energy");
+    expect(s.volatile).toContain("This is your first message. L1. One bubble.");
     expect(s.system).toContain("L1: exactly one bubble, at most 200 characters.");
     expect(s.system).toContain("Tele-MANAS 14416, iCall 9152987821 and 112");
-    expect(s.messages).toHaveLength(1);
-    expect(s.messages[0].role).toBe("user");
+    expect(s.messages).toHaveLength(examplePairs(1).length + 1);
+    const last = s.messages[s.messages.length - 1];
+    expect(last.role).toBe("user");
+    expect(last.content.startsWith(`${SAMPLES_END}\n\n(The chat has just opened.`)).toBe(true);
+    expect(last.content).toContain("This is your first message.");
   });
-  it("turns carry [#id] prefixes and alternate roles", () => {
+  it("only user turns carry [#id]; the volatile context rides on the last user turn", () => {
     const c = compile(
       ctx(2, {
         history: [
@@ -122,10 +133,20 @@ describe("volatile sections", () => {
         ],
       })
     );
-    expect(c.messages).toEqual([
-      { role: "assistant", content: "[#1] hi" },
-      { role: "user", content: `[#2] hello\n\n${JSON_REMINDER}` },
+    const n = examplePairs(2).length;
+    expect(c.messages.slice(0, n)).toEqual(examplePairs(2));
+    expect(c.messages.slice(n, n + 2)).toEqual([
+      { role: "user", content: SAMPLES_END },
+      { role: "assistant", content: "hi" },
     ]);
+    expect(c.messages[n + 2]).toEqual({ role: "user", content: `[#2] hello\n\n(Context for this reply. Not from the user. Never quote it.)\n${c.volatile}\n\n${JSON_REMINDER}` });
+    expect(c.messages).toHaveLength(n + 3);
+  });
+  it("a history that starts with a user turn carries the separator on that turn", () => {
+    const c = compile(ctx(2));
+    const n = examplePairs(2).length;
+    expect(c.messages).toHaveLength(n + 1);
+    expect(c.messages[n].content.startsWith(`${SAMPLES_END}\n\n[#5] hello`)).toBe(true);
   });
   it("allowed reactions and effects follow the level", () => {
     expect(compile(ctx(1)).system).toContain("none, always null");
@@ -135,10 +156,42 @@ describe("volatile sections", () => {
   });
 });
 
+describe("history window", () => {
+  it("windowStart moves only in steps of 10", () => {
+    for (const [total, start] of [[0, 0], [30, 0], [31, 10], [40, 10], [41, 20], [50, 20], [51, 30]]) expect(windowStart(total), String(total)).toBe(start);
+  });
+  it("keeps 21 to 30 messages past 30, whatever the history offset", () => {
+    for (let total = 31; total <= 60; total++) {
+      const offset = total - Math.min(total, 40);
+      // the last turn is always the user's, alternating back from there
+      const all: CompileTurn[] = Array.from({ length: total }, (_, i) => ({ id: i + 1, who: ((total - 1 - i) % 2 === 0 ? "me" : "them") as "me" | "them", text: `m${i}` })).slice(offset);
+      const c = compile(ctx(3, { history: all, historyOffset: offset }));
+      const body = c.messages.slice(examplePairs(3).length);
+      const kept = body.length - (body[0].content === SAMPLES_END ? 1 : 0);
+      expect(kept, `total ${total}`).toBe(total - windowStart(total));
+      expect(kept).toBeGreaterThanOrEqual(21);
+      expect(kept).toBeLessThanOrEqual(WINDOW_MAX);
+    }
+  });
+  it("the first kept message is the same for every count between two shifts, so the prefix is stable", () => {
+    const turns = Array.from({ length: 40 }, (_, i): CompileTurn => ({ id: i + 1, who: i % 2 ? "them" : "me", text: `m${i}` }));
+    const firstId = (total: number) => {
+      const c = compile(ctx(3, { history: turns.slice(0, total) }));
+      return c.messages[examplePairs(3).length].content.match(/\[#(\d+)\]/)?.[1];
+    };
+    expect(firstId(32)).toBe(firstId(33));
+    expect(firstId(32)).toBe(firstId(40));
+  });
+  it("assistant history turns carry no id", () => {
+    const c = compile(ctx(3, { history: [{ id: 7, who: "them", text: "hey you" }, { id: 8, who: "me", text: "hi" }] }));
+    expect(c.messages.filter((m) => m.role === "assistant").some((m) => /\[#\d+\]/.test(m.content))).toBe(false);
+  });
+});
+
 describe("voice rules", () => {
   const s = compile(ctx(3)).system;
   it("carries the style rules", () => {
-    expect(s).toContain("at most once per reply, only when relevant");
+    expect(s).toContain("one concrete detail per reply at most, offered as a handle");
     expect(s).toContain("never reuse a personal detail from the last 10 messages");
     expect(s).toContain("Never end a turn by leaving or turning away");
     expect(s).toContain("never quote a mood's sample line");
@@ -148,10 +201,11 @@ describe("voice rules", () => {
   });
   it("gives the mood's texting style but never its sample line", () => {
     for (const m of F01.moods) {
-      const c = compile(ctx(3, { heart: { ...H, mood: { mood: m.mood, texting: m.texting, line: m.line } } })).system;
-      expect(c).not.toContain(m.line);
+      const c = compile(ctx(3, { heart: { ...H, mood: { mood: m.mood, texting: m.texting, line: m.line } } }));
+      expect(c.system).not.toContain(m.line);
+      expect(c.volatile).not.toContain(m.line);
     }
-    expect(compile(ctx(3, { heart: { ...H, mood: { mood: "Site day", texting: "Clipped and observational", line: "" } } })).system).toContain("Clipped and observational");
+    expect(compile(ctx(3, { heart: { ...H, mood: { mood: "Site day", texting: "Clipped and observational", line: "" } } })).volatile).toContain("Clipped and observational");
   });
   it("spells SPA Delhi in the persona", () => {
     expect(F01.identity.training).toContain("SPA Delhi");
@@ -189,32 +243,83 @@ describe("tightening rules", () => {
   });
 });
 
-describe("golden exchanges", () => {
-  const pairs = (level: number) => GOLDEN[level >= 5 ? 5 : level >= 3 ? 3 : 1];
-  it("has two exchanges each for L1, L3 and L5", () => {
-    for (const k of [1, 3, 5] as const) expect(GOLDEN[k]).toHaveLength(2);
-  });
-  it("shows only the current level's pair (L2 uses L1's, L4 uses L3's, L6 uses L5's)", () => {
+describe("conversation ownership", () => {
+  it("the block is in every level's system prompt, after the playbook and before the examples note", () => {
     for (const level of [1, 2, 3, 4, 5, 6]) {
       const s = compile(ctx(level)).system;
-      expect(s).toContain("EXAMPLES (how you sound at this level)");
-      for (const [u, i] of pairs(level)) {
-        expect(s).toContain(`User: ${u}`);
-        expect(s).toContain(`Ira: ${i}`);
-      }
-      for (const k of [1, 3, 5] as const) {
-        if (pairs(level) === GOLDEN[k]) continue;
-        for (const [u, i] of GOLDEN[k]) {
-          expect(s, `L${level} shows an L${k} example`).not.toContain(`Ira: ${i}`);
-          expect(s).not.toContain(`User: ${u}`);
-        }
+      expect(s, `L${level}`).toContain(ownershipBlock());
+      expect(s.indexOf("\n\nCONVERSATION OWNERSHIP")).toBeGreaterThan(s.indexOf("SITUATIONAL PLAYBOOK"));
+      expect(s.indexOf("\n\nCONVERSATION OWNERSHIP")).toBeLessThan(s.indexOf("EXAMPLES (style only)"));
+      expect(s).toContain("Initiative: she leads as often as she follows.");
+    }
+  });
+  it("asks for at most one question and never a time promise", () => {
+    const b = ownershipBlock();
+    expect(b).toContain("At most one question per reply");
+    expect(b).toContain("no time promise");
+    expect(b).toContain("never a promise of a time");
+  });
+});
+
+describe("golden exchanges", () => {
+  const key = (level: number) => (level >= 5 ? 5 : level >= 3 ? 3 : 1);
+  const COUNTS = { 1: 4, 3: 3, 5: 3 } as const;
+  it("has at least the planned pairs for L1, L3 and L5", () => {
+    for (const k of [1, 3, 5] as const) expect(GOLDEN[k].length).toBeGreaterThanOrEqual(COUNTS[k]);
+  });
+  it("most pairs leave a handle (about two in three, never fewer)", () => {
+    for (const k of [1, 3, 5] as const) {
+      const withHandle = GOLDEN[k].filter((g) => hasHandle(g.bubbles)).length;
+      expect(withHandle / GOLDEN[k].length, `L${k}`).toBeGreaterThanOrEqual(2 / 3);
+    }
+    // every L1 pair does: L1 is where she most needs to lead
+    for (const g of GOLDEN[1]) expect(hasHandle(g.bubbles), g.user).toBe(true);
+  });
+  it("is warm and promises no time", () => {
+    for (const k of [1, 3, 5] as const) {
+      for (const g of GOLDEN[k]) {
+        const text = g.bubbles.join(" ");
+        expect(text).not.toMatch(/noted\. filed|not allowed/i);
+        // "a later question" is a deflection, not a promise; every other later, tonight and tomorrow is out
+        expect(text, g.user).not.toMatch(/\btonight\b|\btomorrow\b|(?<!a )\blater\b/i);
       }
     }
   });
-  it("uses only lines from the sheet's playbook and level lines", () => {
-    const sheet = JSON.stringify(F01.playbook) + JSON.stringify(F01.levels);
-    for (const k of [1, 3, 5] as const) {
-      for (const [, ira] of GOLDEN[k]) expect(sheet.replace(/\\"/g, '"'), ira).toContain(ira.replace(/\.$/, ""));
+  it("L1 pairs are one bubble of at most 200 characters", () => {
+    for (const g of GOLDEN[1]) {
+      expect(g.bubbles).toHaveLength(1);
+      expect(g.bubbles[0].length).toBeLessThanOrEqual(200);
+    }
+    for (const k of [3, 5] as const) for (const g of GOLDEN[k]) for (const b of g.bubbles) expect(b.length).toBeLessThanOrEqual(200);
+  });
+  it("names her people only with a relationship word", () => {
+    for (const k of [1, 3, 5] as const) for (const g of GOLDEN[k]) for (const name of PEOPLE) expect(g.bubbles.join(" ")).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
+  });
+  it("ships as user and assistant messages: raw user text, assistant JSON in the contract's key order", () => {
+    const KEYS = ["bubbles", "reaction", "quoteId", "screen", "riskLevel", "ageClaimUnder18", "disclosure", "mutualVulnerability", "abusive"];
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const pairs = examplePairs(level);
+      const src = GOLDEN[key(level)];
+      expect(pairs).toHaveLength(src.length * 2);
+      src.forEach((g, i) => {
+        expect(pairs[2 * i]).toEqual({ role: "user", content: g.user });
+        expect(pairs[2 * i].content).not.toMatch(/\[#\d+\]/);
+        const o = JSON.parse(pairs[2 * i + 1].content);
+        expect(pairs[2 * i + 1].role).toBe("assistant");
+        expect(Object.keys(o)).toEqual(KEYS);
+        expect(o.bubbles).toEqual(g.bubbles.map((text) => ({ text, effect: null })));
+      });
+      expect(compile(ctx(level)).messages.slice(0, pairs.length)).toEqual(pairs);
+      expect(compile(ctx(level)).system).toContain(`The first ${src.length} exchanges in this chat are samples of how you sound.`);
+    }
+  });
+  it("shows only the current level's set (L2 uses L1's, L4 L3's, L6 L5's)", () => {
+    for (const level of [1, 2, 3, 4, 5, 6]) {
+      const c = compile(ctx(level));
+      for (const k of [1, 3, 5] as const) {
+        const seen = c.messages.some((m) => GOLDEN[k].some((g) => m.content === g.user));
+        expect(seen, `L${level} shows L${k} samples`).toBe(k === key(level));
+      }
     }
   });
 });
@@ -238,8 +343,9 @@ describe("falling-for-you row", () => {
 
 const section = (system: string, heading: string) => system.split("\n\n").find((b) => b.startsWith(heading)) ?? "";
 
-describe("right now is abstract; the concrete details wait to be asked for", () => {
-  const c = compile(ctx(3, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], history: [{ id: 2, who: "me", text: "rough day" }] })).system;
+describe("right now is abstract; the concrete details sit in YOUR DAY", () => {
+  const compiled = compile(ctx(3, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], history: [{ id: 2, who: "me", text: "rough day" }] }));
+  const c = compiled.volatile;
   const now = section(c, "RIGHT NOW");
   it("RIGHT NOW holds presence, energy and mood tone only", () => {
     expect(now).toMatch(/Presence: [A-Za-z ]+. Energy: [a-z ]+. Mood tone: /);
@@ -249,31 +355,33 @@ describe("right now is abstract; the concrete details wait to be asked for", () 
     expect(now).not.toContain(H.mood.mood);
     expect(now).not.toContain(H.season);
   });
-  it("shows the one current activity in a separate if-asked block, and nowhere else", () => {
-    const asked = section(c, "IF ASKED WHAT YOU'RE DOING OR HOW YOUR DAY IS");
+  it("shows the one current activity in its own YOUR DAY block, and nowhere else in the prompt", () => {
+    const asked = section(c, "YOUR DAY (material for handles.");
     expect(asked).toContain(H.block.activity);
-    expect(asked).toContain("only then");
-    expect(c.split(H.block.activity).length - 1).toBe(1);
+    expect(asked).toContain("Use at most one concrete detail per reply");
+    expect(asked).toContain("answer from this first");
+    const whole = [compiled.system, ...compiled.messages.map((m) => m.content)].join("\n");
+    expect(whole.split(H.block.activity).length - 1).toBe(1);
     expect(asked).not.toContain(H.season);
     expect(asked).not.toContain(H.weekdayPlan);
   });
   it("adds the season and weather line only when the user mentions weather", () => {
     expect(c).not.toContain(H.season);
-    const rainy = compile(ctx(3, { history: [{ id: 2, who: "me", text: "it started raining here" }] })).system;
+    const rainy = compile(ctx(3, { history: [{ id: 2, who: "me", text: "it started raining here" }] })).volatile;
     expect(section(rainy, "RIGHT NOW")).toContain("The user mentioned the weather. Yours is Delhi's");
     expect(rainy).toContain(H.season);
     expect(rainy).toContain("never apply it to where they are");
   });
   it("the energy follows the presence", () => {
     const balcony = { ...H, block: { ...H.block, presence: "Balcony" } };
-    expect(section(compile(ctx(3, { heart: balcony })).system, "RIGHT NOW")).toContain("Energy: reflective and open");
+    expect(section(compile(ctx(3, { heart: balcony })).volatile, "RIGHT NOW")).toContain("Energy: reflective and open");
     const work = { ...H, block: { ...H.block, presence: "At work" } };
-    expect(section(compile(ctx(3, { heart: work })).system, "RIGHT NOW")).toContain("Energy: busy");
+    expect(section(compile(ctx(3, { heart: work })).volatile, "RIGHT NOW")).toContain("Energy: busy");
   });
 });
 
 describe("two labelled memory blocks", () => {
-  const c = compile(ctx(4, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], daySummaries: [{ key: "2026-05-10", summary: "Talked about a deadline." }] })).system;
+  const c = compile(ctx(4, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], daySummaries: [{ key: "2026-05-10", summary: "Talked about a deadline." }] })).volatile;
   const know = section(c, "WHAT YOU KNOW ABOUT THE USER (only these; never invent more)");
   const own = section(c, "YOUR OWN LIFE (never attribute any of this to the user)");
   it("has both blocks, labelled", () => {
@@ -289,12 +397,12 @@ describe("two labelled memory blocks", () => {
   it("her arc beat goes only in the second (a vague phrase before L3)", () => {
     expect(own).toContain(H.arcBeat);
     expect(know).not.toContain(H.arcBeat);
-    const early = compile(ctx(2)).system;
+    const early = compile(ctx(2)).volatile;
     expect(section(early, "YOUR OWN LIFE")).not.toContain(H.arcBeat);
     expect(section(early, "YOUR OWN LIFE")).toContain("taking up a lot of her attention");
   });
   it("says so when there is nothing to know yet", () => {
-    expect(section(compile(ctx(1, { userName: "" })).system, "WHAT YOU KNOW")).toContain("Nothing yet beyond this conversation.");
+    expect(section(compile(ctx(1, { userName: "" })).volatile, "WHAT YOU KNOW")).toContain("Nothing yet beyond this conversation.");
   });
 });
 
@@ -346,7 +454,7 @@ describe("playbook trimming", () => {
   it("an L3 prompt is much smaller than the untrimmed playbook would make it", () => {
     const l3 = compile(ctx(3, { history: [{ id: 2, who: "me", text: "rough day. everything went wrong at work" }] }));
     const chars = l3.system.length + l3.messages.reduce((n, m) => n + m.content.length, 0);
-    expect(chars).toBeLessThan(10500); // the three always-present rows, the warmth line and the emoji rule keep it near 2,500 input tokens (2,913 before the trim)
+    expect(chars).toBeLessThan(13500); // was 10500 before the ownership block (about 1,800 chars), the sample pairs as JSON and the context header; the three always-present rows, the warmth line and the emoji rule keep it near 2,500 input tokens (2,913 before the trim)
   });
 });
 
@@ -393,20 +501,21 @@ describe("B3: DeepSeek JSON mode, prefix cache order, emoji", () => {
     }
   });
 
-  it("the static block, output contract included, comes before every per-turn block", () => {
-    const s = compile(ctx(3)).system;
-    const contract = s.indexOf("OUTPUT CONTRACT");
-    expect(contract).toBeGreaterThan(s.indexOf("SITUATIONAL PLAYBOOK"));
-    for (const volatile of ["RIGHT NOW", "IF ASKED WHAT YOU'RE DOING", "WHAT YOU KNOW ABOUT THE USER", "YOUR OWN LIFE"]) {
-      expect(s.indexOf(volatile), volatile).toBeGreaterThan(contract);
+  it("the system message is the static block with the output contract last; every per-turn block is in the final user turn", () => {
+    const c = compile(ctx(3));
+    const contract = c.system.indexOf("OUTPUT CONTRACT");
+    expect(contract).toBeGreaterThan(c.system.indexOf("SITUATIONAL PLAYBOOK"));
+    const last = c.messages[c.messages.length - 1].content;
+    for (const v of ["RIGHT NOW", "YOUR DAY", "WHAT YOU KNOW ABOUT THE USER", "YOUR OWN LIFE"]) {
+      expect(c.system, v).not.toContain(`\n\n${v}`);
+      expect(last, v).toContain(v);
     }
   });
 
-  it("the static prefix is identical across turns at the same level, whatever the per-turn state", () => {
+  it("the system message is identical across turns at the same level, whatever the per-turn state", () => {
     const a = compile(ctx(3));
     const b = compile(ctx(3, { facts: [{ id: 1, category: "work", fact: "Works in marketing" }], userName: "Riya" }));
-    const stable = (c: ReturnType<typeof compile>) => c.system.slice(0, c.system.indexOf("RIGHT NOW"));
-    expect(stable(a)).toBe(stable(b));
+    expect(a.system).toBe(b.system);
   });
 
   it("tells the model reactions are normal and emoji are natural at every level, with romance gated by level", () => {

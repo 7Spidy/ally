@@ -9,6 +9,9 @@
  *   LLM_RESPONSE_FORMAT   json_object (default) | json_schema
  *   LLM_MAX_TOKENS_PARAM  max_tokens (default) | max_completion_tokens
  *   LLM_MAX_TOKENS        overrides the caller's cap
+ *   LLM_TEMPERATURE       overrides the live-chat temperature (default 1.0; DeepSeek
+ *                         recommends 1.3, unvalidated here); a positive number
+ *   LLM_VAULT_THINKING    disabled (default) | enabled, for the nightly fact extraction only
  * Env is read inside chat(), never at import time, so `next build` works
  * with no variables set. Logs model, token counts, latency and companion id;
  * never message text.
@@ -60,6 +63,13 @@ export class LlmError extends Error {
   }
 }
 
+/** The provider stopped the reply with finish_reason=content_filter and returned no content. Not retryable. */
+export class LlmContentFilter extends LlmError {
+  constructor() {
+    super("llm_content_filter", 200, false);
+  }
+}
+
 export type ResponseFormatMode = "json_schema" | "json_object" | "none";
 export type MaxTokensParam = "max_tokens" | "max_completion_tokens";
 
@@ -82,7 +92,7 @@ export function requestShape(): RequestShape {
 
 interface Completion {
   model?: string;
-  choices?: { message?: { content?: string | null } }[];
+  choices?: { message?: { content?: string | null }; finish_reason?: string | null }[];
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
@@ -148,6 +158,10 @@ async function once(args: ChatArgs): Promise<ChatResult> {
   }
 
   const json = (await res.json().catch(() => null)) as Completion | null;
+  if (json?.choices?.[0]?.finish_reason === "content_filter") {
+    console.warn(JSON.stringify({ evt: "llm.content_filter", companion: args.companionId ?? null }));
+    throw new LlmContentFilter();
+  }
   const content = json?.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new LlmError("llm_empty", res.status, false);
 

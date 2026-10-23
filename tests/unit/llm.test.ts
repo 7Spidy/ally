@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_BASE_URL, DEFAULT_MODEL, buildBody, chat, listModels, requestShape, LlmError } from "@/lib/llm/llm";
+import { DEFAULT_BASE_URL, DEFAULT_MODEL, buildBody, chat, listModels, requestShape, LlmContentFilter, LlmError } from "@/lib/llm/llm";
 
-const ENV_KEYS = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_RESPONSE_FORMAT", "LLM_MAX_TOKENS_PARAM", "LLM_MAX_TOKENS", "LLM_THINKING"];
+const ENV_KEYS = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_RESPONSE_FORMAT", "LLM_MAX_TOKENS_PARAM", "LLM_MAX_TOKENS", "LLM_THINKING", "LLM_TEMPERATURE", "LLM_VAULT_THINKING"];
 const saved: Record<string, string | undefined> = {};
 
 beforeEach(() => {
@@ -154,5 +154,27 @@ describe("success and models", () => {
     delete process.env.LLM_API_KEY;
     await expect(chat({ ...args })).rejects.toThrow("LLM_API_KEY is not set");
     await expect(listModels()).rejects.toThrow("LLM_API_KEY is not set");
+  });
+});
+
+describe("content filter", () => {
+  const body = (choice: Record<string, unknown>) => ({ model: "m", choices: [choice], usage: { prompt_tokens: 1, completion_tokens: 0 } });
+
+  it("finish_reason content_filter with null content throws LlmContentFilter and is not retried", async () => {
+    const seen: { url?: string; body?: Record<string, unknown> }[] = [];
+    const f = fakeFetch({ status: 200, body: body({ finish_reason: "content_filter", message: { content: null } }) }, seen);
+    const err = await chat({ ...args, fetchImpl: f }).catch((e) => e);
+    expect(err).toBeInstanceOf(LlmContentFilter);
+    expect(err).toBeInstanceOf(LlmError);
+    expect(err.retryable).toBe(false);
+    expect(seen).toHaveLength(1);
+  });
+
+  it("empty content with finish_reason stop is still llm_empty", async () => {
+    const f = fakeFetch({ status: 200, body: body({ finish_reason: "stop", message: { content: null } }) });
+    const err = await chat({ ...args, fetchImpl: f }).catch((e) => e);
+    expect(err).not.toBeInstanceOf(LlmContentFilter);
+    expect(err).toBeInstanceOf(LlmError);
+    expect(err.message).toBe("llm_empty");
   });
 });

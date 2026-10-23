@@ -52,7 +52,16 @@ async function attempt(label: string, model: string, shape: Partial<RequestShape
   }
   const json = JSON.parse(text) as { choices?: { message?: { content?: string }; finish_reason?: string }[]; usage?: Record<string, unknown> };
   const content = json.choices?.[0]?.message?.content ?? "";
-  console.log(`${label}: OK  finish=${json.choices?.[0]?.finish_reason}  usage=${JSON.stringify(json.usage)}\n  content: ${content.slice(0, 160).replace(/\s+/g, " ")}`);
+  let parses = "n/a";
+  if (shape.thinking === "enabled" && shape.responseFormat === "json_object") {
+    try {
+      JSON.parse(content);
+      parses = "yes";
+    } catch {
+      parses = "NO";
+    }
+  }
+  console.log(`${label}: OK  finish=${json.choices?.[0]?.finish_reason}  usage=${JSON.stringify(json.usage)}${parses === "n/a" ? "" : `  content parses as JSON: ${parses}`}\n  content: ${content.slice(0, 160).replace(/\s+/g, " ")}`);
   return { ok: true as const, status: 200, usage: json.usage };
 }
 
@@ -73,7 +82,7 @@ async function main() {
 
   const c = l3Prompt();
   const chars = c.system.length + c.messages.reduce((n, m) => n + m.content.length, 0);
-  console.log(`\nCompiled L3 prompt: ${c.system.length} system chars + ${chars - c.system.length} history chars = ${chars} chars (about ${Math.round(chars / 4)} tokens at 4 chars/token; the provider's own count follows below).`);
+  console.log(`\nCompiled L3 prompt: ${c.system.length} system chars + ${chars - c.system.length} history chars (volatile context included) = ${chars} chars (about ${Math.round(chars / 4)} tokens at 4 chars/token; the provider's own count follows below).`);
 
   const model = arg("model");
   if (!model) return;
@@ -84,6 +93,7 @@ async function main() {
     ["(b) + max_tokens", { maxTokensParam: "max_tokens", responseFormat: "none" }, false],
     ["(c) + json_object, schema described in the prompt, thinking disabled", { maxTokensParam: "max_tokens", responseFormat: "json_object", thinking: "disabled" }, true],
     ["(d) same, thinking enabled, cap raised to 2000 (reasoning tokens count toward it)", { maxTokensParam: "max_tokens", responseFormat: "json_object", thinking: "enabled", maxTokens: 2000 }, true],
+    ["(d2) vault probe: json_object + thinking enabled, cap 4000; check the content parses as JSON", { maxTokensParam: "max_tokens", responseFormat: "json_object", thinking: "enabled", maxTokens: 4000 }, true],
     ["(e) json_schema strict (not supported by DeepSeek; expect a 400)", { maxTokensParam: "max_tokens", responseFormat: "json_schema", thinking: "disabled" }, true],
   ];
   for (const [label, shape, withSchema] of steps) {

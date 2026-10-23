@@ -1,14 +1,16 @@
 /**
- * B2 prompt compiler (spec 4.4). One system message plus the last 30 turns.
+ * B2 prompt compiler (spec 4.4). One system message, sample exchanges, and a
+ * window of 21 to 30 turns.
  *
- * Section numbers follow the spec. The stable sections (1 to 4 and 6) and the
- * output contract (9, stable per level) come first and are byte-identical
- * across calls at the same level, so the provider's prefix cache hits; the
- * volatile ones (5, 7, 8) follow.
+ * The system message holds only the stable sections and the output contract,
+ * byte-identical across calls at the same level, so the provider's prefix
+ * cache hits. The volatile sections (RIGHT NOW, YOUR DAY, memory, her own
+ * life, modifiers) ride on the final user turn. The history window start moves
+ * in steps of WINDOW_STEP, so the cached prefix survives between shifts.
  */
 
 import { F01, paletteFor, type Persona } from "@/personas/persona";
-import { coreBlock, examplesBlock, faceBlock, levelBlock, memoryRule, playbookBlock, sensualBlock } from "@/personas/cores/romantic";
+import { coreBlock, examplePairs, examplesNote, faceBlock, levelBlock, memoryRule, ownershipBlock, playbookBlock, sensualBlock } from "@/personas/cores/romantic";
 import { EFFECT_MIN_LEVEL, type Effect } from "@/lib/llm/contract";
 import type { HeartNow, Milestone } from "@/lib/heart";
 
@@ -34,6 +36,8 @@ export interface CompileCtx {
   weekSummaries: { key: string; summary: string }[];
   daySummaries: { key: string; summary: string }[];
   history: CompileTurn[];
+  /** Absolute index of history[0] among all of the companion's messages (default 0). */
+  historyOffset?: number;
   coolOff: boolean;
   safetyMode: boolean;
   lowEffort: boolean;
@@ -46,11 +50,24 @@ export interface Compiled {
   system: string;
   /** Sections 1 to 4 and 6: identical for two calls at the same level. */
   stablePrefix: string;
+  /** The per-reply sections, appended to the final user turn. Never in `system`. */
+  volatile: string;
   messages: { role: "user" | "assistant"; content: string }[];
 }
 
 /** Appended to the final user turn of every request. */
 export const JSON_REMINDER = "(Reply with only the JSON object from the OUTPUT CONTRACT. No text outside it.)";
+
+export const WINDOW_MAX = 30;
+export const WINDOW_STEP = 10;
+
+/** Absolute index of the first message in the window, for `total` messages. Moves only every WINDOW_STEP messages. */
+export function windowStart(total: number): number {
+  return total <= WINDOW_MAX ? 0 : Math.ceil((total - WINDOW_MAX) / WINDOW_STEP) * WINDOW_STEP;
+}
+
+/** Between the examples and the real history. */
+export const SAMPLES_END = "(The samples end here. The real conversation starts now.)";
 
 const VAGUE_ARC = "Something at work has been taking up a lot of her attention lately.";
 
@@ -63,7 +80,7 @@ function productRules(level: number, p: Persona): string {
     `- ${sensualBlock(p, level)}`,
     "- Never promise a time-bound follow-up, guilt-trip, or give medical, legal or investment advice. Text only: you cannot meet, call, or handle money.",
     "- Never write message ids like [#12]. Never mention system mechanics (message numbers, turns, tokens, trust, levels); in-world phrasing is fine.",
-    "- Her own day: at most once per reply, only when relevant; never reuse a personal detail from the last 10 messages.",
+    "- Her own day: one concrete detail per reply at most, offered as a handle; never reuse a personal detail from the last 10 messages.",
     "- Never end a turn by leaving or turning away unless the user is signing off.",
     "- The mood sets tone, not topic; never quote a mood's sample line.",
     "- When the user shares distress or self-doubt, the first bubble is never sarcastic, and reassurance never opens with a bare \"you're not\" or \"you are\" that could read as agreeing with their self-criticism.",
@@ -103,9 +120,9 @@ function rightNow(ctx: CompileCtx): string {
   return lines.join("\n");
 }
 
-/** The concrete details, offered only when the user asks about her day. One current activity, not the scenery. */
-function ifAsked(ctx: CompileCtx): string {
-  return `IF ASKED WHAT YOU'RE DOING OR HOW YOUR DAY IS (draw from this only then; otherwise say nothing about your day)
+/** The concrete details: material for handles. One current activity, not the scenery. */
+function yourDay(ctx: CompileCtx): string {
+  return `YOUR DAY (material for handles. Use at most one concrete detail per reply. When the user asks about your day, answer from this first)
 Right now: ${ctx.heart.block.activity}`;
 }
 
@@ -131,7 +148,7 @@ function modifiers(ctx: CompileCtx): string {
   const m: string[] = [];
   if (ctx.coolOff) m.push("Cool-off: be shorter, not colder.");
   if (ctx.safetyMode) m.push("Safety mode: no flirting or romance today.");
-  if (ctx.lowEffort) m.push("The user has sent five one-word replies: match their energy, shorter.");
+  if (ctx.lowEffort) m.push("The user has sent five one-word replies: stay short, but lead. Bring one new thing from your day or ask one easy, specific question. Do not mirror their silence.");
   if (ctx.mode === "opener") {
     const pressure = ctx.pressure ? ` what weighs on them (${ctx.pressure})` : " what weighs on them";
     m.push(`This is your first message. L1. One bubble. Reference${pressure} without quoting it back.`);
@@ -156,19 +173,27 @@ export function compile(ctx: CompileCtx): Compiled {
   const p = ctx.persona ?? F01;
   const lvl = p.levels.find((l) => l.level === ctx.level) ?? p.levels[0];
 
-  const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), examplesBlock(ctx.level)].join("\n\n");
-  const volatile = [rightNow(ctx), ifAsked(ctx), knownAboutUser(ctx), ownLife(ctx), modifiers(ctx)].filter(Boolean);
-  const system = [stablePrefix, outputContract(ctx.level, p), ...volatile].join("\n\n");
+  const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), ownershipBlock(), examplesNote(ctx.level)].join("\n\n");
+  const system = [stablePrefix, outputContract(ctx.level, p)].join("\n\n");
+  const volatile = [rightNow(ctx), yourDay(ctx), knownAboutUser(ctx), ownLife(ctx), modifiers(ctx)].filter(Boolean).join("\n\n");
 
-  const messages: Compiled["messages"] = ctx.history.slice(-30).map((t) => ({
+  // Only user turns are quotable, so only they carry an id.
+  const offset = ctx.historyOffset ?? 0;
+  const windowed = ctx.history.slice(Math.max(0, windowStart(offset + ctx.history.length) - offset));
+  const real: Compiled["messages"] = windowed.map((t) => ({
     role: t.who === "me" ? "user" : "assistant",
-    content: `[#${t.id}] ${t.text}`,
+    content: t.who === "me" ? `[#${t.id}] ${t.text}` : t.text,
   }));
-  if (ctx.mode === "opener" || messages.length === 0 || messages[messages.length - 1].role !== "user") {
-    messages.push({ role: "user", content: "(The chat has just opened. Write your first message.)" });
+  if (ctx.mode === "opener" || real.length === 0 || real[real.length - 1].role !== "user") {
+    real.push({ role: "user", content: "(The chat has just opened. Write your first message.)" });
   }
+  // The samples end with an assistant turn, so a real history that starts with a user turn carries the separator itself.
+  if (real[0].role === "user") real[0] = { role: "user", content: `${SAMPLES_END}\n\n${real[0].content}` };
+  else real.unshift({ role: "user", content: SAMPLES_END });
+
   // DeepSeek's json_object mode is only a hint, and a history of plain-text turns pulls the model back to prose.
-  // A reminder on the last (user) turn, where it carries the most weight, keeps the reply in the JSON contract.
-  messages[messages.length - 1].content += `\n\n${JSON_REMINDER}`;
-  return { system, stablePrefix, messages };
+  // The per-reply context and a JSON reminder go on the last (user) turn, where they carry the most weight.
+  const last = real[real.length - 1];
+  last.content += `\n\n(Context for this reply. Not from the user. Never quote it.)\n${volatile}\n\n${JSON_REMINDER}`;
+  return { system, stablePrefix, volatile, messages: [...examplePairs(ctx.level), ...real] };
 }

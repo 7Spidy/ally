@@ -97,13 +97,13 @@ export async function POST(request: Request) {
 
   try {
     // Context
-    const { data: histDesc } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).order("id", { ascending: false }).limit(30);
+    const { data: histDesc } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).order("id", { ascending: false }).limit(40);
     const history = ((histDesc ?? []) as MsgRow[]).reverse();
     const messageAt = userMsg ? Date.parse(userMsg.created_at) : now;
     const today = dayKey(messageAt);
     const todayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
 
-    const [{ data: factRows }, { data: dayRows }, { data: weekRows }, { data: profile }, { data: tdRow }, { data: todayThem }, { data: pins }] = await Promise.all([
+    const [{ data: factRows }, { data: dayRows }, { data: weekRows }, { data: profile }, { data: tdRow }, { data: todayThem }, { data: pins }, { count: totalMsgs }] = await Promise.all([
       db.from("memory_facts").select("id,category,fact").eq("companion_id", c.id).eq("active", true).order("last_used_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).limit(40),
       db.from("memory_summaries").select("period_key,summary").eq("companion_id", c.id).eq("period", "day").neq("summary", "").order("period_key", { ascending: false }).limit(7),
       db.from("memory_summaries").select("period_key,summary").eq("companion_id", c.id).eq("period", "week").neq("summary", "").order("period_key", { ascending: false }).limit(4),
@@ -111,7 +111,10 @@ export async function POST(request: Request) {
       db.from("trust_days").select("msg_points,session_bonus,disclosure_count,vuln_bonus,user_msgs").eq("companion_id", c.id).eq("day", today).maybeSingle(),
       db.from("messages").select("meta").eq("companion_id", c.id).eq("who", "them").gte("created_at", todayStart),
       db.from("messages").select("id").eq("companion_id", c.id).eq("who", "them").eq("meta->>effect", "pin").gte("created_at", new Date(now - 30 * 86400000).toISOString()).limit(1),
+      db.from("messages").select("id", { count: "exact", head: true }).eq("companion_id", c.id),
     ]);
+    // compile() windows the 40 fetched rows in steps of 10, so it needs where they sit among all the messages.
+    const historyOffset = Math.max(0, (totalMsgs ?? history.length) - history.length);
 
     const level = c.trust_level;
     const createdAt = Date.parse(c.created_at);
@@ -139,6 +142,7 @@ export async function POST(request: Request) {
       weekSummaries: ((weekRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
       daySummaries: ((dayRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
       history: history.map((m) => ({ id: m.id, who: m.who, text: m.text })),
+      historyOffset,
       coolOff,
       safetyMode,
       lowEffort,
@@ -154,11 +158,20 @@ export async function POST(request: Request) {
     }
     const userMsgIds = lastMe.map((m) => m.id);
 
+    // Her bubbles just before the user's latest message, for lint rule e. Undefined when the user wrote twice in a row or this is the opener.
+    const at = userMsg ? history.findIndex((m) => m.id === userMsg.id) : -1;
+    const prevTexts: string[] = [];
+    for (let i = at - 1; i >= 0 && history[i].who === "them"; i--) prevTexts.unshift(history[i].text);
+    const prevReply = prevTexts.length ? prevTexts.join("\n") : undefined;
+
     // Model call, sanitize, voice lint and at most one regeneration.
     const reply = await runReply({
       compiled,
       companionId: c.id,
       userText: userMsg?.text ?? "",
+      prevReply,
+      quiet: coolOff || safetyMode,
+      seed: userMsg?.id,
       sanitizeCtx: {
         level,
         latestMeId: userMsg?.id ?? -1,

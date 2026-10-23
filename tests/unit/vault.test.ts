@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import {
   ACTIVE_FACT_CAP,
+  dailyPrompt,
   dedupeFactIds,
   endedDay,
   expiredSummaries,
@@ -11,6 +12,7 @@ import {
   runWeekly,
   shiftDay,
   weekKeyFor,
+  weeklyPrompt,
 } from "@/lib/vault";
 import type { ChatFn } from "@/lib/vault";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -262,5 +264,30 @@ describe("runWeekly", () => {
     const count = tables.memory_summaries.length;
     expect(await runWeekly(db, weekChat, weekNow)).toEqual({ processed: 0, remaining: 0 });
     expect(tables.memory_summaries).toHaveLength(count);
+  });
+});
+
+describe("nightly prompts and thinking", () => {
+  const saved = process.env.LLM_VAULT_THINKING;
+  afterEach(() => (saved === undefined ? delete process.env.LLM_VAULT_THINKING : (process.env.LLM_VAULT_THINKING = saved)));
+  const daily = () => dailyPrompt("2026-05-12", [{ who: "me", text: "hi" }], []);
+
+  it("daily thinking is off by default, with the original token cap", () => {
+    delete process.env.LLM_VAULT_THINKING;
+    expect(daily().shape).toEqual({ thinking: "disabled" });
+    expect(daily().maxTokens).toBe(700);
+  });
+  it("LLM_VAULT_THINKING=enabled turns it on and raises the cap for reasoning tokens", () => {
+    process.env.LLM_VAULT_THINKING = "enabled";
+    expect(daily().shape).toEqual({ thinking: "enabled" });
+    expect(daily().maxTokens).toBe(4000);
+    process.env.LLM_VAULT_THINKING = "bogus";
+    expect(daily().shape).toEqual({ thinking: "disabled" });
+  });
+  it("the weekly prompt is unchanged", () => {
+    process.env.LLM_VAULT_THINKING = "enabled";
+    const w = weeklyPrompt("2026-05-10", [{ period_key: "2026-05-10", summary: "x" }]);
+    expect(w.shape).toBeUndefined();
+    expect(w.maxTokens).toBe(500);
   });
 });

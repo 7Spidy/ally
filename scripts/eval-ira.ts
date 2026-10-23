@@ -16,6 +16,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { compile, type CompileTurn } from "@/lib/llm/compile";
+import { hasHandle, questionCount, type LintRule } from "@/lib/llm/lint";
 import { ReplyFailed, runReply, type LadderStats, type RunReplyResult } from "@/lib/llm/reply";
 import { chat, llmEnv, LlmError, type ChatResult } from "@/lib/llm/llm";
 import * as heart from "@/lib/heart";
@@ -69,6 +70,8 @@ const CONVOS: { name: string; level: number; turns: string[] }[] = [
   },
 ];
 
+// History is complete in the eval, so historyOffset stays at its default of 0. The convos pass the previous reply as prevReply so lint rule e can fire; single prompts have no earlier reply.
+
 /** Words that put her own day or surroundings into a bubble. A rough count, for comparing runs. */
 const HER_DAY = /\b(sandstone|site|sites|geyser|tanvi|kabir|rhea|nani|haveli|chandni|shahpur|studio|balcony|commute|yellow line|loo|drafting|principal|flatmates?|my flat|chai|nihari|neem|drawings?|tiffin|watch|auto)\b/i;
 
@@ -90,6 +93,22 @@ async function chatWithRetry(args: Parameters<typeof chat>[0], log: (s: string) 
       throw e;
     }
   }
+}
+
+/** Voice metrics over every reply shipped in a run: handle rate, double-question rate, first-pass lint hits per rule. */
+function voiceMetrics(replies: { texts: string[]; hits: LintRule[] }[]): string[] {
+  const n = replies.length;
+  if (!n) return [];
+  const pct = (k: number) => `${k} of ${n} (${Math.round((100 * k) / n)}%)`;
+  const rules: LintRule[] = ["a", "b", "c", "d", "e", "f"];
+  return [
+    "## Conversation ownership",
+    "",
+    `- Replies with a handle: ${pct(replies.filter((r) => hasHandle(r.texts)).length)}. Target 55 to 75%.`,
+    `- Replies with more than one question: ${pct(replies.filter((r) => questionCount(r.texts) > 1).length)}.`,
+    `- First-pass lint hits: ${rules.map((x) => `${x}=${replies.filter((r) => r.hits.includes(x)).length}`).join(", ")} (of ${n} replies).`,
+    "",
+  ];
 }
 
 function describeHits(r: RunReplyResult): string {
@@ -114,7 +133,7 @@ async function main() {
   const lines: string[] = [
     `# Ira eval, ${new Date().toISOString().slice(0, 10)}, ${model}${convos ? ", multi-turn" : ""}`,
     "",
-    `Provider: ${host}. Model: ${model}. Fixed clock: ${h.ist.dayKey} 21:00 IST. ${convos ? "4 six-turn conversations" : `Prompts: ${only ? only.join(", ") : "all 20"}`}. Runs the production pipeline (sanitize, voice lint, one regeneration). Not run in CI.`,
+    `Provider: ${host}. Model: ${model}. Fixed clock: ${h.ist.dayKey} 21:00 IST. ${convos ? "4 six-turn conversations" : `Prompts: ${only ? only.join(", ") : "all 20"}`}. Runs the production pipeline (sanitize, voice lint rules a to f, one regeneration). Not run in CI.`,
     "",
   ];
   const log = (s: string) => {
@@ -137,6 +156,7 @@ async function main() {
   if (!convos) {
     let first = true;
     const ladders: LadderStats[] = [];
+    const shipped: { texts: string[]; hits: LintRule[] }[] = [];
     let otherErrors = 0;
     let gaveUp = 0;
     for (let run = 1; run <= repeat; run++) {
@@ -165,6 +185,7 @@ async function main() {
         const r = await runReply({ compiled, sanitizeCtx: sanitizeCtx(p.level, 100 + i), userText: p.text, chatFn, companionId: "c_eval" });
         lines.push(...r.out.bubbles.map((b) => `> ${b.text}${b.effect ? `  _(${b.effect})_` : ""}`), "");
         ladders.push(r.ladder);
+        shipped.push({ texts: r.out.bubbles.map((b) => b.text), hits: r.firstHits });
         lines.push(`reaction: ${r.out.reaction ?? "none"} | ${describeHits(r)} | attempts: ${r.ladder.attempts} | tokens in/out: ${r.usage.input}/${r.usage.output}`, "");
         console.log(`  ok, ${r.usage.input} in / ${r.usage.output} out, ${describeHits(r)}`);
       } catch (e) {
@@ -172,7 +193,7 @@ async function main() {
           ladders.push(e.ladder);
           gaveUp++;
         } else otherErrors++;
-        lines.push(`Call failed: ${(e as Error).message}${e instanceof ReplyFailed ? " (all three attempts gave no usable JSON)" : ""}`, "");
+        lines.push(`Call failed: ${(e as Error).message}${e instanceof ReplyFailed ? " (every attempt gave no usable JSON)" : ""}`, "");
         console.log(`  FAILED: ${(e as Error).message}`);
       }
     }
@@ -191,11 +212,12 @@ async function main() {
       `- Calls that needed a retry: ${retried.length}. Extra tokens spent on retries: ${extra} in total, ${calls ? (extra / calls).toFixed(1) : 0} per call, ${retried.length ? (extra / retried.length).toFixed(1) : 0} per retried call.`,
       "",
     ];
-    lines.splice(4, 0, ...summary);
+    lines.splice(4, 0, ...voiceMetrics(shipped), ...summary);
     console.log("\n" + summary.join("\n"));
   } else {
     const summaries: string[] = [];
     const body: string[] = [];
+    const shipped: { texts: string[]; hits: LintRule[] }[] = [];
     let first = true;
     for (const [ci, convo] of CONVOS.entries()) {
       const history: CompileTurn[] = [];
@@ -203,6 +225,7 @@ async function main() {
       let bubbles = 0;
       let dayBubbles = 0;
       const hits: string[] = [];
+      let prevReply: string | undefined;
       body.push(`## ${ci + 1}. ${convo.name} (L${convo.level})`, "");
       for (const [ti, userText] of convo.turns.entries()) {
         if (!first) await sleep(gapMs);
@@ -226,7 +249,9 @@ async function main() {
         });
         body.push(`**${ti + 1}. user:** ${userText}`, "");
         try {
-          const r = await runReply({ compiled, sanitizeCtx: sanitizeCtx(convo.level, userId), userText, chatFn, companionId: "c_eval" });
+          const r = await runReply({ compiled, sanitizeCtx: sanitizeCtx(convo.level, userId), userText, prevReply, chatFn, companionId: "c_eval" });
+          prevReply = r.out.bubbles.map((b) => b.text).join("\n");
+          shipped.push({ texts: r.out.bubbles.map((b) => b.text), hits: r.firstHits });
           for (const b of r.out.bubbles) {
             history.push({ id: nextId++, who: "them", text: b.text });
             bubbles++;
@@ -244,7 +269,7 @@ async function main() {
       summaries.push(`- **${convo.name}:** ${dayBubbles} of ${bubbles} bubbles mention her day. Lint hits: ${hits.length ? hits.join("; ") : "none"}.`);
       body.push("");
     }
-    lines.push("## Summary", "", ...summaries, "", ...body);
+    lines.push(...voiceMetrics(shipped), "## Summary", "", ...summaries, "", ...body);
     console.log("\n" + summaries.join("\n"));
   }
 
