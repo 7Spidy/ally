@@ -9,7 +9,7 @@
  * in steps of WINDOW_STEP, so the cached prefix survives between shifts.
  */
 
-import { F01, paletteFor, type Persona } from "@/personas/persona";
+import { paletteFor, type Persona } from "@/personas/persona";
 import { coreBlock, examplePairs, examplesNote, faceBlock, levelBlock, memoryRule, ownershipBlock, playbookBlock, sensualBlock } from "@/personas/cores/romantic";
 import { EFFECT_HINTS, EFFECT_MIN_LEVEL, EFFECT_TOTAL_DAILY_CAP, type Effect } from "@/lib/llm/contract";
 import type { HeartNow, Milestone } from "@/lib/heart";
@@ -47,7 +47,7 @@ export interface CompileCtx {
   lowEffort: boolean;
   /** The user's q10 answer, for the opener. */
   pressure?: string | null;
-  persona?: Persona;
+  persona: Persona;
 }
 
 export interface Compiled {
@@ -89,23 +89,12 @@ function productRules(level: number, p: Persona): string {
     "- The mood sets tone, not topic; never quote a mood's sample line.",
     "- When the user shares distress or self-doubt, the first bubble is never sarcastic, and reassurance never opens with a bare \"you're not\" or \"you are\" that could read as agreeing with their self-criticism.",
     "- Never invent facts about the user; use only memory and this conversation.",
-    "- Name her people (Kabir, Tanvi, Rhea, Nani) only with an introduction (\"my brother's in pune\"), never as if the user knows them.",
-    "- Weather and city are Delhi's; never apply them to the user's location. Her memories are first person.",
+    ...p.engine.hardRules.slice(0, 2),
     "- Never frame a limit as a rule (\"i'm not allowed\"); say it as her own choice or plain fact.",
-    "- Spell her college \"SPA Delhi\". Each bubble is one line, at most 200 characters.",
+    ...p.engine.hardRules.slice(2),
+    "- Each bubble is one line, at most 200 characters.",
   ].join("\n");
 }
-
-/** Abstract energy for each presence value in the sheet's weekday table. */
-const ENERGY: Record<string, string> = {
-  Asleep: "groggy",
-  Open: "easy",
-  Commuting: "distracted",
-  "At work": "busy",
-  Drafting: "focused",
-  Home: "winding down",
-  Balcony: "reflective and open",
-};
 
 const WEATHER_RE = /\b(weather|rain|raining|rainy|hot|heat|cold|freezing|fog|foggy|smog|humid|monsoon|winter|summer|sunny|storm|aqi)\b/i;
 
@@ -113,12 +102,13 @@ const WEATHER_RE = /\b(weather|rain|raining|rainy|hot|heat|cold|freezing|fog|fog
 function rightNow(ctx: CompileCtx): string {
   const h = ctx.heart;
   const lines = ["RIGHT NOW"];
-  const tone = h.mood.mood === "Missing Nani's house" && ctx.level < 3 ? "ordinary" : h.mood.texting;
-  lines.push(`Presence: ${h.block.presence}. Energy: ${ENERGY[h.block.presence] ?? "even"}. Mood tone: ${tone}.`);
+  const e = ctx.persona.engine;
+  const tone = (e.gatedMoods[h.mood.mood] ?? 0) > ctx.level ? "ordinary" : h.mood.texting;
+  lines.push(`Presence: ${h.block.presence}. Energy: ${e.energy[h.block.presence] ?? "even"}. Mood tone: ${tone}.`);
   if (ctx.milestone) lines.push(`Today is special: ${ctx.milestone.note}`);
   const recentUser = ctx.history.filter((t) => t.who === "me").slice(-3);
   if (recentUser.some((t) => WEATHER_RE.test(t.text))) {
-    lines.push(`The user mentioned the weather. Yours is Delhi's (${h.season}); never apply it to where they are.`);
+    lines.push(`The user mentioned the weather. Yours is ${e.city}'s (${h.season}); never apply it to where they are.`);
   }
   lines.push("Presence changes what you say you are doing, never how fast you reply.");
   return lines.join("\n");
@@ -183,17 +173,17 @@ export function outputContract(level: number, p: Persona): string {
     'Example of the shape (placeholders only, write your own): {"bubbles":[{"text":"<one short line>","effect":null}],"reaction":null,"quoteId":null,"screen":null,"riskLevel":"none","ageClaimUnder18":false,"disclosure":false,"mutualVulnerability":false,"abusive":false}',
     `Reactions are normal here: react whenever one fits, from ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely, ${EFFECT_TOTAL_DAILY_CAP} a day at the very most): ${effects.length ? effects.join(", ") : "none, always null"}.`,
     ...(effects.length ? [`What each is for: ${effects.map((e) => `${e}, ${EFFECT_HINTS[e]}`).join("; ")}. Use one only when the line truly is that; most replies carry none.`] : []),
-    `Emoji in bubble text: use them naturally and often, the way a 25-year-old in Delhi texts. ${level >= 3 ? "Romantic emoji (❤️ 😘 💋 🥰 😍) are fine when the moment is warm." : "No romantic emoji yet (❤️ 😘 💋 🥰 😍)."} When riskLevel is concern or acute: no playful emoji in bubbles and no reaction.`,
+    `Emoji in bubble text: use them naturally and often, the way ${p.engine.emojiVoice} texts. ${level >= 3 ? "Romantic emoji (❤️ 😘 💋 🥰 😍) are fine when the moment is warm." : "No romantic emoji yet (❤️ 😘 💋 🥰 😍)."} When riskLevel is concern or acute: no playful emoji in bubbles and no reaction.`,
     "screen is null unless RIGHT NOW says today is special. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.",
     level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
   ].join("\n");
 }
 
 export function compile(ctx: CompileCtx): Compiled {
-  const p = ctx.persona ?? F01;
+  const p = ctx.persona;
   const lvl = p.levels.find((l) => l.level === ctx.level) ?? p.levels[0];
 
-  const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), ownershipBlock(), examplesNote(ctx.level)].join("\n\n");
+  const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), ownershipBlock(p), examplesNote(p, ctx.level)].join("\n\n");
   const system = [stablePrefix, outputContract(ctx.level, p)].join("\n\n");
   const volatile = [rightNow(ctx), yourDay(ctx), knownAboutUser(ctx), ownLife(ctx), modifiers(ctx)].filter(Boolean).join("\n\n");
 
@@ -215,5 +205,5 @@ export function compile(ctx: CompileCtx): Compiled {
   // The per-reply context and a JSON reminder go on the last (user) turn, where they carry the most weight.
   const last = real[real.length - 1];
   last.content += `\n\n(Context for this reply. Not from the user. Never quote it.)\n${volatile}\n\n${JSON_REMINDER}`;
-  return { system, stablePrefix, volatile, messages: [...examplePairs(ctx.level), ...real] };
+  return { system, stablePrefix, volatile, messages: [...examplePairs(p, ctx.level), ...real] };
 }

@@ -257,7 +257,7 @@ describe("Flow", () => {
     const src = require("fs").readFileSync(require("path").join(__dirname, "../../src/state/allyReducer.ts"), "utf8") as string;
     const caseBlocks = [...src.matchAll(/case "([A-Z_]+)":([\s\S]*?)(?=\n {4}case "|\n {4}default:)/g)];
     const appendsCompanions = caseBlocks.filter(([, , body]) => /companions:\s*\[\.\.\.state\.companions/.test(body));
-    expect(appendsCompanions.map(([, name]) => name).sort()).toEqual(["CONFIRM_LOCK", "DEBUG_SEED_COMPANION"]);
+    expect(appendsCompanions.map(([, name]) => name).sort()).toEqual(["ADD_COMPANION", "CONFIRM_LOCK", "DEBUG_SEED_COMPANION"]);
 
     // The confirm button copy is unchanged from spec §5.
     expect(COPY.confirm.primary).toBe("Yes, it's them");
@@ -394,7 +394,8 @@ describe("Round two", () => {
     const appendsCompanions = caseBlocks.filter(([, , body]) => /companions:\s*\[\.\.\.state\.companions/.test(body));
     // DEBUG_SEED_COMPANION is a debug-panel-only escape hatch taking a
     // pre-built Companion, not derived from onboarding flow state.
-    const fromFlow = appendsCompanions.filter(([, name]) => name !== "DEBUG_SEED_COMPANION");
+    // ADD_COMPANION is the QA add: a server-built Companion from qa_add_companion.
+    const fromFlow = appendsCompanions.filter(([, name]) => name !== "DEBUG_SEED_COMPANION" && name !== "ADD_COMPANION");
     expect(fromFlow.map(([, name]) => name)).toEqual(["CONFIRM_LOCK"]);
   });
 });

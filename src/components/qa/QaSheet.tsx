@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { F01, paletteFor } from "@/personas/persona";
+import { useRouter } from "next/navigation";
+import { paletteFor, type Persona } from "@/personas/persona";
+import { LIVE_TEMPLATES, personaFor } from "@/personas/registry";
 import { EFFECT_MIN_LEVEL } from "@/lib/llm/contract";
-import { qaRefillMessages, qaResetChat, qaSetFreeze, qaSetLevel, qaState, type QaState } from "@/lib/supabase/queries";
-import type { Ledger } from "@/state/schema";
+import { qaAddCompanion, qaRefillMessages, qaResetChat, qaSetFreeze, qaSetLevel, qaState, type QaState } from "@/lib/supabase/queries";
+import type { Companion, Ledger } from "@/state/schema";
 import { BUBBLE_EFFECTS, SCREEN_EFFECTS, uniqueReactions, type BubbleEffect } from "./qaPreview";
 import sheet from "@/components/Sheet.module.css";
 import styles from "./QaSheet.module.css";
@@ -30,6 +32,8 @@ export interface QaPreviewRequest {
  */
 export function QaSheet({
   companionId,
+  persona,
+  activeCompanions,
   level,
   admin,
   ignoreCaps,
@@ -39,10 +43,14 @@ export function QaSheet({
   onPreview,
   onLevel,
   onLedger,
+  onAdded,
   onClose,
   onToast,
 }: {
   companionId: string;
+  persona: Persona;
+  /** The caller's active companions, to know which test companions they already have. */
+  activeCompanions: { id: string; templateId: string }[];
   level: number;
   admin: boolean;
   ignoreCaps: boolean;
@@ -52,9 +60,11 @@ export function QaSheet({
   onPreview: (p: QaPreviewRequest) => void;
   onLevel: (trustLevel: number, levelChangedAt: number) => void;
   onLedger: (l: Ledger) => void;
+  onAdded: (c: Companion) => void;
   onClose: () => void;
   onToast: (m: string) => void;
 }) {
+  const router = useRouter();
   const [mode, setMode] = useState<"preview" | "force">("preview");
   const [state, setState] = useState<QaState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,7 +95,7 @@ export function QaSheet({
     try {
       const r = await qaSetLevel(companionId, n);
       onLevel(r.trustLevel, r.levelChangedAt);
-      onToast(`Level ${n}: ${F01.levels[n - 1].name}`);
+      onToast(`Level ${n}: ${persona.levels[n - 1].name}`);
       refresh();
     } catch {
       onToast("Couldn't set the level.");
@@ -102,6 +112,22 @@ export function QaSheet({
       setState({ ...state, frozen: r.frozen });
     } catch {
       onToast("Couldn't change the freeze.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addTest(templateId: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const c = await qaAddCompanion(templateId);
+      onAdded(c);
+      onToast(`${personaFor(templateId).name.split(" ")[0]} added.`);
+      onClose();
+      router.push(`/chat/${c.id}`);
+    } catch {
+      onToast("Couldn't add the test companion.");
     } finally {
       setBusy(false);
     }
@@ -160,7 +186,7 @@ export function QaSheet({
           <section className={styles.section}>
             <div className={styles.labelRow}>
               <span className={styles.label}>Trust level</span>
-              <span className={styles.value}>{F01.levels[Math.min(5, Math.max(0, level - 1))].name}</span>
+              <span className={styles.value}>{persona.levels[Math.min(5, Math.max(0, level - 1))].name}</span>
             </div>
             <div className={styles.levels} role="radiogroup" aria-label="Trust level">
               {[1, 2, 3, 4, 5, 6].map((n) => (
@@ -200,7 +226,7 @@ export function QaSheet({
                 </button>
               </div>
             </div>
-            <p className={styles.hint}>{mode === "preview" ? "Tap one to see it in the chat. No message is sent." : "Tap to force onto Ira's next real reply, whatever the level or caps."}</p>
+            <p className={styles.hint}>{mode === "preview" ? "Tap one to see it in the chat. No message is sent." : "Tap to force onto the next real reply, whatever the level or caps."}</p>
 
             <p className={styles.group}>Bubbles</p>
             <div className={styles.chips}>
@@ -221,7 +247,7 @@ export function QaSheet({
             </div>
             <p className={styles.group}>Reactions at this level</p>
             <div className={styles.chips}>
-              {uniqueReactions(paletteFor(level, F01)).map((r) => (
+              {uniqueReactions(paletteFor(level, persona)).map((r) => (
                 <button key={r} type="button" className={`${styles.chip} ${styles.emoji} ${forced("reaction", r) ? styles.chipOn : ""}`} onClick={() => chip("reaction", r)} aria-label={`Reaction ${r}`}>
                   {r}
                 </button>
@@ -255,6 +281,25 @@ export function QaSheet({
                 <dd>{state.coolOff ? "cool-off" : "no"} / {state.safetyMode ? "safety" : "no"}</dd>
               </dl>
             )}
+          </section>
+
+          <section className={styles.section}>
+            <span className={styles.label}>Test companions</span>
+            <div className={styles.chips}>
+              {Object.keys(LIVE_TEMPLATES).map((t) => {
+                const have = activeCompanions.find((c) => c.templateId === t);
+                const first = personaFor(t).name.split(" ")[0];
+                return have ? (
+                  <Link key={t} href={`/chat/${have.id}`} className={styles.chip} onClick={onClose} data-testid={`qa-open-${t}`}>
+                    Open {first}
+                  </Link>
+                ) : (
+                  <button key={t} type="button" className={styles.chip} disabled={busy} onClick={() => void addTest(t)} data-testid={`qa-add-${t}`}>
+                    Add {first} ({t})
+                  </button>
+                );
+              })}
+            </div>
           </section>
 
           <section className={styles.actions}>

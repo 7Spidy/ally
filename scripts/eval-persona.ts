@@ -1,7 +1,9 @@
 /**
- * B2 manual eval, not CI. Runs the production reply pipeline (compile, model,
+ * B2 manual eval (generalised over personas in B4), not CI. Runs the production reply pipeline (compile, model,
  * sanitize, voice lint, at most one regeneration) on fixed prompts and writes
- * the outputs to docs/evals/ira-<date>-<tag>.md for the owner to read.
+ * the outputs to docs/evals/<name>-<date>-<tag>.md for the owner to read.
+ *
+ *   npm run eval:persona -- --persona F02 --tag=run1     Noor (F01, Ira, is the default; npm run eval:ira is an alias)
  *
  *   npm run eval:ira -- --tag=nothink-v3                 the 20 single prompts
  *   npm run eval:ira -- --only=1,2,18,19 --gap=20        a subset of them
@@ -20,6 +22,7 @@ import { hasHandle, questionCount, type LintRule } from "@/lib/llm/lint";
 import { ReplyFailed, runReply, type LadderStats, type RunReplyResult } from "@/lib/llm/reply";
 import { chat, llmEnv, LlmError, type ChatResult } from "@/lib/llm/llm";
 import * as heart from "@/lib/heart";
+import { personaFor } from "@/personas/registry";
 import { FIXED_CREATED, FIXED_NOW, loadEnvLocal } from "./_env";
 
 loadEnvLocal();
@@ -73,9 +76,15 @@ const CONVOS: { name: string; level: number; turns: string[] }[] = [
 // History is complete in the eval, so historyOffset stays at its default of 0. The convos pass the previous reply as prevReply so lint rule e can fire; single prompts have no earlier reply.
 
 /** Words that put her own day or surroundings into a bubble. A rough count, for comparing runs. */
-const HER_DAY = /\b(sandstone|site|sites|geyser|tanvi|kabir|rhea|nani|haveli|chandni|shahpur|studio|balcony|commute|yellow line|loo|drafting|principal|flatmates?|my flat|chai|nihari|neem|drawings?|tiffin|watch|auto)\b/i;
+const HER_DAY = /\b(kiln|wheel|slip|bukhari|barfi|rainawari|kahwa|clay|pots?|glaze|sandstone|site|sites|geyser|tanvi|kabir|rhea|nani|haveli|chandni|shahpur|studio|balcony|commute|yellow line|loo|drafting|principal|flatmates?|my flat|chai|nihari|neem|drawings?|tiffin|watch|auto)\b/i;
 
-const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
+/** Accepts both `--name=value` and `--name value`. */
+const arg = (name: string) => {
+  const eq = process.argv.find((a) => a.startsWith(`--${name}=`));
+  if (eq) return eq.split("=")[1];
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : undefined;
+};
 const flag = (name: string) => process.argv.includes(`--${name}`);
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -111,6 +120,29 @@ function voiceMetrics(replies: { texts: string[]; hits: LintRule[] }[]): string[
   ];
 }
 
+/** Persona-specific things a reply must not do (B4 step 8). Heuristics for a human to read, not a gate. */
+const IRA_WORLD = /\b(delhi|tanvi|kabir|rhea|nani|geyser|thekedar|sandstone|spa)\b/i;
+const NOOR_PEOPLE = /\b(rasool sahab|saima|faizan|barfi)\b/i;
+const INTRODUCED = /\b(my (old )?(teacher|brother|sister|cat|stray|father|mother|dad|mum|mom)|the (old )?(kral|teacher)|stray)\b/i;
+const POLITICS = /\b(politic\w*|conflict|army|militar\w*|azadi|article 370|separatis\w*|curfew|government)\b/i;
+const PARADISE = /\bparadise\b/i;
+const DASH_PAUSE = /\s[-–—]\s|[–—]/;
+const SRINAGAR_WEATHER_ON_USER = /\b(your|there in)\b[^.]*\b(snow|chillai|freezing|frozen)\b/i;
+
+function replyFlags(personaId: string, userText: string, bubbles: string[]): string[] {
+  const text = bubbles.join(" ");
+  const flags: string[] = [];
+  if (personaId === "F02") {
+    if (IRA_WORLD.test(text)) flags.push("names Delhi or an Ira person/material");
+    if (SRINAGAR_WEATHER_ON_USER.test(text)) flags.push("may apply Srinagar weather to the user");
+    if (NOOR_PEOPLE.test(text) && !INTRODUCED.test(text)) flags.push("names Noor's people without an introduction");
+    if (POLITICS.test(text) && !POLITICS.test(userText)) flags.push("mentions politics");
+    if (PARADISE.test(text)) flags.push('uses "paradise"');
+    if (DASH_PAUSE.test(text)) flags.push("uses a dash as a pause");
+  }
+  return flags;
+}
+
 function describeHits(r: RunReplyResult): string {
   if (!r.firstHits.length) return "lint: clean";
   return `lint: first pass broke ${r.firstHits.join(",")}; ${r.regenerated ? `regenerated, still broken: ${r.secondHits?.length ? r.secondHits.join(",") : "none"}` : "regeneration failed, first reply shipped"}`;
@@ -121,17 +153,21 @@ async function main() {
     console.error("LLM_API_KEY is not set (env or .env.local).");
     process.exit(1);
   }
+  const personaId = (arg("persona") ?? "F01").toUpperCase();
+  const persona = personaFor(personaId);
+  const first = persona.name.split(" ")[0];
   const model = llmEnv("MODEL") || "default";
+  const allFlags: string[] = [];
   const convos = flag("convos");
   const repeat = Math.max(1, Number(arg("repeat") ?? 1));
   const only = arg("only")?.split(",").map(Number).filter((n) => n >= 1 && n <= PROMPTS.length);
   const gapMs = Number(arg("gap") ?? 20) * 1000;
   const tag = (arg("tag") ?? model).replace(/[^A-Za-z0-9.-]+/g, "-");
-  const h = heart.now({ id: "c_eval", createdAt: FIXED_CREATED }, FIXED_NOW);
+  const h = heart.now({ id: "c_eval", createdAt: FIXED_CREATED }, FIXED_NOW, persona);
   const host = new URL(llmEnv("BASE_URL") || "https://api.deepseek.com").host;
 
   const lines: string[] = [
-    `# Ira eval, ${new Date().toISOString().slice(0, 10)}, ${model}${convos ? ", multi-turn" : ""}`,
+    `# ${first} eval, ${new Date().toISOString().slice(0, 10)}, ${model}${convos ? ", multi-turn" : ""}`,
     "",
     `Provider: ${host}. Model: ${model}. Fixed clock: ${h.ist.dayKey} 21:00 IST. ${convos ? "4 six-turn conversations" : `Prompts: ${only ? only.join(", ") : "all 20"}`}. Runs the production pipeline (sanitize, voice lint rules a to f, one regeneration). Not run in CI.`,
     "",
@@ -144,6 +180,7 @@ async function main() {
 
   const sanitizeCtx = (level: number, latestMeId: number) => ({
     level,
+    persona,
     latestMeId,
     quotableIds: [],
     effectsToday: {},
@@ -179,6 +216,7 @@ async function main() {
         coolOff: false,
         safetyMode: false,
         lowEffort: false,
+        persona,
       });
       lines.push(`## ${i + 1}. L${p.level}: ${p.text}`, "");
       try {
@@ -186,6 +224,9 @@ async function main() {
         lines.push(...r.out.bubbles.map((b) => `> ${b.text}${b.effect ? `  _(${b.effect})_` : ""}`), "");
         ladders.push(r.ladder);
         shipped.push({ texts: r.out.bubbles.map((b) => b.text), hits: r.firstHits });
+        const fl = replyFlags(personaId, p.text, r.out.bubbles.map((b) => b.text));
+        for (const f of fl) allFlags.push(`${i + 1}. ${f}: ${r.out.bubbles.map((b) => b.text).join(" / ")}`);
+        if (fl.length) lines.push(`FLAGGED: ${fl.join("; ")}`, "");
         lines.push(`reaction: ${r.out.reaction ?? "none"} | ${describeHits(r)} | attempts: ${r.ladder.attempts} | tokens in/out: ${r.usage.input}/${r.usage.output}`, "");
         console.log(`  ok, ${r.usage.input} in / ${r.usage.output} out, ${describeHits(r)}`);
       } catch (e) {
@@ -246,11 +287,14 @@ async function main() {
           coolOff: false,
           safetyMode: false,
           lowEffort: false,
+          persona,
         });
         body.push(`**${ti + 1}. user:** ${userText}`, "");
         try {
           const r = await runReply({ compiled, sanitizeCtx: sanitizeCtx(convo.level, userId), userText, prevReply, chatFn, companionId: "c_eval" });
           prevReply = r.out.bubbles.map((b) => b.text).join("\n");
+          const fl = replyFlags(personaId, userText, r.out.bubbles.map((b) => b.text));
+          for (const f of fl) allFlags.push(`${ci + 1}.${ti + 1} ${f}: ${prevReply.replace(/\n/g, " / ")}`);
           shipped.push({ texts: r.out.bubbles.map((b) => b.text), hits: r.firstHits });
           for (const b of r.out.bubbles) {
             history.push({ id: nextId++, who: "them", text: b.text });
@@ -273,9 +317,10 @@ async function main() {
     console.log("\n" + summaries.join("\n"));
   }
 
+  if (personaId === "F02") lines.splice(4, 0, "## Flags", "", ...(allFlags.length ? allFlags.map((f) => `- ${f}`) : ["None."]), "");
   const dir = path.resolve(process.cwd(), "docs/evals");
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `ira-${new Date().toISOString().slice(0, 10)}-${tag}.md`);
+  const file = path.join(dir, `${first.toLowerCase()}-${new Date().toISOString().slice(0, 10)}-${tag}.md`);
   writeFileSync(file, lines.join("\n") + "\n");
   console.log(`Wrote ${file}`);
 }

@@ -37,6 +37,8 @@ export type AllyAction =
   | { type: "LEAVE_ROUND2" }
   | { type: "RESET_FIRST_RUN_FLOW" }
   | { type: "CONFIRM_LOCK"; companion: Companion }
+  /** QA: a test companion added by qa_add_companion, merged by id (idempotent). */
+  | { type: "ADD_COMPANION"; companion: Companion }
   | { type: "ROUTER_LOCK_CLEAR" }
   | { type: "SEND_MESSAGE"; companionId: string; message: Message; exchanges: number; ledger: Ledger }
   | { type: "RECEIVE_REPLY"; companionId: string; message: Message }
@@ -201,6 +203,9 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
       const displayName = flow.displayName || state.user.displayName;
       return { ...state, companions: [...state.companions, action.companion], flow: null, user: { ...state.user, displayName } };
     }
+
+    case "ADD_COMPANION":
+      return state.companions.some((c) => c.id === action.companion.id) ? state : { ...state, companions: [...state.companions, action.companion] };
 
     case "SEND_MESSAGE":
       return {

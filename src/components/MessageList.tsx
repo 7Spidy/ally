@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Message } from "@/state/schema";
-import { COPY } from "@/lib/copy";
+import { COPY, fill } from "@/lib/copy";
 import { isFresh, receiptFor } from "@/lib/chatActions";
 import { Bubble, type BubbleQuote } from "@/components/chat/Bubble";
 import { TypingDots } from "@/components/chat/TypingDots";
@@ -41,7 +41,7 @@ export function MessageList({
   personaName?: string;
   /** System cards (not bubbles), such as the resource card, shown after the last message. */
   footer?: React.ReactNode;
-  /** Set when the last reply failed: shows "Couldn't reach Ira. Tap to retry." */
+  /** Set when the last reply failed: shows "Couldn't reach {persona}. Tap to retry." */
   onRetry?: (() => void) | null;
   onOpenActions?: (m: Message) => void;
   onReply?: (m: Message) => void;
@@ -99,7 +99,7 @@ export function MessageList({
               onReply={(x) => onReply?.(x)}
               onJump={jump}
             />
-            {m.meta?.effect === "pin" && m.who === "them" && !m.deleted && <span className={styles.pinned}>{COPY.chat.pinned}</span>}
+            {m.meta?.effect === "pin" && m.who === "them" && !m.deleted && <span className={styles.pinned}>{fill(COPY.chat.pinned, { persona: personaName ?? "" })}</span>}
             {receipt?.index === i && (
               <span className={styles.receipt} data-testid="receipt">
                 {receipt.status === "read" ? COPY.chat.read : COPY.chat.delivered}
@@ -112,7 +112,7 @@ export function MessageList({
       {footer}
       {onRetry && (
         <button type="button" className={styles.retry} onClick={onRetry}>
-          {COPY.chat.retry}
+          {fill(COPY.chat.retry, { persona: personaName ?? "" })}
         </button>
       )}
       <div ref={endRef} />

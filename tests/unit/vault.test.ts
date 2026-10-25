@@ -285,7 +285,7 @@ describe("runWeekly", () => {
 describe("nightly prompts and thinking", () => {
   const saved = process.env.LLM_VAULT_THINKING;
   afterEach(() => (saved === undefined ? delete process.env.LLM_VAULT_THINKING : (process.env.LLM_VAULT_THINKING = saved)));
-  const daily = () => dailyPrompt("2026-05-12", [{ who: "me", text: "hi" }], []);
+  const daily = () => dailyPrompt("Ira", "2026-05-12", [{ who: "me", text: "hi" }], []);
 
   it("daily thinking is off by default, with the original token cap", () => {
     delete process.env.LLM_VAULT_THINKING;
@@ -301,7 +301,7 @@ describe("nightly prompts and thinking", () => {
   });
   it("the weekly prompt is unchanged", () => {
     process.env.LLM_VAULT_THINKING = "enabled";
-    const w = weeklyPrompt("2026-05-10", [{ period_key: "2026-05-10", summary: "x" }]);
+    const w = weeklyPrompt("Ira", "2026-05-10", [{ period_key: "2026-05-10", summary: "x" }]);
     expect(w.shape).toBeUndefined();
     expect(w.maxTokens).toBe(500);
   });

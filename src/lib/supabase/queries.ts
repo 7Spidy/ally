@@ -212,6 +212,12 @@ export function qaState(companionId: string): Promise<QaState> {
   return call("qa_state", { companion_id: companionId });
 }
 
+/** QA: adds a live test companion (F01 or F02) to the caller's own account, or returns the one already active. */
+export async function qaAddCompanion(templateId: string): Promise<Companion> {
+  const c = await call<Companion>("qa_add_companion", { template_id: templateId });
+  return { ...c, messages: c.messages ?? [] };
+}
+
 export function qaRefillMessages(): Promise<{ ledger: Ledger }> {
   return call("qa_refill_messages");
 }

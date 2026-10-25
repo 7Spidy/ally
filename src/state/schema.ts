@@ -67,6 +67,8 @@ export interface Companion {
   levelChangedAt?: number | null;
   pausedReason?: "age_check" | null;
   lastCtxDay?: string | null;
+  /** Server-computed: this companion replies from the live model (see ally_private.is_live). */
+  live?: boolean;
 }
 
 export interface LedgerUnlock {

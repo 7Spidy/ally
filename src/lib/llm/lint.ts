@@ -10,18 +10,18 @@ import type { LiveOut } from "@/lib/llm/contract";
 export type LintRule = "a" | "b" | "c" | "d" | "e" | "f";
 
 export interface LintOpts {
-  /** The previous Ira reply (its bubbles joined with newlines). Undefined skips rule e. */
+  /** The previous companion reply (its bubbles joined with newlines). Undefined skips rule e. */
   prevReply?: string;
   /** Cool-off or safety mode: no handle is asked for. */
   quiet?: boolean;
 }
 
 /** Her people, who may be named only with an introduction. */
-export const PEOPLE = ["Kabir", "Tanvi", "Rhea", "Nani"];
+export const PEOPLE = ["Kabir", "Tanvi", "Rhea", "Nani", "Rasool", "Saima", "Faizan", "Barfi"];
 
 const NAMED = new RegExp(`\\b(${PEOPLE.join("|")})\\b`, "i");
-/** "my brother", "my flatmate", "my nani", "my old friend", and so on. */
-const RELATIONSHIP = /\bmy\s+(?:\w+\s+)?(?:brother|sister|flatmates?|roommates?|friends?|nani|grandmother|grandma|mother|mom|dad|father|colleague|coworker)\b/i;
+/** "my brother", "my flatmate", "my nani", "my old teacher", "my cat", and so on. */
+const RELATIONSHIP = /\bmy\s+(?:\w+\s+)?(?:brother|sister|flatmates?|roommates?|friends?|nani|grandmother|grandma|mother|mom|dad|father|colleague|coworker|teacher|kral|cat|stray)\b/i;
 
 const ASKS_IF_REAL = /\b(?:are|r)\s+(?:you|u)\s+(?:a\s+|an\s+|actually\s+|even\s+|really\s+)?(?:real|ai|bot|human|robot|person|machine)\b|\breal\s+person\b|\bhuman\s+or\b|\b(?:bot|ai)\s+or\b|\bis\s+this\s+(?:a\s+)?(?:bot|ai)\b/i;
 const SAYS_AI = /i['’]m an ai\b/i;

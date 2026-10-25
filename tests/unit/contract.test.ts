@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { paletteFor } from "@/personas/persona";
+import { F01, paletteFor } from "@/personas/persona";
 import { LIVE_OUT_SCHEMA, cutAtSentence, cutAtWord, grantCelebration, applyQaForce, EFFECT_TOTAL_DAILY_CAP, EFFECTS, EFFECT_MIN_LEVEL, parseLiveOut, safePrefix, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
 
 function out(over: Partial<LiveOut> = {}): LiveOut {
@@ -27,6 +27,7 @@ function ctx(over: Partial<SanitizeCtx> = {}): SanitizeCtx {
     pinInLast30d: false,
     milestone: null,
     quiet: false,
+    persona: F01,
     ...over,
   };
 }
@@ -102,12 +103,12 @@ describe("reaction", () => {
   });
   it("each level's palette is a superset of the one below, and L1 is warm", () => {
     for (let level = 2; level <= 6; level++) {
-      for (const e of paletteFor(level - 1)) expect(paletteFor(level), `L${level} keeps ${e}`).toContain(e);
+      for (const e of paletteFor(level - 1, F01)) expect(paletteFor(level, F01), `L${level} keeps ${e}`).toContain(e);
     }
-    expect(paletteFor(1)).toEqual(["👍", "👀", "😂", "😊", "🙈", "🤔", "✨", "😅"]);
-    expect(paletteFor(2)).toEqual(expect.arrayContaining(["🙄", "🤭"]));
-    expect(paletteFor(3)).toEqual(expect.arrayContaining(["🫠", "☕"]));
-    expect(paletteFor(1)).not.toContain("❤️");
+    expect(paletteFor(1, F01)).toEqual(["👍", "👀", "😂", "😊", "🙈", "🤔", "✨", "😅"]);
+    expect(paletteFor(2, F01)).toEqual(expect.arrayContaining(["🙄", "🤭"]));
+    expect(paletteFor(3, F01)).toEqual(expect.arrayContaining(["🫠", "☕"]));
+    expect(paletteFor(1, F01)).not.toContain("❤️");
   });
   it("is stripped in a safety band, except 👀", () => {
     expect(sanitize(out({ reaction: "😂", riskLevel: "concern" }), ctx()).reaction).toBeNull();
@@ -320,8 +321,8 @@ describe("schema and prompt order", () => {
   it("the compiled prompt lists the keys in the same order", async () => {
     const { compile } = await import("@/lib/llm/compile");
     const heart = await import("@/lib/heart");
-    const h = heart.now({ id: "c", createdAt: 0 }, 86400000 * 40);
-    const sys = compile({ level: 1, mode: "reply", userName: "", heart: h, milestone: null, facts: [], weekSummaries: [], daySummaries: [], history: [{ id: 1, who: "me", text: "hi" }], coolOff: false, safetyMode: false, lowEffort: false }).system;
+    const h = heart.now({ id: "c", createdAt: 0 }, 86400000 * 40, F01);
+    const sys = compile({ level: 1, mode: "reply", userName: "", heart: h, milestone: null, facts: [], weekSummaries: [], daySummaries: [], history: [{ id: 1, who: "me", text: "hi" }], coolOff: false, safetyMode: false, lowEffort: false, persona: F01 }).system;
     const idx = ORDER.map((k) => sys.indexOf(k + " ("));
     expect(idx.every((i) => i > 0)).toBe(true);
     expect([...idx].sort((x, y) => x - y)).toEqual(idx);

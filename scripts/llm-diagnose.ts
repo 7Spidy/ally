@@ -5,6 +5,7 @@
  *
  *   npm run llm:diagnose -- --model=deepseek-v4-pro
  */
+import { F01 } from "@/personas/persona";
 import { compile } from "@/lib/llm/compile";
 import { LIVE_OUT_SCHEMA } from "@/lib/llm/contract";
 import { buildBody, listModels, llmEnv, LlmError, type RequestShape } from "@/lib/llm/llm";
@@ -16,8 +17,9 @@ loadEnvLocal();
 const arg = (name: string) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
 
 function l3Prompt() {
-  const h = heart.now({ id: "c_eval", createdAt: FIXED_CREATED }, FIXED_NOW);
+  const h = heart.now({ id: "c_eval", createdAt: FIXED_CREATED }, FIXED_NOW, F01);
   return compile({
+    persona: F01,
     level: 3,
     mode: "reply",
     userName: "Riya",

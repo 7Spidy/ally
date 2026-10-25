@@ -18,8 +18,8 @@ export const CORE_MAP: Record<string, [CoreId, CoreId | null]> = {
   M13: ["PSYCH", null], M14: ["ROMANTIC", null], M15: ["FRIEND", "TRAINER"], M16: ["ROMANTIC", null],
 };
 
-/** Hide a face from these core decks even though the map lists it (F01's Money brain does not exist yet). */
-export const DECK_HIDDEN: Record<string, CoreId[]> = { F01: ["MONEY"] };
+/** Hide a face from these core decks even though the map lists it (F01's Money brain and F02's Psych brain do not exist yet). */
+export const DECK_HIDDEN: Record<string, CoreId[]> = { F01: ["MONEY"], F02: ["PSYCH"] };
 
 export function castsAs(id: string, core: CoreId): boolean {
   const entry = CORE_MAP[id];

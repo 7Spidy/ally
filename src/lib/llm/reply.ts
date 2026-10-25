@@ -20,7 +20,7 @@ export interface RunReplyArgs {
   chatFn?: ChatFn;
   maxTokens?: number;
   temperature?: number;
-  /** The previous Ira reply (bubbles joined with newlines), for lint rule e. Undefined skips it. */
+  /** The previous companion reply (bubbles joined with newlines), for lint rule e. Undefined skips it. */
   prevReply?: string;
   /** Cool-off or safety mode: lint rule e is skipped. */
   quiet?: boolean;

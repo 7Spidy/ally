@@ -14,6 +14,40 @@ export interface PersonaLevel {
   level: number;
 }
 
+export interface GoldenPair {
+  user: string;
+  bubbles: string[];
+}
+
+/** One mood's weight window. It matches if any of its conditions holds; moods without a rule weigh 1. */
+export interface MoodRule {
+  mood: string;
+  weekdays?: number[];
+  months?: number[];
+  /** "MM-DD"; from/to may wrap the year (12-21 to 01-31). */
+  from?: string;
+  to?: string;
+  /** Matches the last N days of the month. */
+  lastDays?: number;
+  on: number;
+  off: number;
+}
+
+/** Everything the engine used to hardcode for Ira. Times are "H:MM" IST. */
+export interface PersonaEngine {
+  city: string;
+  emojiVoice: string;
+  blockStarts: string[];
+  nightEnd: string;
+  cards: string[];
+  cardOverrides: { row: number; weekdays: number[]; card: string }[];
+  energy: Record<string, string>;
+  moodRules: MoodRule[];
+  gatedMoods: Record<string, number>;
+  specialCards: Record<string, string>;
+  hardRules: string[];
+}
+
 export interface Persona {
   id: string;
   name: string;
@@ -54,11 +88,14 @@ export interface Persona {
   reactionPalette: Record<string, string[]>;
   contextCards: Record<string, string>;
   l6Line: string;
+  golden: Record<"1" | "3" | "5", GoldenPair[]>;
+  engine: PersonaEngine;
 }
 
+/** Kept for back-compat; runtime code takes its persona from the registry. */
 export const F01: Persona = raw as Persona;
 
 /** The reaction palette for a trust level. */
-export function paletteFor(level: number, persona: Persona = F01): string[] {
+export function paletteFor(level: number, persona: Persona): string[] {
   return persona.reactionPalette[String(level)] ?? persona.reactionPalette["1"];
 }

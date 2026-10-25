@@ -3,6 +3,7 @@ import { OPEN_LOOP, hasHandle, instructionFor, lintReply, questionCount } from "
 import { FALLBACKS, FILTER_NUDGE, LIVE_TEMPERATURE, ReplyFailed, liveTemperature, runReply, type ChatFn } from "@/lib/llm/reply";
 import { LlmContentFilter, LlmError } from "@/lib/llm/llm";
 import type { LiveOut, SanitizeCtx } from "@/lib/llm/contract";
+import { F01 } from "@/personas/persona";
 import type { Compiled } from "@/lib/llm/compile";
 
 const reply = (...texts: string[]) => ({ bubbles: texts.map((text) => ({ text, effect: null })) });
@@ -143,6 +144,7 @@ describe("combined", () => {
 
 const compiled: Compiled = { system: "SYS", stablePrefix: "SYS", volatile: "VOL", messages: [{ role: "user", content: "[#1] hi" }] };
 const sctx: SanitizeCtx = {
+  persona: F01,
   level: 3,
   latestMeId: 1,
   quotableIds: [],

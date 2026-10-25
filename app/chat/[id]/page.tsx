@@ -14,9 +14,8 @@ import { openerFor, replyFor, COPY } from "@/lib/copy";
 import { firstNameFromFull } from "@/lib/engine";
 import { dayKey, now, serverNow } from "@/lib/clock";
 import { BLOCK_DAYS, LIVE_CONSENT_VERSION } from "@/lib/config";
-import { isLive } from "@/lib/live";
 import * as heart from "@/lib/heart";
-import { F01 } from "@/personas/persona";
+import { personaFor } from "@/personas/registry";
 import { purgeMinorAndBlock } from "@/lib/minor";
 import {
   clearAgeCheck,
@@ -74,7 +73,9 @@ function ChatContent() {
 
   const companion = byId(state, id);
   const template = companion ? templates.find((t) => t.id === companion.templateId) : undefined;
-  const live = companion ? isLive(companion) : false;
+  // The server decides (ally_private.is_live); the client never recomputes it.
+  const live = companion?.live === true;
+  const persona = live && companion ? personaFor(companion.templateId) : null;
 
   const openedRef = useRef(false);
   const seededRef = useRef(false);
@@ -132,16 +133,17 @@ function ChatContent() {
     dividerBeforeAtRef.current = isFirstOpenEver ? null : companion.lastOpenedAt;
     const companionId = companion.id;
 
-    if (isLive(companion)) {
+    if (companion.live) {
+      const persona = personaFor(companion.templateId);
       const t = now();
       const levelChanged = (companion.levelChangedAt ?? 0) > companion.lastOpenedAt;
       const stale = t - companion.lastOpenedAt >= 3 * 3600 * 1000;
       if (companion.lastCtxDay !== dayKey(t) || stale || levelChanged) {
-        const h = heart.now(companion, t);
-        const key = heart.contextCardKey(h.block, h.mood, levelChanged);
+        const h = heart.now(companion, t, persona);
+        const key = heart.contextCardKey(h.block, h.mood, levelChanged, persona);
         setCtxCard({
-          title: levelChanged ? F01.levels[Math.max(0, (companion.trustLevel ?? 1) - 1)]?.name : undefined,
-          line: F01.contextCards[key] ?? F01.contextCards[h.block.card],
+          title: levelChanged ? persona.levels[Math.max(0, (companion.trustLevel ?? 1) - 1)]?.name : undefined,
+          line: persona.contextCards[key] ?? persona.contextCards[h.block.card],
         });
         markCtxShown(companionId)
           .then(() => dispatch({ type: "LIVE_SYNC", companionId, patch: { lastCtxDay: dayKey(t) } }))
@@ -193,12 +195,12 @@ function ChatContent() {
     [dispatch]
   );
 
-  // Asks the server for Ira's reply (or opener), then plays it. 202 means one
+  // Asks the server for the companion's reply (or opener), then plays it. 202 means one
   // is already in flight (a second tab): try again shortly.
   const fetchAndPlay = useCallback(
     async (companionId: string, mode: "reply" | "opener", userMessageId?: number) => {
       if (playingRef.current) {
-        // The user sent again while Ira was mid-reply: answer that message next
+        // The user sent again while the companion was mid-reply: answer that message next
         // (the server prompt covers both), rather than dropping it.
         if (mode === "reply") queuedRef.current = { companionId, userMessageId };
         return;
@@ -467,7 +469,7 @@ function ChatContent() {
 
   const firstName = firstNameFromFull(template.name);
   const paused = companion.pausedReason === "age_check";
-  const presenceOverride = live ? heart.now(companion, now()).block.presence : undefined;
+  const presenceOverride = live && persona ? heart.now(companion, now(), persona).block.presence : undefined;
 
   return (
     <div className={styles.page}>
@@ -480,7 +482,7 @@ function ChatContent() {
         presenceOverride={presenceOverride}
         onQa={qaAccess.qa && live ? () => setQaOpen(true) : undefined}
       />
-      {levelBadge && <LevelBadge name={F01.levels[Math.min(5, Math.max(0, (companion.trustLevel ?? 1) - 1))].name} level={companion.trustLevel ?? 1} />}
+      {levelBadge && persona && <LevelBadge name={persona.levels[Math.min(5, Math.max(0, (companion.trustLevel ?? 1) - 1))].name} level={companion.trustLevel ?? 1} />}
       {/* The badge goes first; a due context card waits until it has gone. */}
       {ctxCard && !levelBadge && <ContextCard title={ctxCard.title} line={ctxCard.line} onGone={() => setCtxCard(null)} />}
       {showOverflow && (
@@ -547,6 +549,8 @@ function ChatContent() {
       {qaOpen && qaAccess.qa && live && (
         <QaSheet
           companionId={companion.id}
+          persona={personaFor(companion.templateId)}
+          activeCompanions={state.companions.filter((c) => c.status === "active")}
           level={companion.trustLevel ?? 1}
           admin={qaAccess.admin}
           ignoreCaps={qaIgnoreCaps}
@@ -556,12 +560,13 @@ function ChatContent() {
           onPreview={runPreview}
           onLevel={(trustLevel, levelChangedAt) => dispatch({ type: "LIVE_SYNC", companionId: companion.id, patch: { trustLevel, levelChangedAt } })}
           onLedger={(ledger) => dispatch({ type: "LEDGER_SYNC", ledger })}
+          onAdded={(c) => dispatch({ type: "ADD_COMPANION", companion: c })}
           onClose={() => setQaOpen(false)}
           onToast={showToast}
         />
       )}
       {paused && <AgeCheckSheet error={ageError} onAdult={(dob) => void onAgeAdult(dob)} onUnder18={() => void onAgeUnder18()} />}
-      {needsConsent && <ConsentUpdateSheet onContinue={() => void onConsentContinue()} onNotNow={() => router.push("/home")} />}
+      {needsConsent && <ConsentUpdateSheet persona={firstName} onContinue={() => void onConsentContinue()} onNotNow={() => router.push("/home")} />}
       {screenFx && <ScreenFx kind={screenFx} onDone={() => setScreenFx(null)} />}
     </div>
   );

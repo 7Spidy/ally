@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { getAdminClient } from "@/lib/supabase/admin";
 import { isLive } from "@/lib/live";
+import { personaFor } from "@/personas/registry";
 import { dayKey } from "@/lib/clock";
 import * as heart from "@/lib/heart";
 import { compile } from "@/lib/llm/compile";
@@ -97,10 +98,14 @@ export async function POST(request: Request) {
   const { data: own } = await supabase.from("companions").select("*").eq("id", companionId).maybeSingle();
   const c = own as CompanionRow | null;
   if (!c || c.status !== "active") return json({ error: "not_found" }, 404);
-  if (!isLive({ templateId: c.template_id, core: c.core })) return json({ error: "not_live" }, 409);
-  if (c.paused_reason) return json({ error: "paused" }, 423);
-
   const db = getAdminClient();
+  // "qa" templates are live only for an owner with role admin or qa (mirrors ally_private.is_live).
+  const { data: ownerRow } = await db.from("profiles").select("role").eq("id", c.user_id).maybeSingle();
+  const ownerIsQa = ownerRow?.role === "admin" || ownerRow?.role === "qa";
+  if (!isLive({ templateId: c.template_id, core: c.core }, ownerIsQa)) return json({ error: "not_live" }, 409);
+  if (c.paused_reason) return json({ error: "paused" }, 423);
+  const persona = personaFor(c.template_id);
+
   const now = Date.now();
   const prevReplied = c.last_replied_msg;
 
@@ -162,7 +167,7 @@ export async function POST(request: Request) {
     const level = c.trust_level;
     const createdAt = Date.parse(c.created_at);
     const relDay = relationshipDay(createdAt, messageAt);
-    const h = heart.now({ id: c.id, createdAt }, messageAt);
+    const h = heart.now({ id: c.id, createdAt }, messageAt, persona);
     const lastMe = history.filter((m) => m.who === "me");
     // The user may have sent several messages while the last reply was in flight, so ask whether 100 was crossed, not hit.
     const batch = Math.max(1, history.filter((m) => m.who === "me" && m.id > prevReplied).length);
@@ -175,6 +180,7 @@ export async function POST(request: Request) {
       rainMentioned: heart.mentionsRain(lastMe.slice(-10).map((m) => m.text)),
       leveledUp: null,
       userMsgCount: countHit,
+      persona,
     });
     const coolOff = (ms(c.cool_off_until) ?? 0) > now;
     const safetyMode = (ms(c.safety_until) ?? 0) > now;
@@ -195,6 +201,7 @@ export async function POST(request: Request) {
       safetyMode,
       lowEffort,
       pressure: c.answers?.q10 ?? null,
+      persona,
     });
 
     // Gates
@@ -226,6 +233,7 @@ export async function POST(request: Request) {
       seed: userMsg?.id,
       sanitizeCtx: {
         level,
+        persona,
         latestMeId: userMsg?.id ?? -1,
         quotableIds: userMsgIds,
         effectsToday,

@@ -20,6 +20,14 @@ export function coreBlock(p: Persona): string {
   ].join("\n");
 }
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** "03-27" becomes "27 March". */
+export function birthdayText(mmdd: string): string {
+  const [m, d] = mmdd.split("-").map(Number);
+  return `${d} ${MONTHS[m - 1]}`;
+}
+
 export function faceBlock(p: Persona, level: number): string {
   const i = p.identity;
   const lines = [
@@ -27,9 +35,9 @@ export function faceBlock(p: Persona, level: number): string {
     `Age ${i.age}. Home: ${i.home}`,
     `Work: ${i.work}`,
     `Training: ${i.training}`,
-    `Flatmates: ${i.flatmates}`,
+    `Household: ${i.flatmates}`,
     `Family: ${i.family}`,
-    `Birthday: 27 March`,
+    `Birthday: ${birthdayText(i.birthday)}`,
   ];
   if (level >= 4) lines.push(`Held back until now: ${i.heldBack.L4}`);
   if (level >= 5) lines.push(`Held back until now: ${i.heldBack.L5}`);
@@ -110,13 +118,19 @@ export function playbookBlock(p: Persona, level: number): string {
   return `SITUATIONAL PLAYBOOK\n${rows.join("\n")}`;
 }
 
+/** The "open loop" example in the ownership block, in the persona's own world. */
+const OPEN_LOOP_EXAMPLE: Record<string, string> = {
+  F01: "ask me what the thekedar said about the tiles",
+  F02: "ask me what the kiln did overnight",
+};
+
 /** Appended to every prompt after the playbook. Identical at every level. */
-export function ownershipBlock(): string {
+export function ownershipBlock(p: Persona): string {
   return [
     "CONVERSATION OWNERSHIP",
     "The user should never be the only one carrying this chat. About two replies in three leave a handle: something the user can pick up without effort. Vary the kind:",
     '- A specific question tied to what they just said or to something in your memory of them. Never a generic one ("how about you?", "and you?").',
-    '- An open loop from your own day, started and left hanging, with no time promise ("ask me what the thekedar said about the tiles").',
+    `- An open loop from your own day, started and left hanging, with no time promise ("${OPEN_LOOP_EXAMPLE[p.id] ?? "ask me how today went"}").`,
     '- An opinion they might push back on ("people who skip breakfast are lying to themselves").',
     "- A callback to something they said earlier.",
     "- A small ask: their pick between two things, or their take on something you are deciding.",
@@ -131,48 +145,17 @@ export function ownershipBlock(): string {
   ].join("\n");
 }
 
-export interface GoldenPair {
-  user: string;
-  bubbles: string[];
-}
-
-/**
- * Ten sample exchanges: four for L1, three each for L3 and L5. Only the set
- * for the current level is shown (L2 uses L1's, L4 L3's, L6 L5's), so no
- * example ever shows behaviour from a higher level. They ship as user and
- * assistant messages at the head of the conversation, in the JSON shape the
- * model must answer in.
- */
-export const GOLDEN: Record<1 | 3 | 5, GoldenPair[]> = {
-  1: [
-    { user: "so i fixed my laptop by turning it off and on again", bubbles: ["okay that's one way to handle it 😂 did it actually work, or is it just sulking quietly?"] },
-    { user: "do you like me?", bubbles: ["ha, that's a later question 🙈 easier one first: breakfast person, or just survive till lunch?"] },
-    { user: "lol", bubbles: ["that was a very specific kind of lol 😄 what's funny? i've been staring at drawings all morning and need a better joke than my own"] },
-    { user: "You should have more protein", bubbles: ["i'll add it to the list right after i fix the geyser 😅 you're oddly invested in my protein though. what did you eat today?"] },
-  ],
-  3: [
-    { user: "you never answer when i flirt", bubbles: ["i noticed 😏 not saying no, not saying yet either. what's got you in a flirty mood anyway, good day or a bad one in disguise?"] },
-    { user: "third coffee already and it's not even noon", bubbles: ["a third coffee before noon isn't a personality 😅 it's a cry for help. what's eating your day, deadlines or people?"] },
-    { user: "good morning", bubbles: ['morning ☀️ the thekedar just told me the plaster is "almost dry". it is not.', "ask me how i know. or tell me what today looks like for you"] },
-  ],
-  5: [
-    { user: "i got the promotion!", bubbles: ["told you 🥰 i'm having a chai on your behalf. okay, details: what did they say when they told you?"] },
-    { user: "big interview tomorrow, i'm freaking out", bubbles: ["stop overthinking. you're capable of this. text me when you're back outside."] },
-    { user: "i'm scared i'll never be good enough", bubbles: ["that sounds heavy, and i'm glad you said it out loud. what's making it louder right now?"] },
-  ],
-};
-
 const tier = (level: number): 1 | 3 | 5 => (level >= 5 ? 5 : level >= 3 ? 3 : 1);
 
 /** System-prompt note that introduces the sample exchanges sent as messages. */
-export function examplesNote(level: number): string {
-  const n = GOLDEN[tier(level)].length;
+export function examplesNote(p: Persona, level: number): string {
+  const n = p.golden[tier(level)].length;
   return `EXAMPLES (style only)\nThe first ${n} exchanges in this chat are samples of how you sound. They are not history. Never refer to them.`;
 }
 
 /** The samples as chat turns: raw user text, and the reply in the exact JSON shape of the output contract. */
-export function examplePairs(level: number): { role: "user" | "assistant"; content: string }[] {
-  return GOLDEN[tier(level)].flatMap((g) => [
+export function examplePairs(p: Persona, level: number): { role: "user" | "assistant"; content: string }[] {
+  return p.golden[tier(level)].flatMap((g) => [
     { role: "user" as const, content: g.user },
     {
       role: "assistant" as const,

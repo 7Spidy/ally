@@ -4,10 +4,14 @@ import { hasHandle } from "@/lib/llm/lint";
 import { PEOPLE } from "@/lib/llm/lint";
 import * as heart from "@/lib/heart";
 import { F01 } from "@/personas/persona";
-import { GOLDEN, examplePairs, ownershipBlock, variantsFor } from "@/personas/cores/romantic";
+import { examplePairs as examplePairsFor, ownershipBlock as ownershipBlockFor, variantsFor } from "@/personas/cores/romantic";
+
+const GOLDEN = F01.golden as Record<1 | 3 | 5, { user: string; bubbles: string[] }[]>;
+const examplePairs = (level: number) => examplePairsFor(F01, level);
+const ownershipBlock = () => ownershipBlockFor(F01);
 
 const NOW = Date.UTC(2026, 4, 12, 4, 30); // Tue 2026-05-12 10:00 IST
-const H = heart.now({ id: "c_x", createdAt: NOW - 40 * 86400000 }, NOW);
+const H = heart.now({ id: "c_x", createdAt: NOW - 40 * 86400000 }, NOW, F01);
 
 function ctx(level: number, over: Partial<CompileCtx> = {}): CompileCtx {
   return {
@@ -23,6 +27,7 @@ function ctx(level: number, over: Partial<CompileCtx> = {}): CompileCtx {
     coolOff: false,
     safetyMode: false,
     lowEffort: false,
+    persona: F01,
     ...over,
   };
 }

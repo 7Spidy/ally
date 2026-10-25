@@ -248,7 +248,7 @@ describe("the v7 casting map", () => {
   // Expected sizes come from the map, not from the code under test.
   function expectedIds(gender: Gender, core: CoreId): string[] {
     return Object.entries(CORE_MAP)
-      .filter(([id, [p, s]]) => id.startsWith(gender === "woman" ? "F" : "M") && (p === core || s === core) && !(id === "F01" && core === "MONEY"))
+      .filter(([id, [p, s]]) => id.startsWith(gender === "woman" ? "F" : "M") && (p === core || s === core) && !DECK_HIDDEN[id]?.includes(core))
       .map(([id]) => id)
       .sort();
   }
@@ -269,6 +269,7 @@ describe("the v7 casting map", () => {
 
   it("F01 is in the woman ROMANTIC deck and in no other core's deck", () => {
     expect(DECK_HIDDEN.F01).toEqual(["MONEY"]);
+    expect(DECK_HIDDEN.F02).toEqual(["PSYCH"]);
     expect(deckTemplates(templates, "woman", undefined, "ROMANTIC").map((t) => t.id)).toContain("F01");
     expect(deckTemplates(templates, "woman", undefined, "MONEY").map((t) => t.id)).not.toContain("F01");
     for (const core of CORES.filter((c) => c !== "ROMANTIC")) {
@@ -296,7 +297,8 @@ describe("buildCoreDeck fallback (D4)", () => {
   ];
   const trainerWomen = ["F03", "F06", "F08", "F10"];
   const friendWomen = ["F05", "F09", "F12", "F13"];
-  const psychWomen = ["F02", "F04", "F07", "F15"];
+  // F02 is hidden from the PSYCH deck until a Psych brain exists (B4 D5).
+  const psychWomen = ["F04", "F07", "F15"];
 
   it("uses the user's own core deck when it has faces", () => {
     expect(idsOf(buildCoreDeck(templates, "woman", undefined, ranked))).toEqual(trainerWomen);
@@ -311,7 +313,7 @@ describe("buildCoreDeck fallback (D4)", () => {
     const excluded = new Set([...trainerWomen, ...friendWomen, ...psychWomen]);
     // ROMANTIC is fourth in `ranked`; its women minus the excluded ones are what is left.
     const deck = buildCoreDeck(templates, "woman", excluded, ranked);
-    expect(idsOf(deck)).toEqual(["F01", "F14", "F16"]);
+    expect(idsOf(deck)).toEqual(["F01", "F02", "F14", "F16"]);
     expect(idsOf(deck)).toEqual(idsOf(deckTemplates(templates, "woman", excluded, "ROMANTIC")));
   });
 

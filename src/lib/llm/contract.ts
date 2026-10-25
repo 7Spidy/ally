@@ -5,7 +5,7 @@
  * trusts the model to gate itself, and sanitize() never throws.
  */
 
-import { F01, paletteFor } from "@/personas/persona";
+import { paletteFor, type Persona } from "@/personas/persona";
 import type { Milestone, ScreenKind } from "@/lib/heart";
 
 export type Effect = "soft" | "loud" | "stop" | "ink" | "pin" | "screen" | "shake" | "sparkle" | "echo" | "bloom" | "heartbeat";
@@ -175,11 +175,13 @@ export interface MsgMeta {
 
 export interface SanitizeCtx {
   level: number;
+  /** The companion's persona: its reaction palette gates reactions. */
+  persona: Persona;
   /** id of the user message being answered. */
   latestMeId: number;
   /** ids of the `me` messages among the last 30. */
   quotableIds: number[];
-  /** Effects Ira has already used today (IST), from stored meta. */
+  /** Effects the companion has already used today (IST), from stored meta. */
   effectsToday: Partial<Record<Effect, number>>;
   /** Screen effects already run today. */
   screensToday: number;
@@ -280,7 +282,7 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
 
   // Reaction: in this level's palette. Not frequency-limited.
   let reaction = out.reaction;
-  if (reaction !== null && !paletteFor(level, F01).includes(reaction)) reaction = null;
+  if (reaction !== null && !paletteFor(level, ctx.persona).includes(reaction)) reaction = null;
 
   // Screen effect: level, milestone, one per day, and petals only at L6.
   let screen = out.screen;

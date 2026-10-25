@@ -1,5 +1,19 @@
 import { describe, it, expect } from "vitest";
-import * as heart from "@/lib/heart";
+import * as heartRaw from "@/lib/heart";
+import { F01 } from "@/personas/persona";
+
+/** Ira's persona is passed explicitly everywhere; these wrappers keep the original assertions readable. */
+const heart = {
+  ...heartRaw,
+  timeBlock: (i: heartRaw.IstParts) => heartRaw.timeBlock(i, F01),
+  moodFor: (id: string, i: heartRaw.IstParts) => heartRaw.moodFor(id, i, F01),
+  moodWeight: (m: string, i: heartRaw.IstParts) => heartRaw.moodWeight(m, i, F01),
+  seasonFor: (m: number) => heartRaw.seasonFor(m, F01),
+  arcBeat: (d: number) => heartRaw.arcBeat(d, F01),
+  now: (c: { id: string; createdAt: number }, ms: number) => heartRaw.now(c, ms, F01),
+  contextCardKey: (b: heartRaw.TimeBlock, m: heartRaw.Mood, l: boolean) => heartRaw.contextCardKey(b, m, l, F01),
+  milestoneFor: (a: Omit<Parameters<typeof heartRaw.milestoneFor>[0], "persona">) => heartRaw.milestoneFor({ ...a, persona: F01 }),
+};
 
 /** IST wall clock to epoch ms. */
 const ist = (y: number, mo: number, d: number, h = 12, mi = 0) => Date.UTC(y, mo - 1, d, h, mi) - 5.5 * 3600 * 1000;

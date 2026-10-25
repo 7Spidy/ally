@@ -1,10 +1,11 @@
 /**
- * B2 "heart" (spec 4.7): what Ira is doing right now. Mood, time block,
+ * B2 "heart" (spec 4.7): what a companion is doing right now. Mood, time block,
  * season, arc month and milestones, all derived from the IST clock and the
  * companion id, so the same day always reads the same. Pure.
  */
 
-import { F01, type Persona } from "@/personas/persona";
+import type { MoodRule, Persona } from "@/personas/persona";
+import { birthdayText } from "@/personas/cores/romantic";
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const DAY_MS = 86400000;
@@ -46,15 +47,14 @@ function daysInMonth(year: number, month: number): number {
 // Time block
 // ---------------------------------------------------------------------------
 
-/**
- * Start of each row of Appendix A's `weekday` table, in IST minutes:
- * 6:45, 7:30, 8:30, 10:30, 14:00, 15:30, 19:30, 21:30. The sheet's own
- * gaps (10:00 to 10:30 and 3:00 to 3:30) belong to the block before them,
- * and 1:00 to 6:45 is the asleep stretch that belongs to no row.
- */
-const BLOCK_STARTS = [405, 450, 510, 630, 840, 930, 1170, 1290];
-const NIGHT_END = 60; // 1:00
-const EVENING_START = 1170; // 19:30, where the weekend joins the weekday table again
+/** "H:MM" to minutes. */
+function minutes(hm: string): number {
+  const [h, m] = hm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** The weekend joins the weekday table again at the evening row (blockStarts[6]); before 14:00 it is "Morning", after it "Lunch". */
+const WEEKEND_LUNCH = 840;
 
 export interface TimeBlock {
   /** Row index in `weekday`, or -1 for the asleep stretch. */
@@ -65,30 +65,37 @@ export interface TimeBlock {
   card: string;
 }
 
-export function timeBlock(ist: IstParts, persona: Persona = F01): TimeBlock {
+/**
+ * Rows follow `persona.engine.blockStarts`. The sheet's own gaps belong to the
+ * block before them, and nightEnd to the first block start is the asleep
+ * stretch that belongs to no row.
+ */
+export function timeBlock(ist: IstParts, persona: Persona): TimeBlock {
+  const e = persona.engine;
+  const starts = e.blockStarts.map(minutes);
+  const nightEnd = minutes(e.nightEnd);
   const m = ist.minuteOfDay;
   const weekend = ist.weekday === 0 || ist.weekday === 6;
 
-  // 0:00 to 1:00 is still the balcony block of the evening before.
-  if (m < NIGHT_END) return blockFromRow(7, ist, persona);
-  if (m < BLOCK_STARTS[0]) {
+  // Midnight to nightEnd is still the last block of the evening before.
+  if (m < nightEnd) return blockFromRow(starts.length - 1, ist, persona);
+  if (m < starts[0]) {
     return { row: -1, presence: "Asleep", activity: "Asleep.", card: "Morning" };
   }
   let row = 0;
-  for (let i = 0; i < BLOCK_STARTS.length; i++) if (m >= BLOCK_STARTS[i]) row = i;
+  for (let i = 0; i < starts.length; i++) if (m >= starts[i]) row = i;
 
-  if (weekend && m < EVENING_START) {
+  if (weekend && m < starts[6]) {
     const plan = persona.week[(ist.weekday + 6) % 7].plan;
-    return { row: -1, presence: "Open", activity: plan, card: m < 840 ? "Morning" : "Lunch" };
+    return { row: -1, presence: "Open", activity: plan, card: m < WEEKEND_LUNCH ? "Morning" : "Lunch" };
   }
   return blockFromRow(row, ist, persona);
 }
 
 function blockFromRow(row: number, ist: IstParts, persona: Persona): TimeBlock {
   const r = persona.weekday[row];
-  const siteDay = ist.weekday === 2 || ist.weekday === 4;
-  const cards = ["Morning", "Morning", "Commute", siteDay ? "Site" : "Studio", "Lunch", "Studio", "Night", "Night"];
-  return { row, presence: r.presence, activity: r.activity, card: cards[row] };
+  const override = persona.engine.cardOverrides.find((o) => o.row === row && o.weekdays.includes(ist.weekday));
+  return { row, presence: r.presence, activity: r.activity, card: override?.card ?? persona.engine.cards[row] };
 }
 
 // ---------------------------------------------------------------------------
@@ -117,30 +124,32 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/**
- * Weight of each mood on a given IST day. Season- and weekday-bound moods
- * ("Site day", "Fog slow", "Smog shutdown", "Missing Nani's house") carry
- * weight 0 outside their window; everything else weighs 1 unless boosted.
- */
-export function moodWeight(mood: string, ist: IstParts): number {
+function inDateRange(month: number, dom: number, from: string, to: string): boolean {
+  const key = month * 100 + dom;
+  const [fm, fd] = from.split("-").map(Number);
+  const [tm, td] = to.split("-").map(Number);
+  const lo = fm * 100 + fd;
+  const hi = tm * 100 + td;
+  return lo <= hi ? key >= lo && key <= hi : key >= lo || key <= hi;
+}
+
+function ruleMatches(r: MoodRule, ist: IstParts): boolean {
   const { weekday, month, dom, year } = ist;
-  const lastThree = dom > daysInMonth(year, month) - 3;
-  switch (mood) {
-    case "Site day":
-      return weekday === 2 || weekday === 4 ? 4 : 0;
-    case "Principal pressure":
-      return weekday === 1 ? 4 : 1;
-    case "Budget close":
-      return weekday === 5 || lastThree ? 4 : 1;
-    case "Fog slow":
-      return month === 12 || month === 1 ? 3 : 0;
-    case "Smog shutdown":
-      return month === 11 && dom <= 20 ? 3 : 0;
-    case "Missing Nani's house":
-      return weekday === 0 ? 2 : 0;
-    default:
-      return 1;
-  }
+  if (r.weekdays?.includes(weekday)) return true;
+  if (r.months?.includes(month)) return true;
+  if (r.from && r.to && inDateRange(month, dom, r.from, r.to)) return true;
+  if (r.lastDays !== undefined && dom > daysInMonth(year, month) - r.lastDays) return true;
+  return false;
+}
+
+/**
+ * Weight of a mood on a given IST day: the persona's rule (`on` when any of
+ * its conditions holds, `off` otherwise), or 1 for a mood without a rule.
+ */
+export function moodWeight(mood: string, ist: IstParts, persona: Persona): number {
+  const rule = persona.engine.moodRules.find((r) => r.mood === mood);
+  if (!rule) return 1;
+  return ruleMatches(rule, ist) ? rule.on : rule.off;
 }
 
 export interface Mood {
@@ -150,8 +159,8 @@ export interface Mood {
 }
 
 /** Deterministic per companion per IST day. */
-export function moodFor(companionId: string, ist: IstParts, persona: Persona = F01): Mood {
-  const weights = persona.moods.map((m) => moodWeight(m.mood, ist));
+export function moodFor(companionId: string, ist: IstParts, persona: Persona): Mood {
+  const weights = persona.moods.map((m) => moodWeight(m.mood, ist, persona));
   const total = weights.reduce((a, b) => a + b, 0);
   const rnd = mulberry32(hashString(companionId + ist.dayKey))();
   let pick = rnd * total;
@@ -170,7 +179,7 @@ export function moodFor(companionId: string, ist: IstParts, persona: Persona = F
 // Season, arc, milestones
 // ---------------------------------------------------------------------------
 
-export function seasonFor(month: number, persona: Persona = F01): string {
+export function seasonFor(month: number, persona: Persona): string {
   const i = month === 1 ? 0 : month <= 3 ? 1 : month <= 6 ? 2 : month <= 9 ? 3 : month <= 11 ? 4 : 5;
   return persona.seasons[i].texture;
 }
@@ -181,7 +190,7 @@ export function arcMonth(relationshipDay: number): number {
   return m <= 12 ? m : 7 + ((m - 13) % 6);
 }
 
-export function arcBeat(relationshipDay: number, persona: Persona = F01): string {
+export function arcBeat(relationshipDay: number, persona: Persona): string {
   const month = arcMonth(relationshipDay);
   return persona.arc.find((a) => a.month === month)?.beat ?? "";
 }
@@ -215,10 +224,14 @@ export function milestoneFor(args: {
   leveledUp: number | null;
   /** Every message the user has ever sent this companion, deleted ones included, so it only ever grows. */
   userMsgCount?: number;
+  persona: Persona;
 }): Milestone | null {
   const { ist } = args;
   if (args.leveledUp === 6) return { kind: "level6", screen: "petals", note: "You and the user just became intimate partners. This is a moment." };
-  if (ist.month === 3 && ist.dom === 27) return { kind: "birthday", screen: "confetti", note: "It is your birthday today (27 March)." };
+  const [bm, bd] = args.persona.identity.birthday.split("-").map(Number);
+  if (ist.month === bm && ist.dom === bd) {
+    return { kind: "birthday", screen: "confetti", note: `It is your birthday today (${birthdayText(args.persona.identity.birthday)}).` };
+  }
   if (DIWALI.includes(ist.dayKey)) return { kind: "diwali", screen: "lanterns", note: "It is Diwali today." };
   if (args.relationshipDay >= 365 && args.createdDayKey.slice(5) === ist.dayKey.slice(5)) {
     return { kind: "anniversary", screen: "confetti", note: "It is one year since you and the user met." };
@@ -234,11 +247,9 @@ export function milestoneFor(args: {
 // Context card and the combined "right now"
 // ---------------------------------------------------------------------------
 
-export function contextCardKey(block: TimeBlock, mood: Mood, levelChangedSinceCard: boolean): string {
+export function contextCardKey(block: TimeBlock, mood: Mood, levelChangedSinceCard: boolean, persona: Persona): string {
   if (levelChangedSinceCard) return "Level-up";
-  if (mood.mood === "Fog slow") return "Fog day";
-  if (mood.mood === "Smog shutdown") return "Smog day";
-  return block.card;
+  return persona.engine.specialCards[mood.mood] ?? block.card;
 }
 
 export interface HeartNow {
@@ -255,7 +266,7 @@ export interface HeartNow {
 export function now(
   companion: { id: string; createdAt: number },
   ms: number,
-  persona: Persona = F01
+  persona: Persona
 ): HeartNow {
   const ist = istNow(ms);
   const created = istNow(companion.createdAt);

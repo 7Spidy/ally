@@ -12,6 +12,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dayKey } from "@/lib/clock";
 import { istDaysBetween } from "@/lib/trust";
+import { isLive } from "@/lib/live";
+import { LIVE_TEMPLATES, personaFor } from "@/personas/registry";
 import type { ChatArgs, ChatResult } from "@/lib/llm/llm";
 
 /** LLM_VAULT_THINKING: enabled lets the nightly fact extraction think. Default disabled until json_object with thinking is verified (npm run llm:diagnose). */
@@ -194,9 +196,9 @@ export function expiredSummaries(
     .map((r) => r.id);
 }
 
-export function dailyPrompt(day: string, msgs: { who: string; text: string }[], facts: Pick<Fact, "id" | "category" | "fact">[]): ChatArgs {
+export function dailyPrompt(name: string, day: string, msgs: { who: string; text: string }[], facts: Pick<Fact, "id" | "category" | "fact">[]): ChatArgs {
   const system = [
-    "You keep the memory notes for Ira, a companion in a chat app. Read one day of conversation and return JSON only.",
+    `You keep the memory notes for ${name}, a companion in a chat app. Read one day of conversation and return JSON only.`,
     "summary: at most 120 words, third person, what happened and what mattered.",
     "add: new lasting facts about the user, each { category, fact } with category one of " + CATEGORIES.join(", ") + ". One short sentence each.",
     "update: { id, fact } to correct an existing fact. retire: ids of facts now false or stale.",
@@ -205,12 +207,12 @@ export function dailyPrompt(day: string, msgs: { who: string; text: string }[], 
   ].join("\n");
   const thinking = vaultThinking();
   const known = facts.length ? facts.map((f) => `#${f.id} [${f.category}] ${f.fact}`).join("\n") : "(none)";
-  const convo = msgs.map((m) => `${m.who === "me" ? "User" : "Ira"}: ${m.text}`).join("\n");
+  const convo = msgs.map((m) => `${m.who === "me" ? "User" : name}: ${m.text}`).join("\n");
   return { system, messages: [{ role: "user", content: `Day: ${day}\n\nKnown facts:\n${known}\n\nConversation:\n${convo}` }], schema: DAILY_SCHEMA, schemaName: "daily_memory", maxTokens: thinking === "enabled" ? DAILY_MAX_TOKENS_THINKING : DAILY_MAX_TOKENS, temperature: 0.2, shape: { thinking } };
 }
 
-export function weeklyPrompt(weekKey: string, days: { period_key: string; summary: string }[]): ChatArgs {
-  const system = "Compact one week of day summaries about a user's chats with Ira into one week summary, at most 200 words, third person. Return JSON only.";
+export function weeklyPrompt(name: string, weekKey: string, days: { period_key: string; summary: string }[]): ChatArgs {
+  const system = `Compact one week of day summaries about a user's chats with ${name} into one week summary, at most 200 words, third person. Return JSON only.`;
   const body = days.map((d) => `${d.period_key}: ${d.summary}`).join("\n");
   return { system, messages: [{ role: "user", content: `Week ending ${weekKey}\n\n${body}` }], schema: WEEKLY_SCHEMA, schemaName: "weekly_memory", maxTokens: 500, temperature: 0.2 };
 }
@@ -227,17 +229,25 @@ export interface RunResult {
 interface LiveRow {
   id: string;
   user_id: string;
+  template_id: string;
 }
+
+const firstName = (templateId: string) => personaFor(templateId).name.split(" ")[0];
 
 async function liveCompanions(db: SupabaseClient): Promise<LiveRow[]> {
   const { data, error } = await db
     .from("companions")
-    .select("id,user_id")
+    .select("id,user_id,template_id")
     .eq("status", "active")
-    .eq("template_id", "F01")
+    .in("template_id", Object.keys(LIVE_TEMPLATES))
     .eq("core->>primary", "ROMANTIC");
   if (error) throw error;
-  return (data ?? []) as LiveRow[];
+  const rows = (data ?? []) as LiveRow[];
+  const owners = [...new Set(rows.map((r) => r.user_id))];
+  const { data: roles, error: roleError } = owners.length ? await db.from("profiles").select("id,role").in("id", owners) : { data: [], error: null };
+  if (roleError) throw roleError;
+  const qaOwners = new Set(((roles ?? []) as { id: string; role: string }[]).filter((r) => r.role === "admin" || r.role === "qa").map((r) => r.id));
+  return rows.filter((r) => isLive({ templateId: r.template_id, core: { primary: "ROMANTIC" } }, qaOwners.has(r.user_id)));
 }
 
 /** The IST day that just ended, relative to `now`. */
@@ -273,7 +283,7 @@ export async function runDaily(db: SupabaseClient, chat: ChatFn, now: number, ba
     if (usable.length) {
       let out: DailyOut | null = null;
       try {
-        const res = await chat(dailyPrompt(day, usable, facts));
+        const res = await chat(dailyPrompt(firstName(c.template_id), day, usable, facts));
         out = parseDailyOut(res.content);
       } catch {
         out = null;
@@ -315,7 +325,7 @@ export async function runWeekly(db: SupabaseClient, chat: ChatFn, now: number, b
     if (rows.length) {
       let text: string | null = null;
       try {
-        const res = await chat(weeklyPrompt(weekKey, rows));
+        const res = await chat(weeklyPrompt(firstName(c.template_id), weekKey, rows));
         const o = JSON.parse(res.content.slice(res.content.indexOf("{"), res.content.lastIndexOf("}") + 1)) as { summary?: unknown };
         if (typeof o.summary === "string") text = clip(o.summary, DAY_SUMMARY_MAX_CHARS);
       } catch {
