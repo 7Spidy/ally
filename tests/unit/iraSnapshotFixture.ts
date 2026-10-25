@@ -1,14 +1,15 @@
 import { compile, type CompileCtx } from "@/lib/llm/compile";
 import * as heart from "@/lib/heart";
-import { F01 } from "@/personas/persona";
+import { F01, type Persona } from "@/personas/persona";
 
 /** Fixed clock and history for the Ira prompt regression (B4 step 0). Tue 2026-05-12 10:00 IST. */
 const NOW = Date.UTC(2026, 4, 12, 4, 30);
 
 export const IRA_SNAPSHOT_LEVELS = [1, 3, 5, 6] as const;
 
-export function iraSnapshot() {
-  const H = heart.now({ id: "c_snapshot", createdAt: NOW - 40 * 86400000 }, NOW, F01);
+/** Fixed-clock prompt snapshot for any persona (B5 step 0 generalises the Ira fixture). */
+export function promptSnapshot(persona: Persona) {
+  const H = heart.now({ id: "c_snapshot", createdAt: NOW - 40 * 86400000 }, NOW, persona);
   const out: Record<string, ReturnType<typeof compile>> = {};
   for (const level of IRA_SNAPSHOT_LEVELS) {
     const ctx: CompileCtx = {
@@ -28,9 +29,11 @@ export function iraSnapshot() {
       coolOff: false,
       safetyMode: false,
       lowEffort: false,
-      persona: F01,
+      persona,
     };
     out[`L${level}`] = compile(ctx);
   }
   return out;
 }
+
+export const iraSnapshot = () => promptSnapshot(F01);

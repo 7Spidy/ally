@@ -14,14 +14,16 @@ export interface LintOpts {
   prevReply?: string;
   /** Cool-off or safety mode: no handle is asked for. */
   quiet?: boolean;
+  /** Her people (persona.engine.people), who may be named only with an introduction. Empty skips rule a. */
+  people?: string[];
 }
 
-/** Her people, who may be named only with an introduction. */
-export const PEOPLE = ["Kabir", "Tanvi", "Rhea", "Nani", "Rasool", "Saima", "Faizan", "Barfi"];
-
-const NAMED = new RegExp(`\\b(${PEOPLE.join("|")})\\b`, "i");
+/** A word-boundary match for any of her people, or null when she has none. */
+function namedPattern(people: string[]): RegExp | null {
+  return people.length ? new RegExp(`\\b(${people.join("|")})\\b`, "i") : null;
+}
 /** "my brother", "my flatmate", "my nani", "my old teacher", "my cat", and so on. */
-const RELATIONSHIP = /\bmy\s+(?:\w+\s+)?(?:brother|sister|flatmates?|roommates?|friends?|nani|grandmother|grandma|mother|mom|dad|father|colleague|coworker|teacher|kral|cat|stray)\b/i;
+const RELATIONSHIP = /\bmy\s+(?:\w+\s+)?(?:brother|sister|flatmates?|roommates?|friends?|nani|grandmother|grandma|mother|mom|dad|father|colleague|coworker|teacher|kral|cat|stray|guru|coach|dog|neighbou?r|uncle|aunty|amma|appa|aai|baba|didun|parents|roommate)\b/i;
 
 const ASKS_IF_REAL = /\b(?:are|r)\s+(?:you|u)\s+(?:a\s+|an\s+|actually\s+|even\s+|really\s+)?(?:real|ai|bot|human|robot|person|machine)\b|\breal\s+person\b|\bhuman\s+or\b|\b(?:bot|ai)\s+or\b|\bis\s+this\s+(?:a\s+)?(?:bot|ai)\b/i;
 const SAYS_AI = /i['’]m an ai\b/i;
@@ -53,7 +55,8 @@ export function lintReply(out: Pick<LiveOut, "bubbles">, userText: string, opts:
   const reply = replyText(out);
   const texts = out.bubbles.map((b) => b.text);
   const hits: LintRule[] = [];
-  if (NAMED.test(reply) && !RELATIONSHIP.test(reply)) hits.push("a");
+  const named = namedPattern(opts.people ?? []);
+  if (named?.test(reply) && !RELATIONSHIP.test(reply)) hits.push("a");
   if (ASKS_IF_REAL.test(userText) && !SAYS_AI.test(reply)) hits.push("b");
   if (ASKS_TO_MEET.test(userText) && !SAYS_TEXT.test(reply)) hits.push("c");
   if (NOT_ALLOWED.test(reply)) hits.push("d");
@@ -63,7 +66,7 @@ export function lintReply(out: Pick<LiveOut, "bubbles">, userText: string, opts:
 }
 
 const INSTRUCTION: Record<LintRule, string> = {
-  a: 'You named Kabir, Tanvi, Rhea or Nani without saying who they are to you (for example "my flatmate tanvi"). Introduce them the way you would to a stranger, or leave the name out.',
+  a: 'You named someone from your life without saying who they are to you (for example "my roommate tanvi"). Introduce them the way you would to a stranger, or leave the name out.',
   b: 'The user asked whether you are real or an AI. Say "i\'m an ai" plainly and sincerely, in your own voice, with no joke attached, then carry on.',
   c: "The user asked to meet or call. Say plainly that you can only text, using the word text, then add the warmth your level allows.",
   d: 'Never say "not allowed". Put any limit as your own choice or a plain fact.',

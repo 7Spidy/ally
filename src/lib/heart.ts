@@ -69,6 +69,11 @@ export interface TimeBlock {
  * Rows follow `persona.engine.blockStarts`. The sheet's own gaps belong to the
  * block before them, and nightEnd to the first block start is the asleep
  * stretch that belongs to no row.
+ *
+ * A block start of "24:00" or later ("24:30", "25:30") is after midnight and
+ * still belongs to the evening before. minutes() returns values past 1440 for
+ * these, and the small hours up to nightEnd (an ordinary clock time such as
+ * "3:45") are shifted by 1440 to sort after them.
  */
 export function timeBlock(ist: IstParts, persona: Persona): TimeBlock {
   const e = persona.engine;
@@ -77,15 +82,15 @@ export function timeBlock(ist: IstParts, persona: Persona): TimeBlock {
   const m = ist.minuteOfDay;
   const weekend = ist.weekday === 0 || ist.weekday === 6;
 
-  // Midnight to nightEnd is still the last block of the evening before.
-  if (m < nightEnd) return blockFromRow(starts.length - 1, ist, persona);
-  if (m < starts[0]) {
+  // The small hours belong to the night before: shift them past 24:00 so they sort after the last block start.
+  const mm = m < nightEnd ? m + 1440 : m;
+  if (mm < starts[0]) {
     return { row: -1, presence: "Asleep", activity: "Asleep.", card: "Morning" };
   }
   let row = 0;
-  for (let i = 0; i < starts.length; i++) if (m >= starts[i]) row = i;
+  for (let i = 0; i < starts.length; i++) if (mm >= starts[i]) row = i;
 
-  if (weekend && m < starts[6]) {
+  if (weekend && mm < starts[6]) {
     const plan = persona.week[(ist.weekday + 6) % 7].plan;
     return { row: -1, presence: "Open", activity: plan, card: m < WEEKEND_LUNCH ? "Morning" : "Lunch" };
   }

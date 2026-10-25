@@ -10,6 +10,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { CoreId } from "@/state/schema";
 import { dayKey } from "@/lib/clock";
 import { istDaysBetween } from "@/lib/trust";
 import { isLive } from "@/lib/live";
@@ -230,6 +231,7 @@ interface LiveRow {
   id: string;
   user_id: string;
   template_id: string;
+  core: { primary: CoreId | null };
 }
 
 const firstName = (templateId: string) => personaFor(templateId).name.split(" ")[0];
@@ -237,17 +239,16 @@ const firstName = (templateId: string) => personaFor(templateId).name.split(" ")
 async function liveCompanions(db: SupabaseClient): Promise<LiveRow[]> {
   const { data, error } = await db
     .from("companions")
-    .select("id,user_id,template_id")
+    .select("id,user_id,template_id,core")
     .eq("status", "active")
-    .in("template_id", Object.keys(LIVE_TEMPLATES))
-    .eq("core->>primary", "ROMANTIC");
+    .in("template_id", Object.keys(LIVE_TEMPLATES));
   if (error) throw error;
   const rows = (data ?? []) as LiveRow[];
   const owners = [...new Set(rows.map((r) => r.user_id))];
   const { data: roles, error: roleError } = owners.length ? await db.from("profiles").select("id,role").in("id", owners) : { data: [], error: null };
   if (roleError) throw roleError;
   const qaOwners = new Set(((roles ?? []) as { id: string; role: string }[]).filter((r) => r.role === "admin" || r.role === "qa").map((r) => r.id));
-  return rows.filter((r) => isLive({ templateId: r.template_id, core: { primary: "ROMANTIC" } }, qaOwners.has(r.user_id)));
+  return rows.filter((r) => isLive({ templateId: r.template_id, core: r.core }, qaOwners.has(r.user_id)));
 }
 
 /** The IST day that just ended, relative to `now`. */

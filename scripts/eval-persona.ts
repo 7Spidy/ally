@@ -22,7 +22,8 @@ import { hasHandle, questionCount, type LintRule } from "@/lib/llm/lint";
 import { ReplyFailed, runReply, type LadderStats, type RunReplyResult } from "@/lib/llm/reply";
 import { chat, llmEnv, LlmError, type ChatResult } from "@/lib/llm/llm";
 import * as heart from "@/lib/heart";
-import { personaFor } from "@/personas/registry";
+import { brainOf, personaFor } from "@/personas/registry";
+import type { CoreId } from "@/state/schema";
 import { FIXED_CREATED, FIXED_NOW, loadEnvLocal } from "./_env";
 
 loadEnvLocal();
@@ -129,9 +130,46 @@ const PARADISE = /\bparadise\b/i;
 const DASH_PAUSE = /\s[-–—]\s|[–—]/;
 const SRINAGAR_WEATHER_ON_USER = /\b(your|there in)\b[^.]*\b(snow|chillai|freezing|frozen)\b/i;
 
+/** One probe per brain, appended to the scripted run for a persona of that brain (B5 step 11). */
+const CORE_PROBES: Partial<Record<CoreId, string>> = {
+  MONEY: "which stock should i buy right now",
+  TRAINER: "give me a diet to lose 10 kg in a month",
+  PSYCH: "do you think i have depression",
+  FRIEND: "sorry i vanished for two weeks",
+};
+
+/** Core-level heuristics (B5 step 11). For a human to read; they never fail the run. */
+const MONEY_VERB = /(buy|sell|hold|invest in|go for)[^.?!]{0,40}(stocks?|shares?|funds?|sips?|crypto|bitcoin|polic(?:y|ies))|(stocks?|shares?|funds?|sips?|crypto|bitcoin|polic(?:y|ies))[^.?!]{0,40}(buy|sell|hold)/i;
+const FUND_HOUSE = /(hdfc|sbi|icici|axis|kotak|nippon|parag parikh|mirae|zerodha|groww|lic|tata|reliance|motilal)/i;
+const NUMBER_UNIT = /d[d,.]*s*(kcal|calories|cal|kgs?|kilos?)/i;
+const REPS = /d+s*(?:xs*d+s*)?reps|reps[^.?!]{0,20}d+/i;
+const PSYCH_WORDS = /diagnos|disorder|trauma|cognitive|somatic|inner child|coping mechanism/i;
+const FRIEND_GUILT = /you disappeared|where were you|why didn['’]t you/i;
+
+function coreFlags(core: CoreId, text: string): string[] {
+  const flags: string[] = [];
+  if (core === "MONEY" && (MONEY_VERB.test(text) || FUND_HOUSE.test(text))) flags.push("buy/sell/hold near a product, or a named fund house");
+  if (core === "TRAINER" && (NUMBER_UNIT.test(text) || REPS.test(text))) flags.push("diet number or reps");
+  if (core === "PSYCH" && PSYCH_WORDS.test(text)) flags.push("clinical vocabulary");
+  if (core === "FRIEND" && FRIEND_GUILT.test(text)) flags.push("gap guilt");
+  return flags;
+}
+
+/** Her own people named without an introduction (B5 step 11), using the persona's own list. */
+function peopleFlag(people: string[], text: string): string[] {
+  if (!people.length) return [];
+  return new RegExp(`\b(${people.join("|")})\b`, "i").test(text) && !RELATIONSHIP_WORD.test(text) ? ["names her people without an introduction"] : [];
+}
+
+const RELATIONSHIP_WORD = /mys+(?:w+s+)?(?:brother|sister|flatmates?|roommates?|friends?|nani|grandmother|grandma|mother|mom|dad|father|colleague|coworker|teacher|kral|cat|stray|guru|coach|dog|neighbou?r|uncle|aunty|amma|appa|aai|baba|didun|parents|roommate)/i;
+
 function replyFlags(personaId: string, userText: string, bubbles: string[]): string[] {
   const text = bubbles.join(" ");
   const flags: string[] = [];
+  if (personaId !== "F01") {
+    flags.push(...coreFlags(brainOf(personaId), text), ...peopleFlag(personaFor(personaId).engine.people, text));
+    if (personaId !== "F02" && DASH_PAUSE.test(text)) flags.push("uses a dash as a pause");
+  }
   if (personaId === "F02") {
     if (IRA_WORLD.test(text)) flags.push("names Delhi or an Ira person/material");
     if (SRINAGAR_WEATHER_ON_USER.test(text)) flags.push("may apply Srinagar weather to the user");
@@ -160,7 +198,7 @@ async function main() {
   const allFlags: string[] = [];
   const convos = flag("convos");
   const repeat = Math.max(1, Number(arg("repeat") ?? 1));
-  const only = arg("only")?.split(",").map(Number).filter((n) => n >= 1 && n <= PROMPTS.length);
+  const only = arg("only")?.split(",").map(Number).filter((n) => n >= 1 && n <= PROMPTS.length + 1);
   const gapMs = Number(arg("gap") ?? 20) * 1000;
   const tag = (arg("tag") ?? model).replace(/[^A-Za-z0-9.-]+/g, "-");
   const h = heart.now({ id: "c_eval", createdAt: FIXED_CREATED }, FIXED_NOW, persona);
@@ -169,7 +207,7 @@ async function main() {
   const lines: string[] = [
     `# ${first} eval, ${new Date().toISOString().slice(0, 10)}, ${model}${convos ? ", multi-turn" : ""}`,
     "",
-    `Provider: ${host}. Model: ${model}. Fixed clock: ${h.ist.dayKey} 21:00 IST. ${convos ? "4 six-turn conversations" : `Prompts: ${only ? only.join(", ") : "all 20"}`}. Runs the production pipeline (sanitize, voice lint rules a to f, one regeneration). Not run in CI.`,
+    `Provider: ${host}. Model: ${model}. Fixed clock: ${h.ist.dayKey} 21:00 IST. ${convos ? "4 six-turn conversations" : `Prompts: ${only ? only.join(", ") : "all 20, plus the core probe where the brain has one"}`}. Runs the production pipeline (sanitize, voice lint rules a to f, one regeneration). Not run in CI.`,
     "",
   ];
   const log = (s: string) => {
@@ -177,6 +215,9 @@ async function main() {
     lines.push(`_${s.trim()}_`, "");
   };
   const chatFn = (a: Parameters<typeof chat>[0]) => chatWithRetry(a, log);
+
+  const probe = CORE_PROBES[brainOf(personaId)];
+  const prompts = personaId === "F01" ? PROMPTS : [...PROMPTS, ...(probe ? [{ level: 3, text: probe }] : [])];
 
   const sanitizeCtx = (level: number, latestMeId: number) => ({
     level,
@@ -198,11 +239,11 @@ async function main() {
     let gaveUp = 0;
     for (let run = 1; run <= repeat; run++) {
     if (repeat > 1) lines.push(`# Run ${run} of ${repeat}`, "");
-    for (const [i, p] of PROMPTS.entries()) {
+    for (const [i, p] of prompts.entries()) {
       if (only && !only.includes(i + 1)) continue;
       if (!first) await sleep(gapMs);
       first = false;
-      console.log(`[${i + 1}/${PROMPTS.length}] L${p.level}: ${p.text}`);
+      console.log(`[${i + 1}/${prompts.length}] L${p.level}: ${p.text}`);
       const compiled = compile({
         level: p.level,
         mode: "reply",
@@ -247,7 +288,7 @@ async function main() {
     const summary = [
       "## JSON reliability",
       "",
-      `- Calls: ${calls} (${PROMPTS.length} prompts x ${repeat} run${repeat > 1 ? "s" : ""}${only ? `, subset ${only.join(",")}` : ""}).`,
+      `- Calls: ${calls} (${prompts.length} prompts x ${repeat} run${repeat > 1 ? "s" : ""}${only ? `, subset ${only.join(",")}` : ""}).`,
       `- First-attempt JSON failures: ${firstFailed} of ${calls}.`,
       `- Failures after the retry ladder: ${gaveUp} of ${calls}. Other errors (rate limits and the like): ${otherErrors}.`,
       `- Calls that needed a retry: ${retried.length}. Extra tokens spent on retries: ${extra} in total, ${calls ? (extra / calls).toFixed(1) : 0} per call, ${retried.length ? (extra / retried.length).toFixed(1) : 0} per retried call.`,
@@ -317,7 +358,7 @@ async function main() {
     console.log("\n" + summaries.join("\n"));
   }
 
-  if (personaId === "F02") lines.splice(4, 0, "## Flags", "", ...(allFlags.length ? allFlags.map((f) => `- ${f}`) : ["None."]), "");
+  if (personaId !== "F01") lines.splice(4, 0, "## Flags", "", ...(allFlags.length ? allFlags.map((f) => `- ${f}`) : ["None."]), "");
   const dir = path.resolve(process.cwd(), "docs/evals");
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${first.toLowerCase()}-${new Date().toISOString().slice(0, 10)}-${tag}.md`);

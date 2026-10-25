@@ -58,8 +58,9 @@ describe("registry", () => {
     expect(() => personaFor("M01")).toThrow();
     expect(() => personaFor("")).toThrow();
   });
-  it("lists F01 for everyone and F02 for qa", () => {
-    expect(LIVE_TEMPLATES).toEqual({ F01: "all", F02: "qa" });
+  it("lists F01 for everyone and the other nine for qa", () => {
+    expect(LIVE_TEMPLATES).toEqual({ F01: "all", F02: "qa", F03: "qa", F04: "qa", F05: "qa", F07: "qa", F08: "qa", F09: "qa", F11: "qa", F13: "qa" });
+    expect(Object.keys(PERSONAS)).toHaveLength(10);
   });
 });
 

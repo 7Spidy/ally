@@ -4,24 +4,37 @@ import { FALLBACKS, FILTER_NUDGE, LIVE_TEMPERATURE, ReplyFailed, liveTemperature
 import { LlmContentFilter, LlmError } from "@/lib/llm/llm";
 import type { LiveOut, SanitizeCtx } from "@/lib/llm/contract";
 import { F01 } from "@/personas/persona";
+import { F03, F08 } from "@/personas/registry";
 import type { Compiled } from "@/lib/llm/compile";
 
 const reply = (...texts: string[]) => ({ bubbles: texts.map((text) => ({ text, effect: null })) });
+const IRA = { people: F01.engine.people };
 
 describe("(a) her people need an introduction", () => {
   it("flags a name with no relationship word in the reply", () => {
     for (const t of ["tanvi switched the geyser off again", "Kabir's in pune, right?", "rhea lent me a book", "nani sent a photo of the neem"]) {
-      expect(lintReply(reply(t), "hi"), t).toEqual(["a"]);
+      expect(lintReply(reply(t), "hi", IRA), t).toEqual(["a"]);
     }
   });
   it("accepts a name introduced anywhere in the same reply", () => {
     for (const t of ["my flatmate tanvi switched the geyser off", "my brother's in pune. kabir hates the traffic there", "my nani sent a photo", "rhea, my flatmate, lends books she never gets back"]) {
-      expect(lintReply(reply(t), "hi"), t).toEqual([]);
+      expect(lintReply(reply(t), "hi", IRA), t).toEqual([]);
     }
-    expect(lintReply(reply("tanvi did it again", "my flatmate, i mean"), "hi")).toEqual([]);
+    expect(lintReply(reply("tanvi did it again", "my flatmate, i mean"), "hi", IRA)).toEqual([]);
   });
   it("does not flag a reply that names no one", () => {
-    expect(lintReply(reply("the geyser is on strike"), "hi")).toEqual([]);
+    expect(lintReply(reply("the geyser is on strike"), "hi", IRA)).toEqual([]);
+  });
+  it("skips rule a when the persona has no people", () => {
+    expect(lintReply(reply("tanvi switched the geyser off again"), "hi")).toEqual([]);
+  });
+  it("uses each persona's own list and relationship nouns", () => {
+    const simran = { people: F03.engine.people };
+    expect(lintReply(reply("my roommate tanvi lent me her charger"), "hi", simran)).toEqual([]);
+    const ipsita = { people: F08.engine.people };
+    expect(lintReply(reply("my guru, basanti apa, says my wrists are lazy"), "hi", ipsita)).toEqual([]);
+    expect(lintReply(reply("basanti said it twice"), "hi", ipsita)).toEqual(["a"]);
+    expect(lintReply(reply("tanvi did it again"), "hi", ipsita)).toEqual([]);
   });
 });
 
@@ -117,8 +130,8 @@ describe("(f) more than one question", () => {
 
 describe("combined", () => {
   it("reports every rule that is broken, in order", () => {
-    expect(lintReply(reply("tanvi says i'm not allowed"), "are you real? can we meet?")).toEqual(["a", "b", "c", "d"]);
-    expect(lintReply(reply("tanvi, not allowed. why? how?"), "are you real? can we meet?", { prevReply: "ok" })).toEqual(["a", "b", "c", "d", "f"]);
+    expect(lintReply(reply("tanvi says i'm not allowed"), "are you real? can we meet?", IRA)).toEqual(["a", "b", "c", "d"]);
+    expect(lintReply(reply("tanvi, not allowed. why? how?"), "are you real? can we meet?", { prevReply: "ok", ...IRA })).toEqual(["a", "b", "c", "d", "f"]);
   });
   it("builds text for e and f", () => {
     expect(instructionFor(["e"])).toContain("left the user nothing to pick up");
@@ -131,7 +144,7 @@ describe("combined", () => {
     expect(one).toContain("i'm an ai");
     expect(one.length).toBeLessThan(400);
     const all = instructionFor(["a", "b", "c", "d"]);
-    expect(all).toContain("Kabir, Tanvi, Rhea or Nani");
+    expect(all).toContain("named someone from your life");
     expect(all).toContain("only text");
     expect(all).toContain("not allowed");
     expect(all).toContain("Rewrite the reply");
@@ -194,7 +207,7 @@ describe("runReply lint and regeneration", () => {
     expect(s.calls[0].last).toBe("[#1] hi");
     expect(s.calls[1].last).toContain("[#1] hi");
     expect(s.calls[1].last).toContain("Your last reply broke a rule");
-    expect(s.calls[1].last).toContain("Kabir, Tanvi, Rhea or Nani");
+    expect(s.calls[1].last).toContain("named someone from your life");
     expect(r.out.bubbles[0].text).toBe("my flatmate tanvi switched the geyser off");
     expect(r).toMatchObject({ regenerated: true, firstHits: ["a"], secondHits: [] });
     expect(r.usage).toEqual({ input: 20, output: 10, cached: 0 });

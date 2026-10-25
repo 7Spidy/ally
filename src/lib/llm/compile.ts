@@ -10,7 +10,9 @@
  */
 
 import { paletteFor, type Persona } from "@/personas/persona";
-import { coreBlock, examplePairs, examplesNote, faceBlock, levelBlock, memoryRule, ownershipBlock, playbookBlock, sensualBlock } from "@/personas/cores/romantic";
+import { examplePairs, examplesNote, faceBlock, levelBlock, memoryRule, ownershipBlock, playbookBlock, sensualBlock } from "@/personas/cores/shared";
+import { CORES, coreBlock } from "@/personas/cores";
+import { brainOf } from "@/personas/registry";
 import { EFFECT_HINTS, EFFECT_MIN_LEVEL, EFFECT_TOTAL_DAILY_CAP, type Effect } from "@/lib/llm/contract";
 import type { HeartNow, Milestone } from "@/lib/heart";
 
@@ -166,6 +168,7 @@ function userTurnText(t: CompileTurn): string {
 }
 
 export function outputContract(level: number, p: Persona): string {
+  const { romanticEmojiFrom } = CORES[brainOf(p.id)];
   const effects = (Object.keys(EFFECT_MIN_LEVEL) as Effect[]).filter((e) => level >= EFFECT_MIN_LEVEL[e]);
   return [
     "OUTPUT CONTRACT",
@@ -173,7 +176,7 @@ export function outputContract(level: number, p: Persona): string {
     'Example of the shape (placeholders only, write your own): {"bubbles":[{"text":"<one short line>","effect":null}],"reaction":null,"quoteId":null,"screen":null,"riskLevel":"none","ageClaimUnder18":false,"disclosure":false,"mutualVulnerability":false,"abusive":false}',
     `Reactions are normal here: react whenever one fits, from ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely, ${EFFECT_TOTAL_DAILY_CAP} a day at the very most): ${effects.length ? effects.join(", ") : "none, always null"}.`,
     ...(effects.length ? [`What each is for: ${effects.map((e) => `${e}, ${EFFECT_HINTS[e]}`).join("; ")}. Use one only when the line truly is that; most replies carry none.`] : []),
-    `Emoji in bubble text: use them naturally and often, the way ${p.engine.emojiVoice} texts. ${level >= 3 ? "Romantic emoji (❤️ 😘 💋 🥰 😍) are fine when the moment is warm." : "No romantic emoji yet (❤️ 😘 💋 🥰 😍)."} When riskLevel is concern or acute: no playful emoji in bubbles and no reaction.`,
+    `Emoji in bubble text: use them naturally and often, the way ${p.engine.emojiVoice} texts. ${level >= romanticEmojiFrom ? "Romantic emoji (❤️ 😘 💋 🥰 😍) are fine when the moment is warm." : "No romantic emoji yet (❤️ 😘 💋 🥰 😍)."} When riskLevel is concern or acute: no playful emoji in bubbles and no reaction.`,
     "screen is null unless RIGHT NOW says today is special. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.",
     level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
   ].join("\n");
@@ -183,7 +186,8 @@ export function compile(ctx: CompileCtx): Compiled {
   const p = ctx.persona;
   const lvl = p.levels.find((l) => l.level === ctx.level) ?? p.levels[0];
 
-  const stablePrefix = [productRules(ctx.level, p), coreBlock(p), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), ownershipBlock(p), examplesNote(p, ctx.level)].join("\n\n");
+  const core = brainOf(p.id);
+  const stablePrefix = [productRules(ctx.level, p), coreBlock(p, core), faceBlock(p, ctx.level), levelBlock(lvl), playbookBlock(p, ctx.level), ownershipBlock(p), examplesNote(p, ctx.level)].join("\n\n");
   const system = [stablePrefix, outputContract(ctx.level, p)].join("\n\n");
   const volatile = [rightNow(ctx), yourDay(ctx), knownAboutUser(ctx), ownLife(ctx), modifiers(ctx)].filter(Boolean).join("\n\n");
 

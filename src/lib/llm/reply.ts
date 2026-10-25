@@ -167,7 +167,7 @@ export async function runReply(args: RunReplyArgs): Promise<RunReplyResult> {
   const firstClean = sanitize(first, args.sanitizeCtx);
   // Crisis and age-check replies are never linted or rewritten.
   const lintable = args.userText !== "" && firstClean.riskLevel === "none" && !firstClean.ageClaimUnder18;
-  const lintOpts = { prevReply: args.prevReply, quiet: args.quiet };
+  const lintOpts = { prevReply: args.prevReply, quiet: args.quiet, people: args.sanitizeCtx.persona.engine.people };
   const firstHits = lintable ? lintReply(firstClean, args.userText, lintOpts) : [];
   if (!firstHits.length) return { raw: first, out: firstClean, firstHits, secondHits: null, regenerated: false, usage, ladder, filtered };
 

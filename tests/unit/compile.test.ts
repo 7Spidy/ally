@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { compile, JSON_REMINDER, SAMPLES_END, WINDOW_MAX, windowStart, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
 import { hasHandle } from "@/lib/llm/lint";
-import { PEOPLE } from "@/lib/llm/lint";
 import * as heart from "@/lib/heart";
 import { F01 } from "@/personas/persona";
 import { examplePairs as examplePairsFor, ownershipBlock as ownershipBlockFor, variantsFor } from "@/personas/cores/romantic";
@@ -298,7 +297,7 @@ describe("golden exchanges", () => {
     for (const k of [3, 5] as const) for (const g of GOLDEN[k]) for (const b of g.bubbles) expect(b.length).toBeLessThanOrEqual(200);
   });
   it("names her people only with a relationship word", () => {
-    for (const k of [1, 3, 5] as const) for (const g of GOLDEN[k]) for (const name of PEOPLE) expect(g.bubbles.join(" ")).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
+    for (const k of [1, 3, 5] as const) for (const g of GOLDEN[k]) for (const name of F01.engine.people) expect(g.bubbles.join(" ")).not.toMatch(new RegExp(`\\b${name}\\b`, "i"));
   });
   it("ships as user and assistant messages: raw user text, assistant JSON in the contract's key order", () => {
     const KEYS = ["bubbles", "reaction", "quoteId", "screen", "riskLevel", "ageClaimUnder18", "disclosure", "mutualVulnerability", "abusive"];

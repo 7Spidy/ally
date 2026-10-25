@@ -46,6 +46,10 @@ export interface PersonaEngine {
   gatedMoods: Record<string, number>;
   specialCards: Record<string, string>;
   hardRules: string[];
+  /** Names of her people; lint flags one used without an introduction. */
+  people: string[];
+  /** The open-loop example in CONVERSATION OWNERSHIP, in her own world. */
+  openLoop: string;
 }
 
 export interface Persona {
