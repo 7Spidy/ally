@@ -13,6 +13,7 @@ import { paletteFor, type Persona } from "@/personas/persona";
 import { examplePairs, examplesNote, faceBlock, levelBlock, memoryRule, ownershipBlock, playbookBlock, sensualBlock } from "@/personas/cores/shared";
 import { CORES, coreBlock } from "@/personas/cores";
 import { brainOf } from "@/personas/registry";
+import { emojiDue } from "@/lib/emoji";
 import { EFFECT_HINTS, EFFECT_MIN_LEVEL, EFFECT_TOTAL_DAILY_CAP, type Effect } from "@/lib/llm/contract";
 import type { HeartNow, Milestone } from "@/lib/heart";
 
@@ -30,6 +31,8 @@ export interface CompileTurn {
   quote?: { who: "them" | "me"; text: string } | null;
   /** The user edited this message after sending it. */
   edited?: boolean;
+  /** This message is part of a crisis-band (concern/acute) exchange. */
+  safety?: boolean;
 }
 
 export interface CompileCtx {
@@ -145,6 +148,9 @@ function modifiers(ctx: CompileCtx): string {
   if (ctx.coolOff) m.push("Cool-off: be shorter, not colder.");
   if (ctx.safetyMode) m.push("Safety mode: no flirting or romance today.");
   if (ctx.lowEffort) m.push("The user has sent five one-word replies: stay short, but lead. Bring one new thing from your day or ask one easy, specific question. Do not mirror their silence.");
+  if (ctx.mode !== "opener" && emojiDue(ctx.history)) {
+    m.push("Emoji: your last two replies had none. Put at least one emoji in this reply, in your usual style; the romantic-emoji rule in the OUTPUT CONTRACT still applies. Skip this only if this reply's riskLevel is concern or acute.");
+  }
   if (ctx.mode === "opener") {
     const pressure = ctx.pressure ? ` what weighs on them (${ctx.pressure})` : " what weighs on them";
     m.push(`This is your first message. L1. One bubble. Reference${pressure} without quoting it back.`);
