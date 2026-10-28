@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compile, JSON_REMINDER, SAMPLES_END, WINDOW_MAX, windowStart, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
+import { compile, JSON_REMINDER, SAMPLES_END, WINDOW_MAX, reactionDue, windowStart, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
 import { hasHandle } from "@/lib/llm/lint";
 import * as heart from "@/lib/heart";
 import { F01 } from "@/personas/persona";
@@ -31,6 +31,7 @@ function ctx(level: number, over: Partial<CompileCtx> = {}): CompileCtx {
   };
 }
 
+const REACTION_LINE = "Reaction: you have not reacted";
 const EMOJI_LINE = "Emoji: your last two replies had none";
 const DRY_HISTORY: CompileTurn[] = [
   { id: 1, who: "me", text: "hello" },
@@ -101,6 +102,7 @@ describe("stable prefix", () => {
     expect(a.system).toBe(b.system);
     expect(a.system).toBe(c.system);
     expect(c.volatile).toContain(EMOJI_LINE);
+    expect(c.volatile).toContain(REACTION_LINE);
     expect(a.system.startsWith(a.stablePrefix)).toBe(true);
     expect(a.volatile).not.toBe(b.volatile);
   });
@@ -125,6 +127,70 @@ describe("emoji floor", () => {
   });
   it("is absent in opener mode", () => {
     expect(compile(ctx(3, { mode: "opener", history: DRY_HISTORY })).volatile).not.toContain(EMOJI_LINE);
+  });
+});
+
+describe("reactionDue", () => {
+  let id = 0;
+  const me = (reacted = false, safety = false): CompileTurn => ({ id: ++id, who: "me", text: "hi", ...(reacted ? { reacted } : {}), ...(safety ? { safety } : {}) });
+  const them = (safety = false): CompileTurn => ({ id: ++id, who: "them", text: "hey", ...(safety ? { safety } : {}) });
+
+  it("is false for empty history and for only a trailing user run", () => {
+    expect(reactionDue([])).toBe(false);
+    expect(reactionDue([me(), me()])).toBe(false);
+  });
+  it("is false after one answered, unreacted turn", () => {
+    expect(reactionDue([me(), them()])).toBe(false);
+  });
+  it("is true after two answered, unreacted turns", () => {
+    expect(reactionDue([me(), them(), me(), them()])).toBe(true);
+  });
+  it("never counts the trailing unanswered user run", () => {
+    expect(reactionDue([me(), them(), me()])).toBe(false);
+    expect(reactionDue([me(), them(), me(), them(), me()])).toBe(true);
+  });
+  it("is false when a reacted turn follows two unreacted ones", () => {
+    expect(reactionDue([me(), them(), me(), them(), me(true), them()])).toBe(false);
+  });
+  it("is false when a reacted turn sits before only one unreacted turn", () => {
+    expect(reactionDue([me(true), them(), me(), them()])).toBe(false);
+  });
+  it("counts a run of user messages as reacted when only the middle one was", () => {
+    expect(reactionDue([me(), me(true), me(), them(), me(), them()])).toBe(false);
+  });
+  it("counts a run of user messages as one turn", () => {
+    expect(reactionDue([me(), me(), me(), them()])).toBe(false);
+    expect(reactionDue([me(), me(), them(), me(), me(), them()])).toBe(true);
+  });
+  it("is false when the newest answered exchange is a safety one", () => {
+    expect(reactionDue([me(), them(), me(), them(), me(), them(true)])).toBe(false);
+    expect(reactionDue([me(), them(), me(), them(), me(false, true), them()])).toBe(false);
+  });
+  it("stops counting at an older safety exchange", () => {
+    expect(reactionDue([me(), them(), me(), them(true), me(), them()])).toBe(false);
+  });
+  it("counts the two unreacted turns after a safety exchange", () => {
+    expect(reactionDue([me(), them(true), me(), them(), me(), them()])).toBe(true);
+  });
+  it("works when the window starts mid-run and ends on a persona run", () => {
+    expect(reactionDue([them(), me(), them(), me(), them()])).toBe(true);
+  });
+});
+
+describe("reaction floor directive", () => {
+  it("adds the line to volatile, never system, when due", () => {
+    const c = compile(ctx(3, { history: DRY_HISTORY }));
+    expect(c.volatile).toContain(REACTION_LINE);
+    expect(c.system).not.toContain(REACTION_LINE);
+  });
+  it("is absent in opener mode, cool-off and safety mode", () => {
+    expect(compile(ctx(3, { history: DRY_HISTORY, mode: "opener" })).volatile).not.toContain(REACTION_LINE);
+    expect(compile(ctx(3, { history: DRY_HISTORY, coolOff: true })).volatile).not.toContain(REACTION_LINE);
+    expect(compile(ctx(3, { history: DRY_HISTORY, safetyMode: true })).volatile).not.toContain(REACTION_LINE);
+  });
+  it("is absent when a recent turn was reacted to", () => {
+    const history = DRY_HISTORY.map((t) => (t.id === 3 ? { ...t, reacted: true } : t));
+    expect(compile(ctx(3, { history })).volatile).not.toContain(REACTION_LINE);
   });
 });
 

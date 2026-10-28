@@ -33,6 +33,8 @@ export interface CompileTurn {
   edited?: boolean;
   /** This message is part of a crisis-band (concern/acute) exchange. */
   safety?: boolean;
+  /** User turn: the persona reacted to this message (meta.reaction set). */
+  reacted?: boolean;
 }
 
 export interface CompileCtx {
@@ -73,6 +75,40 @@ export const WINDOW_STEP = 10;
 /** Absolute index of the first message in the window, for `total` messages. Moves only every WINDOW_STEP messages. */
 export function windowStart(total: number): number {
   return total <= WINDOW_MAX ? 0 : Math.ceil((total - WINDOW_MAX) / WINDOW_STEP) * WINDOW_STEP;
+}
+
+/** Answered user turns without a reaction allowed in a row before the floor fires. */
+export const REACTION_MAX_DRY = 2;
+
+/**
+ * The reaction floor: true when the last REACTION_MAX_DRY answered user turns
+ * got no reaction. A user turn is a run of consecutive "me" messages answered
+ * by the "them" run after it; the trailing "me" run is the turn being answered
+ * now and is not counted. A safety flag on the newest answered exchange means
+ * nothing is due; on an older one it stops the count.
+ */
+export function reactionDue(history: CompileTurn[]): boolean {
+  const runs: { who: "me" | "them"; turns: CompileTurn[] }[] = [];
+  for (const t of history) {
+    const last = runs[runs.length - 1];
+    if (last && last.who === t.who) last.turns.push(t);
+    else runs.push({ who: t.who, turns: [t] });
+  }
+  const answered: { me: CompileTurn[]; them: CompileTurn[] }[] = [];
+  runs.forEach((r, i) => {
+    if (r.who === "me" && runs[i + 1]) answered.push({ me: r.turns, them: runs[i + 1].turns });
+  });
+  let dry = 0;
+  for (let i = answered.length - 1; i >= 0; i--) {
+    const { me, them } = answered[i];
+    if (me.some((t) => t.safety) || them.some((t) => t.safety)) {
+      if (i === answered.length - 1) return false;
+      break;
+    }
+    if (me.some((t) => t.reacted)) break;
+    dry++;
+  }
+  return dry >= REACTION_MAX_DRY;
 }
 
 /** Between the examples and the real history. */
@@ -150,6 +186,9 @@ function modifiers(ctx: CompileCtx): string {
   if (ctx.lowEffort) m.push("The user has sent five one-word replies: stay short, but lead. Bring one new thing from your day or ask one easy, specific question. Do not mirror their silence.");
   if (ctx.mode !== "opener" && emojiDue(ctx.history)) {
     m.push("Emoji: your last two replies had none. Put at least one emoji in this reply, in your usual style; the romantic-emoji rule in the OUTPUT CONTRACT still applies. Skip this only if this reply's riskLevel is concern or acute.");
+  }
+  if (ctx.mode !== "opener" && !ctx.coolOff && !ctx.safetyMode && reactionDue(ctx.history)) {
+    m.push(`Reaction: you have not reacted to their last two messages. Set reaction this time, using only an emoji from the reaction list in the OUTPUT CONTRACT, the one that fits their latest message. Skip this only if this reply's riskLevel is concern or acute.`);
   }
   if (ctx.mode === "opener") {
     const pressure = ctx.pressure ? ` what weighs on them (${ctx.pressure})` : " what weighs on them";

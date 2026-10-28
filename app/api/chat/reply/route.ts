@@ -195,7 +195,7 @@ export async function POST(request: Request) {
       facts: (factRows ?? []) as { id: number; category: string; fact: string }[],
       weekSummaries: ((weekRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
       daySummaries: ((dayRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
-      history: history.map((m) => ({ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m), safety: !!m.meta?.safety })),
+      history: history.map((m) => ({ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m), reacted: m.who === "me" && typeof m.meta?.reaction === "string" && m.meta.reaction !== "", safety: !!m.meta?.safety })),
       historyOffset,
       coolOff,
       safetyMode,

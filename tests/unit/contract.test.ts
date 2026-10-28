@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { F01, paletteFor } from "@/personas/persona";
 import { LIVE_OUT_SCHEMA, cutAtSentence, cutAtWord, grantCelebration, applyQaForce, EFFECT_TOTAL_DAILY_CAP, EFFECTS, EFFECT_MIN_LEVEL, parseLiveOut, safePrefix, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
 
@@ -95,6 +95,19 @@ describe("reaction", () => {
     expect(sanitize(out({ reaction: "👀" }), ctx({ level: 1 })).reaction).toBe("👀");
     expect(sanitize(out({ reaction: "🙄" }), ctx({ level: 1 })).reaction).toBeNull();
     expect(sanitize(out({ reaction: "🙄" }), ctx({ level: 2 })).reaction).toBe("🙄");
+  });
+  it("logs an off-palette reaction as it nulls it, and stays silent for an allowed one", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    try {
+      expect(sanitize(out({ reaction: "❤️" }), ctx({ level: 3 })).reaction).toBeNull();
+      expect(info).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(info.mock.calls[0][0] as string)).toEqual({ evt: "llm.reaction_dropped", level: 3, reaction: "❤️" });
+      info.mockClear();
+      expect(sanitize(out({ reaction: "👀" }), ctx({ level: 1 })).reaction).toBe("👀");
+      expect(info).not.toHaveBeenCalled();
+    } finally {
+      info.mockRestore();
+    }
   });
   it("is not frequency-limited: the same reaction survives reply after reply", () => {
     for (let i = 0; i < 10; i++) {
