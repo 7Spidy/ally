@@ -282,7 +282,10 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
 
   // Reaction: in this level's palette. Not frequency-limited.
   let reaction = out.reaction;
-  if (reaction !== null && !paletteFor(level, ctx.persona).includes(reaction)) reaction = null;
+  if (reaction !== null && !paletteFor(level, ctx.persona).includes(reaction)) {
+    console.info(JSON.stringify({ evt: "llm.reaction_dropped", level, reaction }));
+    reaction = null;
+  }
 
   // Screen effect: level, milestone, one per day, and petals only at L6.
   let screen = out.screen;
