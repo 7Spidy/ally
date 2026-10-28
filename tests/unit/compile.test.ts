@@ -31,6 +31,15 @@ function ctx(level: number, over: Partial<CompileCtx> = {}): CompileCtx {
   };
 }
 
+const EMOJI_LINE = "Emoji: your last two replies had none";
+const DRY_HISTORY: CompileTurn[] = [
+  { id: 1, who: "me", text: "hello" },
+  { id: 2, who: "them", text: "hey you" },
+  { id: 3, who: "me", text: "how are you" },
+  { id: 4, who: "them", text: "good, you?" },
+  { id: 5, who: "me", text: "tired" },
+];
+
 const L4_HELD = F01.identity.heldBack.L4;
 const L5_HELD = F01.identity.heldBack.L5;
 
@@ -88,7 +97,10 @@ describe("stable prefix", () => {
         userName: "Someone else",
       })
     );
+    const c = compile(ctx(3, { history: DRY_HISTORY }));
     expect(a.system).toBe(b.system);
+    expect(a.system).toBe(c.system);
+    expect(c.volatile).toContain(EMOJI_LINE);
     expect(a.system.startsWith(a.stablePrefix)).toBe(true);
     expect(a.volatile).not.toBe(b.volatile);
   });
@@ -98,6 +110,21 @@ describe("stable prefix", () => {
   it("never holds a volatile section", () => {
     const s = compile(ctx(3)).system;
     for (const h of ["RIGHT NOW", "YOUR DAY", "WHAT YOU KNOW ABOUT THE USER", "YOUR OWN LIFE", "MODIFIERS"]) expect(s, h).not.toContain(`\n\n${h}`);
+  });
+});
+
+describe("emoji floor", () => {
+  it("adds the directive to volatile, never system, when the last two replies were emoji-free", () => {
+    const c = compile(ctx(3, { history: DRY_HISTORY }));
+    expect(c.volatile).toContain(EMOJI_LINE);
+    expect(c.system).not.toContain(EMOJI_LINE);
+  });
+  it("is absent when a recent reply had an emoji", () => {
+    const history = DRY_HISTORY.map((t) => (t.id === 4 ? { ...t, text: "good, you? 😊" } : t));
+    expect(compile(ctx(3, { history })).volatile).not.toContain(EMOJI_LINE);
+  });
+  it("is absent in opener mode", () => {
+    expect(compile(ctx(3, { mode: "opener", history: DRY_HISTORY })).volatile).not.toContain(EMOJI_LINE);
   });
 });
 
