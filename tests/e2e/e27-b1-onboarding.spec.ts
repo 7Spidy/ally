@@ -18,11 +18,11 @@ import {
 const ROMANTIC_WOMEN = ["F02", "F03", "F05", "F06", "F10", "F14", "F15", "F16", "F01"];
 
 // ROMANTIC by a wide margin, whatever the pressure.
-const ROMANTIC_ANSWERS = { q5: 1, q6: 0, q7: 1, q8: 1, q9: 2, q10: "alone", q11: ["making"] };
-// MONEY: 9 points to TRAINER's 6, so no tiebreak.
-const MONEY_ANSWERS = { q5: 3, q6: 3, q7: 3, q8: 2, q9: 3, q10: "money", q11: ["making"] };
+const ROMANTIC_ANSWERS = { q5: 0, q6: 3, q7: 1, q8: 2, q9: 0, q10: "alone", q11: ["making"] };
+// MONEY: every directive card plus the money pressure, 13 to TRAINER's 10, so no tiebreak.
+const MONEY_ANSWERS = { q5: 3, q6: 2, q7: 0, q8: 1, q9: 3, q10: "money", q11: ["making"] };
 // MONEY 7 to PSYCH 6: a close call between those two.
-const CLOSE_ANSWERS = { q5: 0, q6: 2, q7: 3, q8: 2, q9: 0, q10: "money", q11: ["making"] };
+const CLOSE_ANSWERS = { q5: 0, q6: 0, q7: 2, q8: 0, q9: 3, q10: "money", q11: ["making"] };
 
 const TIEBREAK_MONEY = "Right. List what's actually urgent. We'll sort the rest tomorrow.";
 const TIEBREAK_PSYCH = "Let's slow it down. What's the thought that keeps coming back?";
@@ -146,16 +146,16 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
     await expect(page.getByRole("button", { name: "Continue" })).toHaveCount(0);
 
     // A tap selects, then moves on by itself.
-    await page.getByRole("radio", { name: "I tell one person" }).click();
-    await expect(page.getByRole("radio", { name: "I tell one person" })).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("radio", { name: "Someone who notices I've gone quiet" }).click();
+    await expect(page.getByRole("radio", { name: "Someone who notices I've gone quiet" })).toHaveAttribute("aria-checked", "true");
     await screenshotScreen(page, "e27-02-cards");
     await page.waitForURL("**/onboarding/questions/warmth");
 
     for (const [route, option] of [
-      ["push", "Feeling understood"],
+      ["push", "Close, like it's just the two of us"],
       ["structure", "Someone who believes in me"],
-      ["offday", "Loosely sketched"],
-      ["pressure", "Someone to just stay"],
+      ["offday", "Take my time, trust gets earned"],
+      ["pressure", "Warm, with a little teasing"],
     ] as const) {
       await expect(page.getByRole("slider")).toHaveCount(0);
       await page.getByRole("radio", { name: option }).click();
@@ -164,7 +164,7 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
     // Q10 keeps its dial.
     await expect(page.getByRole("slider")).toHaveCount(1);
     const flow = await storedFlow(page);
-    expect([flow?.answers.q5, flow?.answers.q6, flow?.answers.q7, flow?.answers.q8, flow?.answers.q9]).toEqual([1, 0, 1, 1, 2]);
+    expect([flow?.answers.q5, flow?.answers.q6, flow?.answers.q7, flow?.answers.q8, flow?.answers.q9]).toEqual([0, 3, 1, 2, 0]);
     assertHealthy(health);
   });
 
@@ -345,14 +345,14 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
       })
     );
     await page.goto("/onboarding/questions/structure");
-    await page.getByRole("radio", { name: "Mostly planned" }).click(); // was index 2 ("Mostly planned")
+    await page.getByRole("radio", { name: "Open up fast if the vibe is right" }).click(); // same as the seeded answer (index 0)
     // Same answer: nothing changes.
     await page.waitForURL("**/onboarding/questions/offday");
     expect((await storedFlow(page))?.answers.tb).toBe("PSYCH");
 
     await page.getByRole("button", { name: "Back" }).click();
     await page.waitForURL("**/onboarding/questions/structure");
-    await page.getByRole("radio", { name: "Open, I'll see what happens" }).click();
+    await page.getByRole("radio", { name: "Get straight to the point" }).click();
     await expect(page.getByText("That changed who you'd meet. Starting the deck again.")).toBeVisible();
     await page.waitForURL("**/onboarding/questions/offday");
     const flow = await storedFlow(page);

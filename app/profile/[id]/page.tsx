@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
@@ -21,6 +21,18 @@ export default function ProfilePage() {
   );
 }
 
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return reduced;
+}
+
 function ProfileContent() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -29,6 +41,9 @@ function ProfileContent() {
   const { setNotify, setSound } = useCompanionPrefs();
   const { openSheet } = useSheet();
   const { templates } = useManifest();
+  const reduced = useReducedMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
 
   const companion = byId(state, id);
   const template = companion ? templates.find((t) => t.id === companion.templateId) : undefined;
@@ -39,10 +54,39 @@ function ProfileContent() {
 
   const firstName = firstNameFromFull(template.name);
 
+  function togglePlay() {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      void v.play().then(() => setPlaying(true), () => {});
+    } else {
+      v.pause();
+      setPlaying(false);
+    }
+  }
+
   return (
     <div className={styles.page} style={{ ["--k" as string]: template.palette }}>
       <div className={styles.header}>
-        <Image src={"/" + template.reveal} alt="" fill className={styles.headerImage} sizes="390px" />
+        <video
+          ref={videoRef}
+          className={styles.headerVideo}
+          src={"/" + template.video}
+          poster={"/" + template.reveal}
+          muted
+          loop
+          autoPlay={!reduced}
+          playsInline
+          preload="metadata"
+        />
+        {reduced && (
+          <button
+            type="button"
+            className={styles.playToggle}
+            aria-label={playing ? `Pause ${firstName}` : `Play ${firstName}`}
+            onClick={togglePlay}
+          />
+        )}
         <div className={styles.headerScrim} />
         <button
           type="button"

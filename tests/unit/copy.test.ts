@@ -150,14 +150,14 @@ describe("copy", () => {
       "That code didn't work. Check it or ask for a new one.",
       "That code has expired. Ask for a new one.",
       "We couldn't confirm you're human. Try again.",
-      "Logging in will discard what you've set up on this device. Continue?",
+      "Logging in will leave your unfinished setup behind. Continue?",
       "6-digit code",
       "Resend in {s}s",
       "Resend code",
       "Already have an account? Log in",
       "Send code",
       "We've sent a 6-digit code to {email}. It's valid for 10 minutes.",
-      "This email already has an account. Log in instead? What you've set up here won't carry over.",
+      "This email already has an account. Log in and {persona} comes with you.",
       "Log in",
       "Use another email",
       "Want a password too?",
@@ -225,17 +225,26 @@ describe("copy", () => {
   });
 
   it("50. B1: the card questions and the tiebreaker carry the exact spec copy", () => {
-    expect(COPY.q6).toEqual({ question: "A good conversation ends with", options: ["Feeling understood", "Feeling lighter", "Seeing it clearly", "Knowing what to do"] });
+    expect(COPY.q5).toEqual({
+      question: "After a rough day, what helps most?",
+      options: ["Someone who notices I've gone quiet", "Talking it through until it makes sense", "Being made to laugh about it", "Being told what to do next"],
+    });
+    expect(COPY.q6).toEqual({
+      question: "The best conversations feel",
+      options: ["Clear, like I finally get it", "Easy, like we could talk about nothing", "Useful, like something got sorted", "Close, like it's just the two of us"],
+    });
     expect(COPY.q7).toEqual({
       question: "When you're stuck, what actually gets you moving?",
-      options: ["Someone patient", "Someone who believes in me", "Someone who makes it fun", "Someone who won't let it go"],
+      options: ["Someone who won't let it go", "Someone who believes in me", "Someone patient", "Someone who makes it fun"],
+    });
+    expect(COPY.q8).toEqual({
+      question: "With someone new, I usually",
+      options: ["Open up fast if the vibe is right", "Get straight to the point", "Take my time, trust gets earned", "Listen more than I talk"],
     });
     expect(COPY.q9).toEqual({
-      question: "When something's off, what do you want most?",
-      options: ["Help understanding it", "Help forgetting it for an hour", "Someone to just stay", "A way to fix it, today"],
+      question: "I'd like my companion's messages to be",
+      options: ["Warm, with a little teasing", "Chaotic, with memes and voice notes", "Thoughtful, with good questions", "Short and to the point"],
     });
-    expect(COPY.q5.options).toEqual(["I keep it to myself", "I tell one person", "I need to say it out loud", "Everyone hears about it"]);
-    expect(COPY.q8.options).toEqual(["Open, I'll see what happens", "Loosely sketched", "Mostly planned", "Every hour accounted for"]);
     for (const q of [COPY.q5, COPY.q6, COPY.q7, COPY.q8, COPY.q9]) expect(q.options.length).toBe(4);
     expect(COPY.tiebreak.question).toBe("It's 11pm and it's been a rough day. Which message would you rather get?");
     expect(COPY.tiebreak.lines).toEqual({

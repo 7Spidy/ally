@@ -202,14 +202,62 @@ function upgradeFlow(flow: OnboardingFlow): OnboardingFlow {
   };
 }
 
-/** Brings any stored state up to v3. A state already at v3 is returned unchanged. */
+/**
+ * v3 -> v4: the five style questions were rewritten, so option indices changed
+ * meaning. A half-finished flow drops q5..q9 and the tiebreak, plus everything
+ * derived from them, and resumes at the first style question if it had got that
+ * far. q10, q11 and the rest of the flow are kept; stored companion answers are
+ * historical and untouched.
+ */
+function resetStyleAnswers(flow: OnboardingFlow): OnboardingFlow {
+  const reached = ORDER_FROM_QUESTIONS.has(flow.step);
+  return {
+    ...flow,
+    step: reached ? "questions/disclosure" : flow.step,
+    answers: { ...flow.answers, q5: null, q6: null, q7: null, q8: null, q9: null, tb: null },
+    core: emptyCore(),
+    deckOrder: [],
+    deckIndex: 0,
+    deckHistory: [],
+    dwell: {},
+    liked: [],
+    expanded: [],
+    poolRemoved: [],
+    redraws: 0,
+    canRedraw: false,
+    proposed: null,
+    proposalsSeen: 0,
+    proposalMode: null,
+  };
+}
+
+const ORDER_FROM_QUESTIONS = new Set([
+  "questions/disclosure",
+  "questions/warmth",
+  "questions/push",
+  "questions/structure",
+  "questions/offday",
+  "questions/pressure",
+  "questions/interests",
+  "questions/tiebreak",
+  "matching",
+  "deck",
+  "choosing",
+  "proposal",
+  "reveal",
+]);
+
+/** Brings any stored state up to v4. A state already at v4 is returned unchanged. */
 export function upgradeState(raw: AllyState | (Omit<AllyState, "v"> & { v: number })): AllyState {
-  if (raw.v === 3) return raw as AllyState;
+  if (raw.v === 4) return raw as AllyState;
+  if (raw.v === 3) {
+    return { ...(raw as Omit<AllyState, "v">), v: 4, flow: raw.flow ? resetStyleAnswers(raw.flow) : null };
+  }
   return {
     ...raw,
-    v: 3,
+    v: 4,
     companions: (raw.companions ?? []).map((c) => ({ ...c, answers: upgradeAnswers(c.answers), core: upgradeCore(c.core) })),
-    flow: raw.flow ? upgradeFlow(raw.flow) : null,
+    flow: raw.flow ? resetStyleAnswers(upgradeFlow(raw.flow)) : null,
   };
 }
 
@@ -276,7 +324,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
         sound: true,
       };
       next = {
-        v: 3,
+        v: 4,
         savedAt: now,
         user,
         companions: [companion],
@@ -286,7 +334,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
     } else {
       const step = OLD_SCREEN_STEP[s.screen] ?? "consent";
       next = {
-        v: 3,
+        v: 4,
         savedAt: now,
         user,
         companions: [],
@@ -320,7 +368,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
     }
   } else {
     next = {
-      v: 3,
+      v: 4,
       savedAt: now,
       user: {
         displayName: "",

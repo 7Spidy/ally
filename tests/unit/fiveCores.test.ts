@@ -6,7 +6,7 @@ import {
   CORE_ORDER,
   PRESSURES,
   PRESSURE_OWNER,
-  PRESSURE_POINTS,
+  PRESSURE_SCORE,
   SCORE,
   TIEBREAK_POINTS,
   assignCore,
@@ -45,7 +45,7 @@ function idsOf(deck: Template[]): string[] {
 }
 
 describe("scoring", () => {
-  it("the score table matches the spec: every option of q5..q9 names 1 or 2 cores, 2 points to the lead", () => {
+  it("the score table: each option of q5..q9 is one support style, directive splits MONEY and TRAINER equally", () => {
     for (const q of ["q5", "q6", "q7", "q8", "q9"] as const) {
       expect(SCORE[q].length).toBe(4);
       for (const opt of SCORE[q]) {
@@ -55,19 +55,18 @@ describe("scoring", () => {
         expect(pts.length).toBeLessThanOrEqual(2);
       }
     }
-    expect(PRESSURE_POINTS).toBe(3);
     expect(TIEBREAK_POINTS).toBe(3);
     expect(CLOSE_MARGIN).toBe(2);
   });
 
-  it("each pressure adds exactly 3 points, to its owner only", () => {
+  it("each pressure adds its PRESSURE_SCORE points and nothing else", () => {
     const base = answers({ q5: 2, q6: 3, q7: 1, q8: 0, q9: 3 });
     const plain = new Map(scoreCores(base).map((r) => [r.id, r.score]));
     for (const pressure of PRESSURES) {
       const withPressure = new Map(scoreCores({ ...base, q10: pressure }).map((r) => [r.id, r.score]));
       for (const id of CORES) {
         const delta = withPressure.get(id)! - plain.get(id)!;
-        expect(delta, `${pressure} -> ${id}`).toBe(id === PRESSURE_OWNER[pressure] ? PRESSURE_POINTS : 0);
+        expect(delta, `${pressure} -> ${id}`).toBe(PRESSURE_SCORE[pressure][id] ?? 0);
       }
     }
   });

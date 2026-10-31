@@ -14,7 +14,7 @@ function assertHealthyExceptDeletedUserLogout(h: { errors: string[]; failed: str
 }
 
 test.describe("E21 under-18 purge, route guards and account deletion", () => {
-  test("E21a: an under-18 birthday purges the anonymous user and lands on /blocked", async ({ page }) => {
+  test("E21a: an under-18 birthday shows a popup, stays on the page, and purges nothing", async ({ page }) => {
     const health = trackHealth(page);
     await page.goto("/");
     await page.getByRole("button", { name: "Get started" }).click();
@@ -41,22 +41,23 @@ test.describe("E21 under-18 purge, route guards and account deletion", () => {
     const thisYear = new Date().getFullYear();
     await page.getByLabel("Year").selectOption(String(thisYear - 10));
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.waitForURL("**/blocked", { timeout: 15000 });
-    await screenshotScreen(page, "e21-01-blocked");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Ally is for adults.")).toBeVisible();
+    await screenshotScreen(page, "e21-01-under18-popup");
+    await dialog.getByRole("button", { name: "Check my birthday" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByLabel("Year")).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe("/onboarding/birthday");
 
-    // Server side: the anonymous user and its rows are gone.
-    const admin = adminClient();
-    await expect
-      .poll(async () => (await admin.auth.admin.getUserById(userId as string)).data.user, { timeout: 10000 })
-      .toBeNull();
-    const consents = await admin.from("consents").select("id").eq("user_id", userId as string);
-    expect(consents.data).toHaveLength(0);
+    // Nothing was purged or blocked: the anonymous user and its local state are intact.
+    expect((await adminClient().auth.admin.getUserById(userId as string)).data.user?.id).toBe(userId);
+    expect(await page.evaluate(() => window.localStorage.getItem("ally_blocked_until"))).toBeNull();
+    expect(await page.evaluate(() => Object.keys(window.localStorage).some((k) => k.startsWith("ally_v2:")))).toBe(true);
 
-    // Client side: the per-user local state is removed and the block holds.
-    const keys = await page.evaluate(() => Object.keys(window.localStorage).filter((k) => k.startsWith("ally_v2:")));
-    expect(keys).toEqual([]);
-    await page.goto("/");
-    await page.waitForURL("**/blocked");
+    // Unlimited retries: an adult year goes on.
+    await page.getByLabel("Year").selectOption(String(thisYear - 25));
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForURL("**/onboarding/questions/disclosure");
     assertHealthyExceptDeletedUserLogout(health);
   });
 

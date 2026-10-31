@@ -9,6 +9,7 @@ import { now } from "@/lib/clock";
 import { SPLASH_RETURN_MS } from "@/lib/config";
 import { isBlocked, wipeLegacy } from "@/lib/migrate";
 import { bootTarget } from "@/lib/boot";
+import { LogoSplash } from "@/components/LogoSplash";
 import { RippleSplash } from "@/components/firstRun/RippleSplash";
 import styles from "./page.module.css";
 
@@ -91,15 +92,7 @@ export default function BootPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  if (phase === "returning-splash") {
-    return (
-      <div className={styles.returning}>
-        <Image src="/assets/logo/ally-logo.png" alt="" width={120} height={120} className={styles.logoLarge} priority />
-        <p className={`wordmark ${styles.wordmark}`}>Ally</p>
-        <p className={`meta ${styles.footer}`}>Ally is an AI. Every character here is fictional.</p>
-      </div>
-    );
-  }
+  if (phase === "returning-splash" || phase === "deciding") return <LogoSplash />;
 
   if (phase === "first-choose") {
     const step = state.flow?.step ?? "consent";

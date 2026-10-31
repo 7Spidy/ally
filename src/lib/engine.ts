@@ -47,23 +47,37 @@ export interface Manifest {
 /** Stable sort order for equal scores. ROMANTIC first means it wins every exact tie it is part of. */
 export const CORE_ORDER: readonly CoreId[] = ["ROMANTIC", "PSYCH", "FRIEND", "MONEY", "TRAINER"];
 
+type Points = Partial<Record<CoreId, number>>;
+
+// One option per support style per question; the style decides the points.
+const C: Points = { ROMANTIC: 2, FRIEND: 1 }; // closeness
+const R: Points = { PSYCH: 2 }; // reflective
+const P: Points = { FRIEND: 2, ROMANTIC: 1 }; // playful
+const D: Points = { MONEY: 2, TRAINER: 2 }; // directive: the pressure answer splits the pair
+
 /** Points each option of q5..q9 adds, indexed by the chosen option 0..3. */
-export const SCORE: Record<"q5" | "q6" | "q7" | "q8" | "q9", Partial<Record<CoreId, number>>[]> = {
-  q5: [{ ROMANTIC: 2, PSYCH: 1 }, { ROMANTIC: 2, PSYCH: 1 }, { PSYCH: 2, FRIEND: 1 }, { FRIEND: 2, TRAINER: 1 }],
-  q6: [{ ROMANTIC: 2, PSYCH: 1 }, { FRIEND: 2, ROMANTIC: 1 }, { PSYCH: 2, MONEY: 1 }, { MONEY: 2, TRAINER: 1 }],
-  q7: [{ PSYCH: 2, ROMANTIC: 1 }, { ROMANTIC: 2 }, { FRIEND: 2 }, { TRAINER: 2, MONEY: 1 }],
-  q8: [{ FRIEND: 2, ROMANTIC: 1 }, { ROMANTIC: 2, PSYCH: 1 }, { MONEY: 2, PSYCH: 1 }, { TRAINER: 2, MONEY: 1 }],
-  q9: [{ PSYCH: 2 }, { FRIEND: 2 }, { ROMANTIC: 2 }, { TRAINER: 2, MONEY: 1 }],
+export const SCORE: Record<"q5" | "q6" | "q7" | "q8" | "q9", Points[]> = {
+  q5: [C, R, P, D],
+  q6: [R, P, D, C],
+  q7: [D, C, R, P],
+  q8: [P, D, C, R],
+  q9: [C, P, R, D],
 };
-export const PRESSURE_OWNER: Record<Pressure, CoreId> = {
-  money: "MONEY",
-  health: "TRAINER",
-  head: "PSYCH",
-  alone: "ROMANTIC",
-  notgood: "FRIEND",
-  change: "FRIEND",
+export const PRESSURE_SCORE: Record<Pressure, Points> = {
+  money: { MONEY: 3 },
+  health: { TRAINER: 3 },
+  head: { PSYCH: 3 },
+  alone: { ROMANTIC: 2, FRIEND: 1 },
+  notgood: { FRIEND: 2, PSYCH: 1 },
+  change: { PSYCH: 2, FRIEND: 1 },
 };
-export const PRESSURE_POINTS = 3;
+/** Each pressure's highest-scoring core. */
+export const PRESSURE_OWNER = Object.fromEntries(
+  (Object.entries(PRESSURE_SCORE) as [Pressure, Points][]).map(([p, pts]) => [
+    p,
+    (Object.entries(pts) as [CoreId, number][]).sort((x, y) => y[1] - x[1])[0][0],
+  ])
+) as Record<Pressure, CoreId>;
 export const TIEBREAK_POINTS = 3;
 export const CLOSE_MARGIN = 2; // top minus second below this is a close call
 /** A support core is only named when it trails the primary by no more than this. */
@@ -85,7 +99,9 @@ export function scoreCores(a: Answers): RankedCore[] {
     if (!points) continue; // not an option index; a stale pre-B1 float scores nothing
     for (const [core, pts] of Object.entries(points) as [CoreId, number][]) totals[core] += pts;
   }
-  if (a.q10) totals[PRESSURE_OWNER[a.q10]] += PRESSURE_POINTS;
+  if (a.q10) {
+    for (const [core, pts] of Object.entries(PRESSURE_SCORE[a.q10]) as [CoreId, number][]) totals[core] += pts;
+  }
   if (a.tb) totals[a.tb] += TIEBREAK_POINTS;
   return CORE_ORDER.map((id) => ({ id, score: totals[id] })).sort(
     (x, y) => y.score - x.score || CORE_ORDER.indexOf(x.id) - CORE_ORDER.indexOf(y.id)
@@ -102,6 +118,8 @@ export function needsTiebreak(ranked: RankedCore[], a: Answers): [CoreId, CoreId
   return gap < CLOSE_MARGIN ? [first.id, second.id] : null;
 }
 
+const MENTORS = new Set<CoreId>(["MONEY", "TRAINER"]);
+
 export interface AssignedCore {
   primary: CoreId;
   secondary: CoreId | null;
@@ -110,8 +128,8 @@ export interface AssignedCore {
 
 export function assignCore(ranked: RankedCore[]): AssignedCore {
   const [first] = ranked;
-  // Romantic never supports.
-  const support = ranked.slice(1).find((r) => r.id !== "ROMANTIC");
+  // Romantic never supports, and the two mentor cores never support each other.
+  const support = ranked.slice(1).find((r) => r.id !== "ROMANTIC" && !(MENTORS.has(first.id) && MENTORS.has(r.id)));
   if (support && first.score - support.score <= SECONDARY_MARGIN) {
     return { primary: first.id, secondary: support.id, weight: 70 };
   }

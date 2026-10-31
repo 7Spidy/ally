@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { resolveRegion, suggestPlaces, SOMEWHERE_ELSE, PLACES } from "@/lib/engine";
@@ -9,12 +9,14 @@ import { invalidationFor } from "../_lib/invalidate";
 import { useOnboardingToast } from "../_lib/Toast";
 import styles from "./page.module.css";
 
+const CITY_OK = /^[\p{L}\p{M}][\p{L}\p{M}\s.,'’-]{1,59}$/u;
 const CHIPS = ["Mumbai", "Delhi", "Bengaluru", "Kolkata", "Chennai", "Pune", "Hyderabad", SOMEWHERE_ELSE];
 
 export default function LocationPage() {
   const router = useRouter();
   const { state, dispatch } = useAlly();
   const toast = useOnboardingToast();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(state.flow?.cityRaw ?? "");
   // "Somewhere else" chosen: the field is free text and nothing is prefilled.
   const [elsewhere, setElsewhere] = useState(!state.flow?.cityRaw && state.flow?.region === "Unspecified");
@@ -26,7 +28,7 @@ export default function LocationPage() {
   const trimmed = value.trim();
   const exact = useMemo(() => PLACES.some((p) => p.name.toLowerCase() === trimmed.toLowerCase()), [trimmed]);
   const suggestions = useMemo(() => (trimmed && !exact ? suggestPlaces(trimmed, 6) : []), [trimmed, exact]);
-  const canContinue = trimmed.length > 0 || elsewhere;
+  const canContinue = CITY_OK.test(trimmed);
 
   if (!state.flow || state.flow.kind === "round2") return null;
 
@@ -50,12 +52,14 @@ export default function LocationPage() {
       <div className="stack">
         <h1 className="q">{COPY.location.question}</h1>
         <input
+          ref={inputRef}
           className={styles.field}
           type="text"
           autoComplete="off"
           autoCapitalize="words"
           spellCheck={false}
           aria-label="City or country"
+          placeholder={elsewhere ? "Your city or town" : undefined}
           value={value}
           onChange={(e) => {
             setValue(e.target.value);
@@ -87,6 +91,7 @@ export default function LocationPage() {
                 if (c === SOMEWHERE_ELSE) {
                   setElsewhere(true);
                   setValue("");
+                  inputRef.current?.focus();
                 } else {
                   setElsewhere(false);
                   setValue(c);

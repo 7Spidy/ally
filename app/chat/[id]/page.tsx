@@ -116,7 +116,7 @@ function ChatContent() {
     };
   }, []);
 
-  // A live chat needs the v2-live consent (v2-live-groq) before anything is sent to the model.
+  // A live chat needs the v2-live consent (LIVE_CONSENT_VERSION) before anything is sent to the model.
   // A user who has not been hydrated from the server (a fresh onboarding) has no known version, so they consent here too.
   const needsConsent = live && state.user.consentVersion !== LIVE_CONSENT_VERSION;
 
@@ -251,6 +251,8 @@ function ChatContent() {
       void fetchAndPlay(companion.id, "opener");
       return;
     }
+    // No opener while the name is blank: it would go out saying "!".
+    if (!state.user.displayName.trim()) return;
     seededRef.current = true;
     const companionId = companion.id;
     const pressure: Pressure = companion.answers.q10 ?? "head";
@@ -264,7 +266,7 @@ function ChatContent() {
         showToast(rpcErrorMessage(e));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companion?.id, companion?.messages.length, live, needsConsent, state.user.consentVersion]);
+  }, [companion?.id, companion?.messages.length, live, needsConsent, state.user.consentVersion, state.user.displayName]);
 
   // Account sheet nudge, spec §8.1's exchange-count rule applied to THIS
   // chat's companion (see report — the spec literally says

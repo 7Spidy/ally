@@ -19,6 +19,7 @@ export type AllyAction =
   | { type: "SET_LOCATION"; cityRaw: string; region: string | null }
   | { type: "SET_GENDER"; gender: Gender }
   | { type: "SET_NAME"; name: string }
+  | { type: "SET_USER_NAME"; name: string }
   | { type: "SET_BIRTHDAY"; dob: string | null; age: number | null }
   | { type: "SET_ANSWER"; key: keyof Answers; value: Answers[keyof Answers] }
   | { type: "SET_FLOW_STEP"; step: string }
@@ -85,6 +86,9 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
 
     case "SET_GENDER":
       return { ...state, flow: { ...requireFlow(state), deckGender: action.gender } };
+
+    case "SET_USER_NAME":
+      return { ...state, user: { ...state.user, displayName: action.name } };
 
     case "SET_NAME":
       return { ...state, flow: { ...requireFlow(state), displayName: action.name } };
@@ -299,7 +303,7 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
 
     case "DELETE_ALL":
       return {
-        v: 3,
+        v: 4,
         savedAt: action.now,
         user: { displayName: "", consentAt: null, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
         companions: [],

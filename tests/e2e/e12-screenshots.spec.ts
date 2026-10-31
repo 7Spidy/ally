@@ -53,7 +53,7 @@ test.describe("E12 screenshots of remaining screens", () => {
     await screenshotScreen(page, "e12-06-leave-sheet");
   });
 
-  test("blocked gate screen", async ({ page }) => {
+  test("under-18 popup on the birthday screen", async ({ page }) => {
     await setClock(page, FIXED_NOW);
     await page.goto("/");
     await page.getByRole("button", { name: "Get started" }).click();
@@ -70,8 +70,7 @@ test.describe("E12 screenshots of remaining screens", () => {
     // pick a year that makes the user under 18 relative to FIXED_NOW (2026)
     await page.getByLabel("Year").selectOption("2015");
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.waitForURL("**/blocked");
-    await expect(page.getByText("Ally is for adults.")).toBeVisible();
-    await screenshotScreen(page, "e12-07-blocked");
+    await expect(page.getByRole("dialog").getByText("Ally is for adults.")).toBeVisible();
+    await screenshotScreen(page, "e12-07-under18-popup");
   });
 });

@@ -97,7 +97,7 @@ export function makeState(opts: MakeStateOpts = {}) {
   const now = opts.now ?? FIXED_NOW;
   const day = dayKeyIST(now);
   return {
-    v: 3,
+    v: 4,
     savedAt: now,
     user: {
       displayName: "Riya",
@@ -385,11 +385,11 @@ const COPY = {
   genderMan: "A man",
   // The options each card question is answered with (B1). These pick ROMANTIC
   // by a wide margin whatever Q10 is, so the run never lands on the tiebreak.
-  q5: "I tell one person",
-  q6: "Feeling understood",
+  q5: "Someone who notices I've gone quiet",
+  q6: "Close, like it's just the two of us",
   q7: "Someone who believes in me",
-  q8: "Loosely sketched",
-  q9: "Someone to just stay",
+  q8: "Listen more than I talk",
+  q9: "Warm, with a little teasing",
   matchingAction: "Show me",
   deckDone: "Done",
   proposalPrimary: "Lock them in",
@@ -510,6 +510,8 @@ export async function grantLiveConsent(userId: string) {
 export async function createUser(email: string, password?: string): Promise<string> {
   const { data, error } = await adminClient().auth.admin.createUser({ email, password, email_confirm: true });
   if (error || !data.user) throw error ?? new Error("createUser failed");
+  // A nameless account gets the "What should I call you?" sheet over every app screen.
+  await adminClient().from("profiles").update({ display_name: "Tester" }).eq("id", data.user.id);
   return data.user.id;
 }
 

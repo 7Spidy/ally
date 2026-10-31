@@ -137,7 +137,7 @@ export function AccountSheet(props: Record<string, unknown>) {
 
   function onCollisionLogin() {
     dismissForNavigation();
-    router.replace(`/login?email=${encodeURIComponent(flow.email)}&discard=1`);
+    router.replace(`/login?email=${encodeURIComponent(flow.email)}`);
   }
 
   function onDismiss() {
@@ -214,7 +214,7 @@ export function AccountSheet(props: Record<string, unknown>) {
         {flow.step === "collision" && (
           <div className="stack">
             <p className="sub" style={{ marginTop: -8 }}>
-              {COPY.account.collision}
+              {fill(COPY.account.collision, { persona: personaName })}
             </p>
             <button type="button" className="btn primary" onClick={onCollisionLogin}>
               {COPY.account.collisionLogin}
