@@ -448,9 +448,9 @@ describe("v2 to v3 upgrade (B1)", () => {
     return fakeStorage({ [STATE_KEY]: JSON.stringify(state) });
   }
 
-  it("bumps v to 3 and adds tb: null and tutorialShown: false", () => {
+  it("bumps v to 4 and adds tb: null and tutorialShown: false", () => {
     const out = migrate(stored(v2State(v2Flow({ answers: { ...oldAnswers, q5: null, q6: null, q7: null, q8: null, q9: null } }))), now);
-    expect(out.v).toBe(3);
+    expect(out.v).toBe(4);
     expect(out.flow!.answers.tb).toBeNull();
     expect(out.flow!.tutorialShown).toBe(false);
   });
@@ -464,6 +464,19 @@ describe("v2 to v3 upgrade (B1)", () => {
     // Nothing was answered, so the user stays where they were.
     expect(f.step).toBe("birthday");
     expect(f.answers.q10).toBe("money");
+  });
+
+  it("v3 to v4: clears q5..q9, tb, core, deck and proposal; keeps q10, q11, name and an early step", () => {
+    const v3 = v2State(v2Flow({ step: "questions/pressure", answers: { q5: 1, q6: 2, q7: 3, q8: 0, q9: 1, q10: "money", q11: ["music"], tb: "MONEY" }, displayName: "Rhea" }));
+    const out = migrate(stored({ ...v3, v: 3 }), now);
+    expect(out.v).toBe(4);
+    const f = out.flow!;
+    expect(f.step).toBe("questions/disclosure");
+    expect(f.answers).toMatchObject({ q5: null, q6: null, q7: null, q8: null, q9: null, tb: null, q10: "money", q11: ["music"] });
+    expect(f.core.primary).toBeNull();
+    expect(f.displayName).toBe("Rhea");
+    const early = migrate(stored({ ...v2State(v2Flow({ step: "birthday" })), v: 3 }), now).flow!;
+    expect(early.step).toBe("birthday");
   });
 
   it("the ANAY merge keeps the higher score whichever entry comes first", () => {
@@ -532,16 +545,16 @@ describe("v2 to v3 upgrade (B1)", () => {
     }
   });
 
-  it("a v2 flow parked on the removed nostalgia step resumes at offday only if nothing was answered", () => {
+  it("a v2 flow parked on the removed nostalgia step restarts at the first question (v3 to v4 resets the style questions)", () => {
     const blank = { q5: null, q6: null, q7: null, q8: null, q9: null, q10: null, q11: [] };
     const empty = v2Flow({ step: "questions/nostalgia", answers: blank });
-    expect(migrate(stored(v2State(empty)), now).flow!.step).toBe("questions/offday");
+    expect(migrate(stored(v2State(empty)), now).flow!.step).toBe("questions/disclosure");
     // The user got to nostalgia by answering q5..q8: those are stale, so they restart.
     const answered = v2Flow({ step: "questions/nostalgia", answers: { ...blank, q5: 0.4, q6: 0.5, q7: 0.5, q8: 0.38 } });
     expect(migrate(stored(v2State(answered)), now).flow!.step).toBe("questions/disclosure");
   });
 
-  it("a v1 session's nostalgia screen (10) also resumes at offday, and its float answers restart the questions", () => {
+  it("a v1 session's nostalgia screen (10) also restarts at the first question, and its float answers restart the questions", () => {
     const v1 = {
       savedAt: now - 1000,
       state: {
@@ -580,7 +593,7 @@ describe("v2 to v3 upgrade (B1)", () => {
       },
     };
     const out = migrate(fakeStorage({ [SESSION_KEY]: JSON.stringify(v1) }), now);
-    expect(out.v).toBe(3);
+    expect(out.v).toBe(4);
     expect(out.flow!.step).toBe("questions/disclosure");
     expect(out.flow!.answers.q5).toBeNull();
   });

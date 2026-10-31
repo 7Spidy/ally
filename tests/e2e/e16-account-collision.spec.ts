@@ -45,12 +45,11 @@ test.describe("E16 email collision while linking", () => {
     await expect(dialog.getByText("This email already has an account.")).toBeVisible();
 
     await dialog.getByRole("button", { name: "Log in" }).click();
-    await page.waitForURL(/\/login\?email=.*discard=1/);
+    await page.waitForURL(/\/login\?email=/);
 
-    // Logging in over an anonymous session with set-up data asks first.
-    await expect(page.getByText("Logging in will discard what you've set up on this device. Continue?")).toBeVisible();
-    await screenshotScreen(page, "e16-02-login-discard-confirm");
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
+    // Logging in over an anonymous session with a companion carries it across: no confirm step.
+    await expect(page.getByText("and your chat will come with you.")).toBeVisible();
+    await screenshotScreen(page, "e16-02-login-carry-note");
     await expect(page.getByLabel("Email")).toHaveValue(takenEmail);
     await screenshotScreen(page, "e16-03-login-prefilled");
 

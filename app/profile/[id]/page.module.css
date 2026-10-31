@@ -2,25 +2,41 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow-y: auto;
 }
 
+/* The 9:16 video frame. The 62svh cap crops only the bottom; the face stays in frame. */
 .header {
   position: relative;
-  height: 220px;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  max-height: 62svh;
   overflow: hidden;
 }
 
-.headerImage {
+.headerVideo {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: 50% 22%;
+}
+
+.playToggle {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
 }
 
 .headerScrim {
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background: linear-gradient(180deg, rgba(10, 9, 16, 0) 45%, var(--surf) 100%);
 }
 
@@ -37,8 +53,7 @@
 }
 
 .body {
-  flex: 1 1 auto;
-  overflow-y: auto;
+  flex: none;
   padding: 20px;
   display: flex;
   flex-direction: column;

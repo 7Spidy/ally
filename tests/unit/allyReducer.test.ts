@@ -142,7 +142,7 @@ describe("allyReducer: B1 five cores", () => {
   });
 
   it("DELETE_ALL resets to a v3 state", () => {
-    expect(allyReducer(freshState(NOW, DAY), { type: "DELETE_ALL", now: NOW }).v).toBe(3);
+    expect(allyReducer(freshState(NOW, DAY), { type: "DELETE_ALL", now: NOW }).v).toBe(4);
   });
 });
 

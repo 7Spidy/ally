@@ -4,7 +4,7 @@ import { useCallback, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
-import { NO_BACK_STEPS, QUESTION_STEPS, backTargetFor, stepFromPathname } from "./_lib/steps";
+import { NO_BACK_STEPS, ORDER, QUESTION_STEPS, backTargetFor, stepFromPathname } from "./_lib/steps";
 import { OnboardingToastProvider } from "./_lib/Toast";
 import styles from "./layout.module.css";
 
@@ -44,6 +44,16 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  // Flows saved before the city became mandatory may lack one.
+  useEffect(() => {
+    const f = state.flow;
+    if (!step || !f || f.kind !== "first") return;
+    if (ORDER.indexOf(step) > ORDER.indexOf("location") && !f.cityRaw.trim()) {
+      router.replace("/onboarding/location");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, state.flow?.cityRaw]);
 
   const handleBack = useCallback(() => {
     if (isRound2) {

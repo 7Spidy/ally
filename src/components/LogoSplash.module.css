@@ -1,0 +1,26 @@
+.splash {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  gap: 16px;
+}
+
+.logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 28px;
+  object-fit: cover;
+}
+
+.wordmark {
+  margin: 0;
+}
+
+.footer {
+  text-align: center;
+}

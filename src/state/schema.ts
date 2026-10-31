@@ -145,7 +145,7 @@ export interface AllyUser {
 }
 
 export interface AllyState {
-  v: 3;
+  v: 4;
   savedAt: number;
   user: AllyUser;
   companions: Companion[];
@@ -203,7 +203,7 @@ export function freshLedger(day: string): Ledger {
 
 export function freshState(nowMs: number, day: string): AllyState {
   return {
-    v: 3,
+    v: 4,
     savedAt: nowMs,
     user: {
       displayName: "",

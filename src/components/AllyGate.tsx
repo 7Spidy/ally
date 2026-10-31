@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAlly } from "@/state/useAlly";
 import { COPY } from "@/lib/copy";
+import { LogoSplash } from "@/components/LogoSplash";
 
 /**
  * P2: holds back page content until AllyProvider is first `ready`, i.e. the
@@ -10,7 +11,7 @@ import { COPY } from "@/lib/copy";
  * hydration was synchronous, so screens could read state on their first
  * render; now a screen loaded directly (home, a chat, an onboarding step)
  * would otherwise render, and let the user act on, the empty placeholder
- * for a network round trip. Renders nothing meanwhile (no spinner, spec
+ * for a network round trip. Renders the static logo splash meanwhile (no spinner, spec
  * §13.2), which is also identical on the server and the first client pass.
  *
  * Sticky: once open it stays open, so a later identity change (consent's
@@ -34,5 +35,5 @@ export function AllyGate({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  return null;
+  return <LogoSplash />;
 }

@@ -15,7 +15,7 @@ export const BLOCK_DAYS = 180; // under-18 gate: ally_blocked_until = now + BLOC
 
 // P1 accounts and auth
 export const CONSENT_VERSION = "2026-09-v1";
-/** B2: the consent a user gives once Ira replies live (processed by the LLM provider, Groq). */
+/** B2: the consent a user gives once Ira replies live (replies are written by an AI model; the version string is historical and stays). */
 export const LIVE_CONSENT_VERSION = "v2-live-groq";
 export const OTP_LENGTH = 6;
 export const OTP_RESEND_SECONDS = 60;

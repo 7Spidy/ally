@@ -1,9 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useAuth } from "@/state/useAuth";
+import { useManifest } from "@/state/useManifest";
+import { useToast } from "@/state/useToast";
 import { CodeInput } from "@/components/auth/CodeInput";
 import { PasswordField } from "@/components/auth/PasswordField";
 import { ResendButton } from "@/components/auth/ResendButton";
@@ -11,6 +13,9 @@ import { getBrowserClient } from "@/lib/supabase/browser";
 import { validEmail } from "@/lib/accountFlow";
 import { authErrorMessage, isNetworkError } from "@/lib/authErrors";
 import { OTP_LENGTH } from "@/lib/config";
+import { stateKeyFor } from "@/lib/migrate";
+import { active, lastOpened } from "@/lib/selectors";
+import { firstNameFromFull } from "@/lib/engine";
 import { COPY, fill } from "@/lib/copy";
 import { TurnstileMount, useTurnstile } from "@/lib/turnstile";
 import styles from "./page.module.css";
@@ -23,11 +28,45 @@ export default function LoginPage() {
   );
 }
 
+const MERGE_KEY = "ally_merge_anon";
+const MERGE_TRIES = 3;
+
+interface MergeResult {
+  moved: string[];
+  skipped: { id: string; reason: "duplicate" | "full" }[];
+}
+
+function readStoredMerge(): { uid: string; token: string } | null {
+  try {
+    const raw = window.sessionStorage.getItem(MERGE_KEY);
+    return raw ? (JSON.parse(raw) as { uid: string; token: string }) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearStoredMerge() {
+  try {
+    window.sessionStorage.removeItem(MERGE_KEY);
+  } catch {
+    /* storage blocked */
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function LoginScreen() {
   const router = useRouter();
   const params = useSearchParams();
-  const { state, ownerId } = useAlly();
+  const { state, ownerId, reloadServerState } = useAlly();
   const auth = useAuth();
+  const { templates } = useManifest();
+  const showToast = useToast();
+  const ownerRef = useRef(ownerId);
+  ownerRef.current = ownerId;
+  // The anonymous session's token, kept for the merge after sign-in. Also in
+  // sessionStorage so a reload between sending the code and verifying keeps it.
+  const anonRef = useRef<{ uid: string; token: string } | null>(null);
   const { getToken, container } = useTurnstile();
 
   const [email, setEmail] = useState(params.get("email") ?? "");
@@ -52,10 +91,83 @@ function LoginScreen() {
   const normalised = email.trim().toLowerCase();
   const linkFailed = params.get("error") === "link";
 
-  // Logging in replaces an anonymous session, which discards what was set up on this device.
-  const wouldLoseOnboarding =
-    auth.isAnonymous && (state.companions.length > 0 || (!!state.flow && state.flow.step !== "consent"));
+  // An anonymous user with a companion brings it along; one with only an unfinished setup loses it.
+  const carried = auth.isAnonymous ? lastOpened(state) : undefined;
+  const carriedTemplate = carried ? templates.find((t) => t.id === carried.templateId) : undefined;
+  const hasCompanion = auth.isAnonymous && active(state).length > 0;
+  const wouldLoseOnboarding = auth.isAnonymous && !hasCompanion && !!state.flow && state.flow.step !== "consent";
   const needsConfirm = wouldLoseOnboarding && !confirmed;
+
+  /** Remembers the anonymous session's token before it is replaced by signing in. */
+  async function captureAnon() {
+    if (!auth.isAnonymous || state.companions.length === 0) return;
+    try {
+      const { data } = await getBrowserClient().auth.getSession();
+      const token = data.session?.access_token;
+      const uid = data.session?.user.id;
+      if (!token || !uid) return;
+      anonRef.current = { uid, token };
+      try {
+        window.sessionStorage.setItem(MERGE_KEY, JSON.stringify(anonRef.current));
+      } catch {
+        /* storage blocked */
+      }
+    } catch {
+      /* no token: login proceeds without a carry */
+    }
+  }
+
+  async function postMerge(targetToken: string, anonAccessToken: string): Promise<MergeResult | null> {
+    for (let attempt = 0; attempt < MERGE_TRIES; attempt++) {
+      try {
+        const res = await fetch("/api/account/merge", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${targetToken}` },
+          body: JSON.stringify({ anonAccessToken }),
+        });
+        if (res.ok) return (await res.json()) as MergeResult;
+        if (res.status < 500) return null; // a refusal will not change on retry
+      } catch {
+        /* network error: retry */
+      }
+      if (attempt < MERGE_TRIES - 1) await sleep(1000);
+    }
+    return null;
+  }
+
+  /** After a successful sign-in: merge the anonymous session's companions, then head for the right screen. */
+  async function afterSignIn(uid: string, accessToken: string | undefined) {
+    const anon = anonRef.current ?? readStoredMerge();
+    if (!anon || !accessToken || anon.uid === uid) {
+      setGoForUid(uid);
+      return;
+    }
+    const result = await postMerge(accessToken, anon.token);
+    clearStoredMerge();
+    anonRef.current = null;
+    if (!result) {
+      showToast(COPY.login.carryFailed);
+      setGoForUid(uid);
+      return;
+    }
+    try {
+      window.localStorage.removeItem(stateKeyFor(anon.uid));
+    } catch {
+      /* storage blocked */
+    }
+    // Let the provider's own load for the new user land first, or it could overwrite the reload.
+    for (let i = 0; i < 100 && ownerRef.current !== uid; i++) await sleep(50);
+    try {
+      await reloadServerState();
+    } catch {
+      showToast(COPY.login.carryFailed);
+      setGoForUid(uid);
+      return;
+    }
+    if (result.skipped.length > 0) showToast(COPY.login.carryPartial);
+    if (result.moved.length > 0) router.replace(`/chat/${result.moved[0]}`);
+    else setGoForUid(uid);
+  }
 
   async function sendCode() {
     if (!emailOk || busy) return;
@@ -88,13 +200,14 @@ function LoginScreen() {
     setBusy(true);
     setMessage(null);
     try {
+      await captureAnon();
       const { data, error } = await getBrowserClient().auth.verifyOtp({ email: normalised, token, type: "email" });
       if (error || !data.user) {
         setCode("");
         setMessage(authErrorMessage(error, "code"));
         return;
       }
-      setGoForUid(data.user.id);
+      await afterSignIn(data.user.id, data.session?.access_token);
     } catch (err) {
       setCode("");
       setMessage(authErrorMessage(err, "code"));
@@ -109,12 +222,13 @@ function LoginScreen() {
     setMessage(null);
     try {
       const captchaToken = await getToken();
+      await captureAnon();
       const { data, error } = await getBrowserClient().auth.signInWithPassword({ email: normalised, password, options: { captchaToken } });
       if (error || !data.user) {
         setMessage(isNetworkError(error) ? COPY.auth.network : COPY.login.badLogin);
         return;
       }
-      setGoForUid(data.user.id);
+      await afterSignIn(data.user.id, data.session?.access_token);
     } catch (err) {
       setMessage(isNetworkError(err) ? COPY.auth.network : COPY.login.badLogin);
     } finally {
@@ -142,6 +256,9 @@ function LoginScreen() {
 
       <div className={styles.body}>
         {linkFailed && <p className={styles.note}>{COPY.login.linkFailed}</p>}
+        {hasCompanion && carriedTemplate && (
+          <p className="sub">{fill(COPY.login.carry, { persona: firstNameFromFull(carriedTemplate.name) })}</p>
+        )}
 
         {needsConfirm ? (
           <div className="stack">

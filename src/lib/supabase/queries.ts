@@ -69,6 +69,11 @@ export function createCompanion(args: {
   });
 }
 
+/** Saves the caller's display name; the server validates it and returns the stored value. */
+export function setDisplayName(name: string): Promise<string> {
+  return call<string>("set_display_name", { p_name: name });
+}
+
 export interface SendResult {
   blocked: boolean;
   status: SendStatus;
@@ -145,7 +150,7 @@ export function clearAgeCheck(companionId: string, dob: string): Promise<{ pause
   return call("clear_age_check", { companion_id: companionId, dob });
 }
 
-/** Records the v2-live-groq consent (the consents table allows a user's own insert). */
+/** Records the live-chat consent (LIVE_CONSENT_VERSION) (the consents table allows a user's own insert). */
 export async function insertConsent(userId: string, version: string): Promise<void> {
   const { error } = await getBrowserClient().from("consents").insert({ user_id: userId, version, marketing: false });
   if (error) throw error;

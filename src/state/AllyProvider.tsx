@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { AllyState } from "@/state/schema";
 import { allyReducer, type AllyAction } from "@/state/allyReducer";
 import { localOnly, migrate, stateKeyFor, type RemovableStorage } from "@/lib/migrate";
@@ -37,6 +37,12 @@ export interface AllyContextValue {
    * pending. Cleared when a load succeeds. AllyGate shows it to the user.
    */
   loadFailed: boolean;
+  /**
+   * Re-reads companions and the ledger from the server for the current user,
+   * keeping the local flow and user blob. Used after an anonymous-to-account
+   * merge moved rows on the server. Rejects if the load fails.
+   */
+  reloadServerState: () => Promise<void>;
 }
 
 export const AllyContext = createContext<AllyContextValue | null>(null);
@@ -195,8 +201,25 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state, owner, hydrated]);
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const reloadServerState = useCallback(async () => {
+    const server = await getMyState();
+    setServerTime(server.server_now);
+    const { companions, ledger } = assembleServerState(server);
+    const cur = stateRef.current;
+    const flow = companions.length > 0 && cur.flow?.kind === "first" ? null : cur.flow;
+    dispatch({
+      type: "HYDRATE",
+      state: { ...cur, user: { ...cur.user, displayName: server.profile?.display_name || cur.user.displayName }, flow, companions, ledger },
+    });
+  }, []);
+
   const ready = auth.ready && hydrated && owner === uid;
-  const value = useMemo(() => ({ state, dispatch, ready, ownerId: owner, loadFailed }), [state, ready, owner, loadFailed]);
+  const value = useMemo(
+    () => ({ state, dispatch, ready, ownerId: owner, loadFailed, reloadServerState }),
+    [state, ready, owner, loadFailed, reloadServerState]
+  );
 
   return <AllyContext.Provider value={value}>{children}</AllyContext.Provider>;
 }
