@@ -424,7 +424,12 @@ export function RippleSplash({ onDone }: { onDone: () => void }) {
           <Link href="/login" className={styles.loginLink}>
             {COPY.splash.login}
           </Link>
-          <p className={styles.footer}>{COPY.splash.footer}</p>
+          <p className={styles.footer}>
+            {COPY.splash.footer}{" "}
+            <Link href="/privacy" className={styles.privacyLink}>
+              {COPY.splash.privacy}
+            </Link>
+          </p>
         </div>
       </div>
     </div>

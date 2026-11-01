@@ -58,3 +58,14 @@
 .footer {
   text-align: center;
 }
+
+.privacyLink {
+  color: var(--mut);
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  margin-top: 8px;
+}
+.privacyLink:hover {
+  color: var(--fg);
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useAuth } from "@/state/useAuth";
@@ -138,6 +139,9 @@ function FirstRunChoice({ onContinue, onStartOver }: { onContinue: () => void; o
         <button className="btn secondary" onClick={onStartOver}>
           Start over
         </button>
+        <Link href="/privacy" className={styles.privacyLink}>
+          Privacy Policy
+        </Link>
       </div>
     </div>
   );

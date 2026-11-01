@@ -161,6 +161,17 @@
   color: var(--mut);
 }
 
+.privacyLink {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.privacyLink:hover {
+  opacity: 0.8;
+}
+
 .ring {
   position: absolute;
   z-index: 3;

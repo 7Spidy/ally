@@ -21,6 +21,7 @@ export const COPY = {
     action: "Get started",
     footer: "Ally is an AI. Every character here is fictional.",
     login: "Already have an account? Log in",
+    privacy: "Privacy Policy",
   },
   consent: {
     heading: "Before we start",
