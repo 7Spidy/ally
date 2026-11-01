@@ -1,11 +1,20 @@
 .page {
-  min-height: 100vh;
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background-color: var(--ink, #0a0910);
   color: var(--fg, #f4efe6);
-  padding: calc(24px + var(--safe-t, 0px)) 20px calc(48px + var(--safe-b, 0px));
+  padding: calc(32px + var(--safe-t, 0px)) 24px calc(64px + var(--safe-b, 0px));
+}
+
+.inner {
   max-width: 760px;
   margin: 0 auto;
-  line-height: 1.65;
+  width: 100%;
+  line-height: 1.68;
 }
 
 .header {
@@ -20,7 +29,7 @@
   gap: 6px;
   color: var(--mut, #9a92a6);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 14.5px;
   margin-bottom: 16px;
   transition: color 0.2s ease;
 }
