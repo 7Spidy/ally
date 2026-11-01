@@ -131,8 +131,8 @@ describe("qa_add_companion", () => {
     expect(after?.map((r) => r.template_id)).not.toContain("F02");
   });
 
-  it("rejects M01 and unknown templates (template_not_testable)", async () => {
-    for (const t of ["M01", "F06", "", "F02; drop table companions"]) {
+  it("rejects M99 and unknown templates (template_not_testable)", async () => {
+    for (const t of ["M99", "F06", "", "F02; drop table companions"]) {
       const { error } = await qa.client.rpc("qa_add_companion", { template_id: t });
       expect(error?.message, t).toContain("template_not_testable");
     }
