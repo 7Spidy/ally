@@ -55,12 +55,12 @@ describe("registry", () => {
     expect(personaFor("F01")).toBe(F01);
     expect(personaFor("F02")).toBe(F02);
     expect(PERSONAS.F02.name).toBe("Noor Qureshi");
-    expect(() => personaFor("M01")).toThrow();
+    expect(() => personaFor("M99")).toThrow();
     expect(() => personaFor("")).toThrow();
   });
-  it("lists F01 for everyone and the other nine for qa", () => {
-    expect(LIVE_TEMPLATES).toEqual({ F01: "all", F02: "qa", F03: "qa", F04: "qa", F05: "qa", F07: "qa", F08: "qa", F09: "qa", F11: "qa", F13: "qa" });
-    expect(Object.keys(PERSONAS)).toHaveLength(10);
+  it("lists F01 for everyone and the other nineteen for qa", () => {
+    expect(LIVE_TEMPLATES).toEqual({ F01: "all", F02: "qa", F03: "qa", F04: "qa", F05: "qa", F07: "qa", F08: "qa", F09: "qa", F11: "qa", F13: "qa", ...Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`M${String(i + 1).padStart(2, "0")}`, "qa"])) });
+    expect(Object.keys(PERSONAS)).toHaveLength(20);
   });
 });
 
@@ -77,9 +77,10 @@ describe("isLive", () => {
   it("F02 under a PSYCH primary is not live", () => {
     expect(isLive(c("F02", "PSYCH"), true)).toBe(false);
   });
-  it("M01 is not live", () => {
-    expect(isLive(c("M01"), true)).toBe(false);
+  it("M01 is live for a qa owner only, and M99 is never live", () => {
+    expect(isLive(c("M01"), true)).toBe(true);
     expect(isLive(c("M01"), false)).toBe(false);
+    expect(isLive(c("M99"), true)).toBe(false);
   });
 });
 

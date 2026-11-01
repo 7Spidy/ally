@@ -45,6 +45,7 @@ interface CompanionJson {
   templateId: string;
   status: string;
   live: boolean;
+  deckGender: string;
   core: { primary: string; secondary: string | null; weight: number; ranked: unknown[] };
 }
 
@@ -84,11 +85,47 @@ describe("qa_add_companion for the eight", () => {
     });
   }
 
-  it("M01 and F06 raise template_not_testable", async () => {
-    for (const t of ["M01", "F06"]) {
+  it("M99 and F06 raise template_not_testable", async () => {
+    for (const t of ["M99", "F06"]) {
       const { error } = await qa.client.rpc("qa_add_companion", { template_id: t });
       expect(error?.message, t).toContain("template_not_testable");
     }
+  });
+});
+
+// B6: ten men live for QA (supabase/migrations/20261101000001_ten_men_live.sql).
+const TEN: [string, string, string | null][] = [
+  ["M01", "ROMANTIC", "MONEY"],
+  ["M02", "ROMANTIC", "MONEY"],
+  ["M03", "ROMANTIC", "FRIEND"],
+  ["M04", "ROMANTIC", "PSYCH"],
+  ["M05", "ROMANTIC", "MONEY"],
+  ["M06", "MONEY", null],
+  ["M07", "ROMANTIC", "FRIEND"],
+  ["M08", "TRAINER", null],
+  ["M09", "TRAINER", "PSYCH"],
+  ["M10", "FRIEND", null],
+];
+
+describe("qa_add_companion for the ten men", () => {
+  for (const [id, primary, secondary] of TEN) {
+    it(`${id}: live with the ${primary} core and deckGender man`, async () => {
+      const c = await addCompanion(qa, id);
+      expect(c.templateId).toBe(id);
+      expect(c.live).toBe(true);
+      expect(c.deckGender).toBe("man");
+      expect(c.core).toEqual({ primary, secondary, weight: secondary ? 70 : 100, ranked: [] });
+    });
+  }
+
+  it("F03 still gets deckGender woman", async () => {
+    expect((await addCompanion(qa, "F03")).deckGender).toBe("woman");
+  });
+
+  it("a normal user is rejected", async () => {
+    const u = await makeUser("normal-m01");
+    const { error } = await u.client.rpc("qa_add_companion", { template_id: "M01" });
+    expect(error).toBeTruthy();
   });
 });
 

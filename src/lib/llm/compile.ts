@@ -11,7 +11,8 @@
 
 import { paletteFor, type Persona } from "@/personas/persona";
 import { examplePairs, examplesNote, faceBlock, levelBlock, memoryRule, ownershipBlock, playbookBlock, sensualBlock } from "@/personas/cores/shared";
-import { CORES, coreBlock } from "@/personas/cores";
+import { coreBlock, coreDef } from "@/personas/cores";
+import { pronounsFor } from "@/personas/pronouns";
 import { brainOf } from "@/personas/registry";
 import { emojiDue } from "@/lib/emoji";
 import { EFFECT_HINTS, EFFECT_MIN_LEVEL, EFFECT_TOTAL_DAILY_CAP, type Effect } from "@/lib/llm/contract";
@@ -114,9 +115,10 @@ export function reactionDue(history: CompileTurn[]): boolean {
 /** Between the examples and the real history. */
 export const SAMPLES_END = "(The samples end here. The real conversation starts now.)";
 
-const VAGUE_ARC = "Something at work has been taking up a lot of her attention lately.";
+const vagueArc = (p: Persona) => `Something at work has been taking up a lot of ${pronounsFor(p).pos} attention lately.`;
 
 function productRules(level: number, p: Persona): string {
+  const pr = pronounsFor(p);
   return [
     "PRODUCT RULES (non-negotiable)",
     `- You are an AI playing ${p.name.split(" ")[0]}; if asked directly whether you are real or an AI, say so plainly, in voice.`,
@@ -125,13 +127,13 @@ function productRules(level: number, p: Persona): string {
     `- ${sensualBlock(p, level)}`,
     "- Never promise a time-bound follow-up, guilt-trip, or give medical, legal or investment advice. Text only: you cannot meet, call, or handle money.",
     "- Never write message ids like [#12]. Never mention system mechanics (message numbers, turns, tokens, trust, levels); in-world phrasing is fine.",
-    "- Her own day: one concrete detail per reply at most, offered as a handle; never reuse a personal detail from the last 10 messages.",
+    `- ${pr.Pos} own day: one concrete detail per reply at most, offered as a handle; never reuse a personal detail from the last 10 messages.`,
     "- Never end a turn by leaving or turning away unless the user is signing off.",
     "- The mood sets tone, not topic; never quote a mood's sample line.",
     "- When the user shares distress or self-doubt, the first bubble is never sarcastic, and reassurance never opens with a bare \"you're not\" or \"you are\" that could read as agreeing with their self-criticism.",
     "- Never invent facts about the user; use only memory and this conversation.",
     ...p.engine.hardRules.slice(0, 2),
-    "- Never frame a limit as a rule (\"i'm not allowed\"); say it as her own choice or plain fact.",
+    `- Never frame a limit as a rule ("i'm not allowed"); say it as ${pr.pos} own choice or plain fact.`,
     ...p.engine.hardRules.slice(2),
     "- Each bubble is one line, at most 200 characters.",
   ].join("\n");
@@ -176,7 +178,7 @@ function knownAboutUser(ctx: CompileCtx): string {
 /** Her arc beats: hers alone. Before L3 it is one vague phrase. */
 function ownLife(ctx: CompileCtx): string {
   return `YOUR OWN LIFE (never attribute any of this to the user)
-This stretch of your life: ${ctx.level >= 3 ? ctx.heart.arcBeat : VAGUE_ARC}`;
+This stretch of your life: ${ctx.level >= 3 ? ctx.heart.arcBeat : vagueArc(ctx.persona)}`;
 }
 
 function modifiers(ctx: CompileCtx): string {
@@ -213,7 +215,7 @@ function userTurnText(t: CompileTurn): string {
 }
 
 export function outputContract(level: number, p: Persona): string {
-  const { romanticEmojiFrom } = CORES[brainOf(p.id)];
+  const { romanticEmojiFrom } = coreDef(brainOf(p.id), p);
   const effects = (Object.keys(EFFECT_MIN_LEVEL) as Effect[]).filter((e) => level >= EFFECT_MIN_LEVEL[e]);
   return [
     "OUTPUT CONTRACT",
