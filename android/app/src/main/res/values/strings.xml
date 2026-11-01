@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ally</string>
+    <string name="title_activity_main">Ally</string>
+    <string name="package_name">in.redream.ally</string>
+    <string name="custom_url_scheme">in.redream.ally</string>
+</resources>

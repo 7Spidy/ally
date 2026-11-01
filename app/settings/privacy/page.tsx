@@ -34,6 +34,9 @@ export default function PrivacySettingsPage() {
         <h1 className={styles.title}>{COPY.privacy.title}</h1>
       </div>
       <div className={styles.body}>
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className={styles.row}>
+          {COPY.privacy.policy}
+        </a>
         <button type="button" className={styles.row} onClick={downloadData}>
           {COPY.privacy.download}
         </button>

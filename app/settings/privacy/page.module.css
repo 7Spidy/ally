@@ -34,4 +34,6 @@
   border-right: 0;
   border-top: 0;
   color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
 }

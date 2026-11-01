@@ -276,7 +276,7 @@ export const COPY = {
     ageSheetError: "Couldn't check that. Try again.",
     consentHeading: "{persona} now replies live",
     consentBody:
-      "{persona} now replies live. The replies are written by an AI model, and key things you tell {persona} are remembered so conversations carry over. You can delete everything any time in Settings.",
+      "{persona} now replies live. Her replies are written by an AI model. She remembers key things you tell her so conversations carry over. You can delete everything any time in Settings.",
     consentContinue: "Continue",
     consentNotNow: "Not now",
   },
@@ -341,6 +341,7 @@ export const COPY = {
     title: "Privacy and data",
     download: "Download my data",
     delete: "Delete everything",
+    policy: "Read privacy policy",
   },
   deleteSheet: {
     heading: "Delete everything?",

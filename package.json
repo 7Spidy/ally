@@ -18,9 +18,20 @@
     "llm:diagnose": "node scripts/run-ts.mjs scripts/llm-diagnose.ts",
     "eval:persona": "node scripts/eval-persona.mjs",
     "eval:ira": "node scripts/eval-persona.mjs --persona F01",
-    "assets:first-run": "node scripts/build-first-run-assets.mjs"
+    "assets:first-run": "node scripts/build-first-run-assets.mjs",
+    "android:sync": "cap sync android",
+    "android:open": "cap open android",
+    "android:icons": "node scripts/generate-android-icons.mjs && node scripts/generate-android-splash.mjs",
+    "android:build": "cd android && gradlew.bat assembleDebug",
+    "android:bundle": "cd android && gradlew.bat bundleRelease"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.1",
     "next": "15.5.25",
