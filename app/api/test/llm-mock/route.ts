@@ -29,14 +29,17 @@ function out(o: Record<string, unknown>) {
 
 function cannedFor(text: string, system: string) {
   const t = text.toLowerCase();
+  // A message sent while she was still replying: nothing to add, so a tapback alone.
+  if (t.includes("(they sent this while you were still replying")) return out({ bubbles: [], reaction: "👍" });
   // Voice lint: a reply that breaks a rule, then (once told so) a clean one.
   if (t.includes("lint please")) {
-    return system.includes("Your last reply broke a rule")
+    // The regeneration instruction rides on the final user turn, not the cached system block.
+    return t.includes("your last reply broke") || system.includes("Your last reply broke")
       ? out({ bubbles: [{ text: "my flatmate tanvi is fine now", effect: null }] })
       : out({ bubbles: [{ text: "tanvi says hi", effect: null }] });
   }
   if (t.includes("json please")) return out({ bubbles: [{ text: "got there in the end", effect: null }] });
-  if (t.startsWith("(the chat has just opened")) return out({ bubbles: [{ text: "you look like someone who reads the fine print. what's on your mind?", effect: null }] });
+  if (t.includes("(the chat has just opened")) return out({ bubbles: [{ text: "you look like someone who reads the fine print. what's on your mind?", effect: null }] });
   if (t.includes("my manager moved the deadline again")) return out({ reaction: "👀", bubbles: [{ text: "again. that's the third time you've said that word this week", effect: null }] });
   if (t.includes("ink please")) return out({ bubbles: [{ text: "i don't usually say this out loud", effect: "ink" }] });
   if (t.includes("effect please")) return out({ reaction: "❤️", bubbles: [{ text: "SLAM", effect: "loud" }, { text: "second", effect: "soft" }] });
@@ -76,6 +79,8 @@ export async function POST(request: Request) {
   const system = body?.messages?.find((m) => m.role === "system")?.content ?? "";
   const text = (last?.content ?? "").replace(/^[#d+]s*/, "");
   const usage = { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } };
+  // "slow please": a slow model call, so a second message can arrive while this reply is in flight.
+  if (text.toLowerCase().includes("slow please") && !text.toLowerCase().includes("(they sent this while you were still replying")) await new Promise((res) => setTimeout(res, 4000));
   const failure = ladderFailure(text, body ?? {});
   const content = failure === "prose" ? "Sure! Here is what I would say, no JSON." : JSON.stringify(cannedFor(text, system));
   return NextResponse.json({ model: body?.model ?? "mock", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }], usage });

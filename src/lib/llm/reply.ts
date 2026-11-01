@@ -5,7 +5,7 @@
  */
 
 import { chat, LlmContentFilter, requestShape, type ChatArgs, type ChatResult } from "@/lib/llm/llm";
-import { LIVE_OUT_SCHEMA, parseLiveOut, sanitize, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
+import { LIVE_OUT_SCHEMA, LIVE_OUT_SCHEMA_FOLLOWUP, parseLiveOut, sanitize, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
 import { instructionFor, lintReply, type LintRule } from "@/lib/llm/lint";
 import type { Compiled } from "@/lib/llm/compile";
 
@@ -26,6 +26,8 @@ export interface RunReplyArgs {
   quiet?: boolean;
   /** Picks the in-voice fallback if the provider's content filter blocks the reply twice. */
   seed?: number;
+  /** A follow-up that may send no bubbles (a tapback alone). Default false. */
+  allowEmpty?: boolean;
 }
 
 /** How the JSON retry ladder went for the first (pre-lint) generation. */
@@ -116,7 +118,7 @@ export async function runReply(args: RunReplyArgs): Promise<RunReplyResult> {
       const res = await call({
         system: args.compiled.system,
         messages,
-        schema: LIVE_OUT_SCHEMA,
+        schema: args.allowEmpty ? LIVE_OUT_SCHEMA_FOLLOWUP : LIVE_OUT_SCHEMA,
         schemaName: "ira_reply",
         maxTokens: args.maxTokens ?? 500,
         temperature: attempt === 0 ? (args.temperature ?? liveTemperature()) : RETRY_TEMPERATURE,
@@ -126,7 +128,7 @@ export async function runReply(args: RunReplyArgs): Promise<RunReplyResult> {
       usage.input += res.usage.input;
       usage.output += res.usage.output;
       usage.cached += res.usage.cached;
-      const out = parseLiveOut(res.content);
+      const out = parseLiveOut(res.content, { allowEmpty: args.allowEmpty });
       if (!out) logUnparsed(res.content, attempt, args.companionId);
       if (attempt > 0) stats.retryTokens += usage.input + usage.output - before;
       if (out) return out;
@@ -166,7 +168,7 @@ export async function runReply(args: RunReplyArgs): Promise<RunReplyResult> {
   }
   const firstClean = sanitize(first, args.sanitizeCtx);
   // Crisis and age-check replies are never linted or rewritten.
-  const lintable = args.userText !== "" && firstClean.riskLevel === "none" && !firstClean.ageClaimUnder18;
+  const lintable = args.userText !== "" && firstClean.bubbles.length > 0 && firstClean.riskLevel === "none" && !firstClean.ageClaimUnder18;
   const lintOpts = { prevReply: args.prevReply, quiet: args.quiet, people: args.sanitizeCtx.persona.engine.people };
   const firstHits = lintable ? lintReply(firstClean, args.userText, lintOpts) : [];
   if (!firstHits.length) return { raw: first, out: firstClean, firstHits, secondHits: null, regenerated: false, usage, ladder, filtered };

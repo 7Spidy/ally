@@ -39,6 +39,16 @@ export function istNow(ms: number): IstParts {
   };
 }
 
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** The local time as the model reads it, e.g. "Your local time: 11:47 pm, Saturday (night)." */
+export function clockLine(ist: IstParts): string {
+  const h = ist.hour;
+  const part = h < 5 ? "late night" : h < 8 ? "early morning" : h < 12 ? "morning" : h < 17 ? "afternoon" : h < 21 ? "evening" : "night";
+  const time = `${h % 12 || 12}:${String(ist.minute).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+  return `Your local time: ${time}, ${WEEKDAY_NAMES[ist.weekday]} (${part}).`;
+}
+
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }

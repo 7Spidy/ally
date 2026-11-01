@@ -84,6 +84,8 @@ function ChatContent() {
   const playingRef = useRef(false);
   /** A reply asked for while another was still playing; run once that one ends. */
   const queuedRef = useRef<{ companionId: string; userMessageId?: number } | null>(null);
+  // The newest user message the server had seen when it wrote the last reply.
+  const lastSeenUpToRef = useRef(0);
   const [typing, setTyping] = useState(false);
   const [showOverflow, setShowOverflow] = useState(false);
   const [ctxCard, setCtxCard] = useState<{ title?: string; line: string } | null>(null);
@@ -198,7 +200,7 @@ function ChatContent() {
   // Asks the server for the companion's reply (or opener), then plays it. 202 means one
   // is already in flight (a second tab): try again shortly.
   const fetchAndPlay = useCallback(
-    async (companionId: string, mode: "reply" | "opener", userMessageId?: number) => {
+    async (companionId: string, mode: "reply" | "opener", userMessageId?: number, followUp = false) => {
       if (playingRef.current) {
         // The user sent again while the companion was mid-reply: answer that message next
         // (the server prompt covers both), rather than dropping it.
@@ -207,7 +209,8 @@ function ChatContent() {
       }
       playingRef.current = true;
       setFailedMode(null);
-      setTyping(true);
+      // A dequeued follow-up may end up a tapback alone: play() shows the dots per bubble, so none while waiting.
+      if (!followUp) setTyping(true);
       try {
         let r: LiveReply | null = null;
         const opts = qaRef.current;
@@ -219,6 +222,7 @@ function ChatContent() {
         // "Next reply" means one reply: the forced effects are spent once it has come back.
         if (r && opts.force) setQaForce(null);
         setTyping(false);
+        if (r?.seenUpTo != null) lastSeenUpToRef.current = r.seenUpTo;
         if (r) await play(companionId, userMessageId, r);
       } catch (e) {
         setTyping(false);
@@ -231,7 +235,9 @@ function ChatContent() {
         playingRef.current = false;
         const next = queuedRef.current;
         queuedRef.current = null;
-        if (next && aliveRef.current) void fetchAndPlay(next.companionId, "reply", next.userMessageId);
+        // The reply just played already saw the queued message: nothing left to ask for.
+        const covered = next && next.userMessageId !== undefined && lastSeenUpToRef.current >= next.userMessageId;
+        if (next && !covered && aliveRef.current) void fetchAndPlay(next.companionId, "reply", next.userMessageId, true);
       }
     },
     [dispatch, play]

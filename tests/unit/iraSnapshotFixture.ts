@@ -5,6 +5,14 @@ import { F01, type Persona } from "@/personas/persona";
 /** Fixed clock and history for the Ira prompt regression (B4 step 0). Tue 2026-05-12 10:00 IST. */
 const NOW = Date.UTC(2026, 4, 12, 4, 30);
 
+/** The RIGHT NOW clock line (double-send change). The stored snapshots predate it; system and stablePrefix are unaffected. */
+const CLOCK_LINE = /Your local time: [^\n]*never contradict it\.\n/;
+const withoutClock = (c: ReturnType<typeof compile>): ReturnType<typeof compile> => ({
+  ...c,
+  volatile: c.volatile.replace(CLOCK_LINE, ""),
+  messages: c.messages.map((m) => ({ ...m, content: m.content.replace(CLOCK_LINE, "") })),
+});
+
 export const IRA_SNAPSHOT_LEVELS = [1, 3, 5, 6] as const;
 
 /** Fixed-clock prompt snapshot for any persona (B5 step 0 generalises the Ira fixture). */
@@ -31,7 +39,7 @@ export function promptSnapshot(persona: Persona) {
       lowEffort: false,
       persona,
     };
-    out[`L${level}`] = compile(ctx);
+    out[`L${level}`] = withoutClock(compile(ctx));
   }
   return out;
 }

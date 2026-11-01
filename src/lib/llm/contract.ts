@@ -94,6 +94,12 @@ export const LIVE_OUT_SCHEMA = {
   },
 } as const;
 
+/** The follow-up variant: identical except that a reply may carry no bubbles (a tapback alone). */
+export const LIVE_OUT_SCHEMA_FOLLOWUP = {
+  ...LIVE_OUT_SCHEMA,
+  properties: { ...LIVE_OUT_SCHEMA.properties, bubbles: { ...LIVE_OUT_SCHEMA.properties.bubbles, minItems: 0 } },
+} as const;
+
 // ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
@@ -121,8 +127,12 @@ function firstJsonObject(text: string): string | null {
   return null;
 }
 
-/** Parses the model's reply into a LiveOut, or null when it is not usable. */
-export function parseLiveOut(text: string): LiveOut | null {
+/**
+ * Parses the model's reply into a LiveOut, or null when it is not usable.
+ * With `allowEmpty` (a follow-up), a reply with no bubbles is valid, but only
+ * when it carries no safety or age flag; those must still go through the retry ladder.
+ */
+export function parseLiveOut(text: string, opts: { allowEmpty?: boolean } = {}): LiveOut | null {
   const json = firstJsonObject(text);
   if (!json) return null;
   let raw: unknown;
@@ -144,14 +154,17 @@ export function parseLiveOut(text: string): LiveOut | null {
       bubbles.push({ text: (b as { text: string }).text, effect: EFFECTS.includes(e as Effect) ? (e as Effect) : null });
     }
   }
-  if (!bubbles.some((b) => b.text.trim())) return null;
-
   const screen = o.screen;
   const band = o.riskLevel ?? o.safety; // tolerate the old key
+  let kept = bubbles;
+  if (!bubbles.some((b) => b.text.trim())) {
+    if (!opts.allowEmpty || (BANDS.includes(band as Band) && band !== "none") || o.ageClaimUnder18 === true) return null;
+    kept = [];
+  }
   return {
     reaction: typeof o.reaction === "string" && o.reaction.trim() ? o.reaction.trim() : null,
     quoteId: typeof o.quoteId === "number" && Number.isInteger(o.quoteId) ? o.quoteId : null,
-    bubbles,
+    bubbles: kept,
     screen: SCREENS.includes(screen as ScreenKind) ? (screen as ScreenKind) : null,
     riskLevel: BANDS.includes(band as Band) ? (band as Band) : "none",
     ageClaimUnder18: o.ageClaimUnder18 === true,
@@ -190,7 +203,12 @@ export interface SanitizeCtx {
   milestone: Milestone | null;
   /** Cool-off or safety mode: no effects, no reaction. */
   quiet: boolean;
+  /** A follow-up that may send no bubbles: it then always carries a reaction. */
+  allowEmpty?: boolean;
 }
+
+/** The reaction forced onto an empty follow-up, in preference order. */
+export const FOLLOWUP_REACTIONS = ["🫶", "🤍", "❤️", "😊", "👍"];
 
 const segmenter = typeof Intl !== "undefined" && "Segmenter" in Intl ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
 
@@ -285,6 +303,13 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
   if (reaction !== null && !paletteFor(level, ctx.persona).includes(reaction)) {
     console.info(JSON.stringify({ evt: "llm.reaction_dropped", level, reaction }));
     reaction = null;
+  }
+
+  // An empty follow-up is a tapback alone, so it must have one.
+  if (ctx.allowEmpty && bubbles.length === 0 && reaction === null) {
+    const palette = paletteFor(level, ctx.persona);
+    reaction = FOLLOWUP_REACTIONS.find((r) => palette.includes(r)) ?? palette[0];
+    console.info(JSON.stringify({ evt: "llm.followup_reaction_forced" }));
   }
 
   // Screen effect: level, milestone, one per day, and petals only at L6.

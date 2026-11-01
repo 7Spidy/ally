@@ -16,7 +16,7 @@ import { pronounsFor } from "@/personas/pronouns";
 import { brainOf } from "@/personas/registry";
 import { emojiDue } from "@/lib/emoji";
 import { EFFECT_HINTS, EFFECT_MIN_LEVEL, EFFECT_TOTAL_DAILY_CAP, type Effect } from "@/lib/llm/contract";
-import type { HeartNow, Milestone } from "@/lib/heart";
+import { clockLine, type HeartNow, type Milestone } from "@/lib/heart";
 
 export interface CompileFact {
   id: number;
@@ -56,6 +56,12 @@ export interface CompileCtx {
   /** The user's q10 answer, for the opener. */
   pressure?: string | null;
   persona: Persona;
+  /**
+   * Set when the history ends in her own bubbles because the user wrote while the last reply
+   * was in flight. `unanswered` are their messages her bubbles did not answer; `allowEmpty`
+   * lets the reply be a tapback alone.
+   */
+  followUp?: { unanswered: CompileTurn[]; allowEmpty: boolean } | null;
 }
 
 export interface Compiled {
@@ -144,7 +150,7 @@ const WEATHER_RE = /\b(weather|rain|raining|rainy|hot|heat|cold|freezing|fog|fog
 /** Abstract state only: presence, energy and mood tone. Nothing concrete to latch onto. */
 function rightNow(ctx: CompileCtx): string {
   const h = ctx.heart;
-  const lines = ["RIGHT NOW"];
+  const lines = ["RIGHT NOW", `${clockLine(h.ist)} Time sets context; mention it only when it matters, and never contradict it.`];
   const e = ctx.persona.engine;
   const tone = (e.gatedMoods[h.mood.mood] ?? 0) > ctx.level ? "ordinary" : h.mood.texting;
   lines.push(`Presence: ${h.block.presence}. Energy: ${e.energy[h.block.presence] ?? "even"}. Mood tone: ${tone}.`);
@@ -186,7 +192,7 @@ function modifiers(ctx: CompileCtx): string {
   if (ctx.coolOff) m.push("Cool-off: be shorter, not colder.");
   if (ctx.safetyMode) m.push("Safety mode: no flirting or romance today.");
   if (ctx.lowEffort) m.push("The user has sent five one-word replies: stay short, but lead. Bring one new thing from your day or ask one easy, specific question. Do not mirror their silence.");
-  if (ctx.mode !== "opener" && emojiDue(ctx.history)) {
+  if (ctx.mode !== "opener" && !ctx.followUp && emojiDue(ctx.history)) {
     m.push("Emoji: your last two replies had none. Put at least one emoji in this reply, in your usual style; the romantic-emoji rule in the OUTPUT CONTRACT still applies. Skip this only if this reply's riskLevel is concern or acute.");
   }
   if (ctx.mode !== "opener" && !ctx.coolOff && !ctx.safetyMode && reactionDue(ctx.history)) {
@@ -212,6 +218,14 @@ function userTurnText(t: CompileTurn): string {
   if (t.edited) parts.push("(edited)");
   parts.push(t.text);
   return parts.join(" ");
+}
+
+function followUpTurn(unanswered: CompileTurn[], allowEmpty: boolean): string {
+  const listed = unanswered.map((t) => `[#${t.id}] "${userTurnText(t)}"`).join(" ");
+  const ifCovered = allowEmpty
+    ? "react only and send no bubbles (an empty bubbles array overrides the bubble count in the OUTPUT CONTRACT for this reply only)"
+    : "send one short bubble";
+  return `(They sent this while you were still replying: ${listed}. Your reply above already went out. If their message still needs an answer, answer it in one to three short bubbles. If your reply already covered it, ${ifCovered}. Never greet, never restart the day, never start a new topic.)`;
 }
 
 export function outputContract(level: number, p: Persona): string {
@@ -245,8 +259,12 @@ export function compile(ctx: CompileCtx): Compiled {
     role: t.who === "me" ? "user" : "assistant",
     content: t.who === "me" ? `[#${t.id}] ${userTurnText(t)}` : t.text,
   }));
-  if (ctx.mode === "opener" || real.length === 0 || real[real.length - 1].role !== "user") {
+  if (ctx.mode === "opener" || real.length === 0) {
     real.push({ role: "user", content: "(The chat has just opened. Write your first message.)" });
+  } else if (real[real.length - 1].role !== "user") {
+    // Reply mode with the history ending in her bubbles: a message sent while she was still replying.
+    const unanswered = ctx.followUp?.unanswered ?? [];
+    real.push({ role: "user", content: unanswered.length ? followUpTurn(unanswered, ctx.followUp?.allowEmpty === true) : "(Continue from where the conversation is. No greeting, no new topic.)" });
   }
   // The samples end with an assistant turn, so a real history that starts with a user turn carries the separator itself.
   if (real[0].role === "user") real[0] = { role: "user", content: `${SAMPLES_END}\n\n${real[0].content}` };

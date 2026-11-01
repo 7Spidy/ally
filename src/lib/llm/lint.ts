@@ -34,7 +34,7 @@ const SAYS_TEXT = /\btext\b/i;
 const NOT_ALLOWED = /not allowed/i;
 
 export const OPEN_LOOP = /\b(ask me|you['’]ll never guess|guess what|wait till you hear|you won['’]t believe|remind me to tell you|i still need to tell you|long story)\b/i;
-const SIGN_OFF = /\b(good\s?night|gn|bye|ttyl|cya|talk (?:later|tomorrow)|going to (?:sleep|bed)|heading to bed|off to (?:sleep|bed)|gotta go|got to go|need to go|sleep now|signing off|need (?:some )?space|leave me alone|not in the mood)\b/i;
+const SIGN_OFF = /\b(good\s?night|gn|bye|ttyl|cya|talk (?:later|tomorrow)|talk to (?:you|u) (?:later|tomorrow|tmrw|tmr)|ttyt|(?:see|catch) (?:you|u|ya) (?:tomorrow|tmrw|later)|going to (?:sleep|bed)|heading to bed|off to (?:sleep|bed)|gotta go|got to go|need to go|sleep now|signing off|need (?:some )?space|leave me alone|not in the mood)\b/i;
 
 /** A handle: a question, an in-chat open loop, or a trailing ellipsis. A rough heuristic; false positives only cost one regeneration. */
 export function hasHandle(texts: string[]): boolean {

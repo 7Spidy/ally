@@ -116,6 +116,8 @@ export interface LiveReply {
   resourceCard: boolean;
   paused: boolean;
   replayed?: boolean;
+  /** Highest user message id the server saw when it wrote this reply; a queued fetch for an id at or below it is already covered. */
+  seenUpTo?: number | null;
 }
 
 /** QA only: what to force onto one reply. The server refuses it for anyone who is not QA or admin. */

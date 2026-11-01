@@ -5,10 +5,11 @@ import { isLive } from "@/lib/live";
 import { personaFor } from "@/personas/registry";
 import { dayKey } from "@/lib/clock";
 import * as heart from "@/lib/heart";
-import { compile } from "@/lib/llm/compile";
-import { applyQaForce, bubbleMeta, EFFECTS, grantCelebration, SCREENS, type Effect, type MsgMeta, type QaForce } from "@/lib/llm/contract";
+import { compile, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
+import { planReply } from "@/lib/llm/replyPlan";
+import { applyQaForce, bubbleMeta, EFFECTS, grantCelebration, sanitize, SCREENS, type Effect, type MsgMeta, type QaForce } from "@/lib/llm/contract";
 import { runReply } from "@/lib/llm/reply";
-import { applySafety } from "@/lib/safety";
+import { applySafety, backstopHit } from "@/lib/safety";
 import { applyReply, freshDay, relationshipDay, wordCount, type TrustDay, type TrustState } from "@/lib/trust";
 import type { CoreId } from "@/state/schema";
 
@@ -118,7 +119,10 @@ export async function POST(request: Request) {
     const { data: claimed } = await db.from("companions").update({ last_replied_msg: userMsg.id }).eq("id", c.id).lt("last_replied_msg", userMsg.id).select("id");
     if (!claimed?.length) {
       const { data: existing } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).eq("in_reply_to", userMsg.id).order("id");
-      if (existing?.length) return json({ replayed: true, reaction: null, bubbles: bubblesOf(existing as MsgRow[]), trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
+      if (existing?.length) return json({ replayed: true, reaction: null, bubbles: bubblesOf(existing as MsgRow[]), seenUpTo: userMsg.id, trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
+      // A reply with no bubbles is a tapback alone. The reaction is written atomically with the reply, so its presence means the reply is done.
+      const done = userMsg.meta?.reaction;
+      if (typeof done === "string" && done !== "") return json({ replayed: true, reaction: done, bubbles: [], seenUpTo: userMsg.id, trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
       return json({ pending: true }, 202);
     }
   } else {
@@ -133,6 +137,15 @@ export async function POST(request: Request) {
     // Context
     const { data: histDesc } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to,edited_at").eq("companion_id", c.id).is("deleted_at", null).order("id", { ascending: false }).limit(40);
     const history = ((histDesc ?? []) as MsgRow[]).reverse();
+
+    // The reply for an earlier message may have been written after newer user rows: answer the newest one instead.
+    const plan = mode === "reply" && userMsg ? planReply(history, userMsg.id) : null;
+    if (plan && userMsg && plan.answerId > userMsg.id) {
+      const { data: promoted } = await db.from("companions").update({ last_replied_msg: plan.answerId }).eq("id", c.id).eq("last_replied_msg", userMsg.id).select("id");
+      const row = history.find((m) => m.id === plan.answerId);
+      if (promoted?.length && row) userMsg = row;
+      else console.info(JSON.stringify({ evt: "reply.promote_lost", companion: c.id }));
+    }
 
     // A reply the user quoted from outside the 40-message window still needs its text.
     const inWindow = new Map(history.map((m) => [m.id, m]));
@@ -186,7 +199,17 @@ export async function POST(request: Request) {
     const safetyMode = (ms(c.safety_until) ?? 0) > now;
     const lowEffort = lastMe.length >= 5 && lastMe.slice(-5).every((m) => wordCount(m.text) <= 1);
 
-    const compiled = compile({
+    // History that ends in her bubbles: a message the user sent while the last reply was in flight.
+    const unansweredTurns: CompileTurn[] = plan?.followUp
+      ? plan.followUp.unansweredIds.flatMap((id) => {
+          const m = history.find((x) => x.id === id);
+          return m ? [{ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m) }] : [];
+        })
+      : [];
+    const followUpText = [userMsg?.text ?? "", ...unansweredTurns.map((t) => t.text)];
+    const allowEmpty = !!plan?.followUp && !coolOff && !safetyMode && milestone === null && !followUpText.some(backstopHit);
+    const followUp = plan?.followUp ? { unanswered: unansweredTurns, allowEmpty } : null;
+    const baseCtx: Omit<CompileCtx, "followUp"> = {
       level,
       mode,
       userName: profile?.display_name ?? "",
@@ -202,7 +225,8 @@ export async function POST(request: Request) {
       lowEffort,
       pressure: c.answers?.q10 ?? null,
       persona,
-    });
+    };
+    const compiled = compile({ ...baseCtx, followUp });
 
     // Gates
     const effectsToday: Partial<Record<Effect, number>> = {};
@@ -218,10 +242,12 @@ export async function POST(request: Request) {
     const userMsgIds = lastMe.map((m) => m.id);
 
     // Her bubbles just before the user's latest message, for lint rule e. Undefined when the user wrote twice in a row or this is the opener.
-    const at = userMsg ? history.findIndex((m) => m.id === userMsg.id) : -1;
+    const answered = userMsg;
+    const at = answered ? history.findIndex((m) => m.id === answered.id) : -1;
     const prevTexts: string[] = [];
     for (let i = at - 1; i >= 0 && history[i].who === "them"; i--) prevTexts.unshift(history[i].text);
-    const prevReply = prevTexts.length ? prevTexts.join("\n") : undefined;
+    // A follow-up's job is to close, not to lead, so lint rule e is skipped.
+    const prevReply = prevTexts.length && !followUp ? prevTexts.join("\n") : undefined;
 
     // Model call, sanitize, voice lint and at most one regeneration.
     const reply = await runReply({
@@ -231,7 +257,9 @@ export async function POST(request: Request) {
       prevReply,
       quiet: coolOff || safetyMode,
       seed: userMsg?.id,
+      allowEmpty,
       sanitizeCtx: {
+        allowEmpty,
         level,
         persona,
         latestMeId: userMsg?.id ?? -1,
@@ -251,7 +279,7 @@ export async function POST(request: Request) {
     if (userMsg) {
       const { data: still } = await db.from("messages").select("deleted_at").eq("id", userMsg.id).maybeSingle();
       if (!still || still.deleted_at) {
-        return json({ reaction: null, screen: null, bubbles: [], trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
+        return json({ reaction: null, screen: null, bubbles: [], seenUpTo: null, trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
       }
     }
 
@@ -291,7 +319,23 @@ export async function POST(request: Request) {
       leveledUp = r.leveledUp;
     }
 
-    const finalOut = grantCelebration(safe.out, { level: trust.level, leveledUp, milestone, screensToday, band: safe.band });
+    let finalOut = grantCelebration(safe.out, { level: trust.level, leveledUp, milestone, screensToday, band: safe.band });
+
+    // A celebration needs a bubble to persist on (screensToday counts stored meta), so an empty follow-up that earned one gets a single bubble.
+    if (finalOut.bubbles.length === 0 && (leveledUp !== null || finalOut.screen !== null)) {
+      try {
+        const rescueCompiled = compile({ ...baseCtx, followUp: plan?.followUp ? { unanswered: unansweredTurns, allowEmpty: false } : null });
+        rescueCompiled.messages[rescueCompiled.messages.length - 1].content += "'+BS+'n'+BS+'nSend exactly one short bubble.";
+        const rescue = await runReply({ compiled: rescueCompiled, companionId: c.id, userText, prevReply: undefined, quiet: coolOff || safetyMode, seed: userMsg?.id, allowEmpty: false, sanitizeCtx: { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode } });
+        const rescued = sanitize({ ...finalOut, bubbles: rescue.out.bubbles }, { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode });
+        if (!rescued.bubbles.length) throw new Error("no_bubbles");
+        finalOut = { ...finalOut, bubbles: rescued.bubbles };
+        console.info(JSON.stringify({ evt: "reply.followup_rescue", outcome: "bubble", companion: c.id }));
+      } catch {
+        finalOut = { ...finalOut, screen: null };
+        console.info(JSON.stringify({ evt: "reply.followup_rescue", outcome: "dropped_screen", companion: c.id }));
+      }
+    }
     const bubbles = finalOut.bubbles.map((b, i) => ({ text: b.text, meta: bubbleMeta(finalOut, i, safe.safetyMeta) }));
 
     const { data: written, error } = await db.rpc("write_live_reply", {
@@ -320,6 +364,7 @@ export async function POST(request: Request) {
       reaction: finalOut.reaction,
       screen: finalOut.screen,
       bubbles: result.bubbles,
+      seenUpTo: mode === "reply" ? (plan?.seenUpTo ?? null) : null,
       trustLevel: trust.level,
       leveledUp,
       resourceCard: safe.resourceCard,
