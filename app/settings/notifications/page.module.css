@@ -22,6 +22,49 @@
   padding: 8px 20px 24px;
 }
 
+.intro {
+  color: var(--mut);
+  font-size: 14.5px;
+  line-height: 1.45;
+  margin: 0 0 20px;
+}
+
+.permissionBanner {
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.permissionText {
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.permissionBtn {
+  align-self: flex-start;
+  background: var(--fg);
+  color: var(--ink);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sectionHeader {
+  font-size: 14px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 20px 4px 8px;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -41,6 +84,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
+  cursor: pointer;
 }
 .toggle.on {
   background: var(--fg);
@@ -51,4 +95,33 @@
   height: 24px;
   border-radius: 50%;
   background: var(--ink);
+}
+
+.testContainer {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.testBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  background: var(--surf);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--fg);
+  font-size: 14.5px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.testBtn:active {
+  background: var(--line);
 }
