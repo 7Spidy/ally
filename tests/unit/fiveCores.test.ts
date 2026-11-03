@@ -18,7 +18,7 @@ import {
   type RankedCore,
   type Template,
 } from "@/lib/engine";
-import { CORE_MAP, DECK_HIDDEN, castsAs } from "@/lib/coreMap";
+import { CORE_MAP, servesCore } from "@/lib/coreMap";
 import { BEAT_BUZZ, REVEAL_BUZZ, vibrate } from "@/lib/vibrate";
 import { emptyAnswers, freshFlow, type Answers, type CoreId, type Gender } from "@/state/schema";
 import { invalidationFor } from "../../app/onboarding/_lib/invalidate";
@@ -237,42 +237,50 @@ describe("the v7 casting map", () => {
     for (const [id, [primary, secondary]] of Object.entries(CORE_MAP)) expect(secondary, id).not.toBe(primary);
   });
 
-  it("castsAs is true for a primary or secondary core, false for the rest and for unknown ids", () => {
-    expect(castsAs("F13", "MONEY")).toBe(true);
-    expect(castsAs("F13", "FRIEND")).toBe(true);
-    expect(castsAs("F13", "TRAINER")).toBe(false);
-    expect(castsAs("F99", "ROMANTIC")).toBe(false);
+  it("servesCore is true for the primary core only, false for a secondary, the rest and unknown ids", () => {
+    expect(servesCore("F13", "MONEY")).toBe(true);
+    expect(servesCore("F13", "FRIEND")).toBe(false);
+    expect(servesCore("F13", "TRAINER")).toBe(false);
+    expect(servesCore("F99", "ROMANTIC")).toBe(false);
   });
 
   // Expected sizes come from the map, not from the code under test.
   function expectedIds(gender: Gender, core: CoreId): string[] {
     return Object.entries(CORE_MAP)
-      .filter(([id, [p, s]]) => id.startsWith(gender === "woman" ? "F" : "M") && (p === core || s === core) && !DECK_HIDDEN[id]?.includes(core))
+      .filter(([id, [p]]) => id.startsWith(gender === "woman" ? "F" : "M") && p === core)
       .map(([id]) => id)
       .sort();
   }
 
-  it("first-run deck sizes: ROMANTIC 9 per gender, the others 3 to 5", () => {
+  it("first-run deck sizes: ROMANTIC 9 per gender, the others 1 or 2 (primary core only)", () => {
     for (const gender of ["woman", "man"] as Gender[]) {
       for (const core of CORES) {
         const deck = deckTemplates(templates, gender, undefined, core);
         expect(idsOf(deck), `${gender} ${core}`).toEqual(expectedIds(gender, core));
         if (core === "ROMANTIC") expect(deck.length, `${gender} ROMANTIC`).toBe(9);
         else {
-          expect(deck.length, `${gender} ${core}`).toBeGreaterThanOrEqual(3);
-          expect(deck.length, `${gender} ${core}`).toBeLessThanOrEqual(5);
+          expect(deck.length, `${gender} ${core}`).toBeGreaterThanOrEqual(1);
+          expect(deck.length, `${gender} ${core}`).toBeLessThanOrEqual(2);
         }
       }
     }
   });
 
-  it("F01 is in the woman ROMANTIC deck and in no other core's deck", () => {
-    expect(DECK_HIDDEN.F01).toEqual(["MONEY"]);
-    expect(DECK_HIDDEN.F02).toEqual(["PSYCH"]);
-    expect(deckTemplates(templates, "woman", undefined, "ROMANTIC").map((t) => t.id)).toContain("F01");
-    expect(deckTemplates(templates, "woman", undefined, "MONEY").map((t) => t.id)).not.toContain("F01");
-    for (const core of CORES.filter((c) => c !== "ROMANTIC")) {
-      expect(deckTemplates(templates, "woman", undefined, core).map((t) => t.id), core).not.toContain("F01");
+  it("F01 and F02 are in the woman ROMANTIC deck and in no other core's deck", () => {
+    for (const id of ["F01", "F02"]) {
+      expect(deckTemplates(templates, "woman", undefined, "ROMANTIC").map((t) => t.id)).toContain(id);
+      for (const core of CORES.filter((c) => c !== "ROMANTIC")) {
+        expect(deckTemplates(templates, "woman", undefined, core).map((t) => t.id), `${id} in ${core}`).not.toContain(id);
+      }
+    }
+  });
+
+  it("every face is in exactly one core's deck, so no card is shown for a core it is not live for", () => {
+    for (const t of templates) expect(CORES.filter((c) => servesCore(t.id, c)), t.id).toEqual([CORE_MAP[t.id][0]]);
+    for (const gender of ["woman", "man"] as Gender[]) {
+      const all = CORES.flatMap((c) => deckTemplates(templates, gender, undefined, c).map((t) => t.id));
+      expect(new Set(all).size, gender).toBe(all.length);
+      expect(all.length, gender).toBe(16);
     }
   });
 
@@ -294,10 +302,10 @@ describe("buildCoreDeck fallback (D4)", () => {
     { id: "ROMANTIC", score: 1 },
     { id: "MONEY", score: 0 },
   ];
-  const trainerWomen = ["F03", "F06", "F08", "F10"];
-  const friendWomen = ["F05", "F09", "F12", "F13"];
-  // F02 is hidden from the PSYCH deck until a Psych brain exists (B4 D5).
-  const psychWomen = ["F04", "F07", "F15"];
+  // Decks hold primary-core faces only (B7), so the non-Romantic decks are one or two faces.
+  const trainerWomen = ["F08"];
+  const friendWomen = ["F09", "F12"];
+  const psychWomen = ["F04", "F07"];
 
   it("uses the user's own core deck when it has faces", () => {
     expect(idsOf(buildCoreDeck(templates, "woman", undefined, ranked))).toEqual(trainerWomen);
@@ -310,17 +318,17 @@ describe("buildCoreDeck fallback (D4)", () => {
 
   it("falls to the fourth-ranked core when the top three are exhausted", () => {
     const excluded = new Set([...trainerWomen, ...friendWomen, ...psychWomen]);
-    // ROMANTIC is fourth in `ranked`; its women minus the excluded ones are what is left.
+    // ROMANTIC is fourth in `ranked`; none of its women were excluded.
     const deck = buildCoreDeck(templates, "woman", excluded, ranked);
-    expect(idsOf(deck)).toEqual(["F01", "F02", "F14", "F16"]);
+    expect(idsOf(deck)).toEqual(["F01", "F02", "F03", "F05", "F06", "F10", "F14", "F15", "F16"]);
     expect(idsOf(deck)).toEqual(idsOf(deckTemplates(templates, "woman", excluded, "ROMANTIC")));
   });
 
   it("falls to the fifth when the top four are exhausted", () => {
     const romanticWomen = ["F01", "F02", "F03", "F05", "F06", "F10", "F14", "F15", "F16"];
     const excluded = new Set([...trainerWomen, ...friendWomen, ...psychWomen, ...romanticWomen]);
-    // Only MONEY's F11 is left (F13 and F16 were excluded with the others).
-    expect(idsOf(buildCoreDeck(templates, "woman", excluded, ranked))).toEqual(["F11"]);
+    // Only MONEY's two women are left.
+    expect(idsOf(buildCoreDeck(templates, "woman", excluded, ranked))).toEqual(["F11", "F13"]);
   });
 
   it("all five empty for the gender gives an empty deck, the existing empty-pool behaviour", () => {
@@ -331,12 +339,10 @@ describe("buildCoreDeck fallback (D4)", () => {
   });
 
   it("a deck is empty exactly when the gender's pool is empty, so deck -> matching cannot loop", () => {
-    // Every face is cast for at least one core and never hidden from all of them,
-    // so trying all five cores reaches every face. The deck page only redirects to
+    // Every face is the primary of exactly one core, so trying all five cores reaches every face. The deck page only redirects to
     // matching on an empty deck, and the gender screen already refuses an empty pool.
     for (const t of templates) {
-      const reachable = CORES.some((c) => castsAs(t.id, c) && !DECK_HIDDEN[t.id]?.includes(c));
-      expect(reachable, t.id).toBe(true);
+      expect(CORES.filter((c) => servesCore(t.id, c)).length, t.id).toBe(1);
     }
     // Randomised exclusions, every ranking order: the union of the five decks is the whole pool.
     for (let run = 0; run < 300; run++) {
@@ -354,7 +360,7 @@ describe("buildCoreDeck fallback (D4)", () => {
 
   it("counts a parted or active face as excluded, exactly like the round-two pool", () => {
     // Everyone in TRAINER's deck already met: the exclusion set is the union of active and parted.
-    expect(idsOf(buildCoreDeck(templates, "woman", new Set(trainerWomen.slice(0, 3)), ranked))).toEqual(["F10"]);
+    expect(idsOf(buildCoreDeck(templates, "man", new Set(["M08"]), ranked))).toEqual(["M09"]);
   });
 
   it("orders the result with orderDeck when a user is given, keeping the same faces", () => {
@@ -374,7 +380,7 @@ describe("buildCoreDeck fallback (D4)", () => {
     };
     expect(computeCore(flow.answers).primary).toBe("MONEY");
     const ids = deckFor(flow, templates, new Set());
-    expect(ids.sort()).toEqual(["F11", "F13", "F16"]); // MONEY women, F01 hidden
+    expect(ids.sort()).toEqual(["F11", "F13"]); // MONEY women, primary core only
     expect(deckFor({ ...flow, deckGender: null }, templates, new Set())).toEqual([]);
   });
 });

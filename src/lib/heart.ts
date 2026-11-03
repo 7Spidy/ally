@@ -39,6 +39,20 @@ export function istNow(ms: number): IstParts {
   };
 }
 
+/** Wall-clock parts in an IANA zone, in the same shape as istNow. Only used for personas that declare engine.tz. */
+export function zonedNow(ms: number, tz: string): IstParts {
+  const f = new Intl.DateTimeFormat("en-GB", { timeZone: tz, year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", hourCycle: "h23" });
+  const g = Object.fromEntries(f.formatToParts(new Date(ms)).map((p) => [p.type, p.value]));
+  const year = Number(g.year), month = Number(g.month), dom = Number(g.day), hour = Number(g.hour), minute = Number(g.minute);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return { dayKey: `${year}-${p(month)}-${p(dom)}`, year, month, dom, weekday: new Date(Date.UTC(year, month - 1, dom)).getUTCDay(), hour, minute, minuteOfDay: hour * 60 + minute };
+}
+
+/** The persona's own wall clock: its zone when declared, IST otherwise (byte-identical for every existing face). */
+export function localNow(ms: number, persona: Persona): IstParts {
+  return persona.engine.tz ? zonedNow(ms, persona.engine.tz) : istNow(ms);
+}
+
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /** The local time as the model reads it, e.g. "Your local time: 11:47 pm, Saturday (night)." */
@@ -247,11 +261,13 @@ export function milestoneFor(args: {
   if (ist.month === bm && ist.dom === bd) {
     return { kind: "birthday", screen: "confetti", note: `It is your birthday today (${birthdayText(args.persona.identity.birthday)}).` };
   }
-  if (DIWALI.includes(ist.dayKey)) return { kind: "diwali", screen: "lanterns", note: "It is Diwali today." };
+  // Diwali and the first-of-July rain moment are Indian; a face that lives elsewhere (engine.tz set, not Asia/Kolkata) skips both.
+  const indian = !args.persona.engine.tz || args.persona.engine.tz === "Asia/Kolkata";
+  if (indian && DIWALI.includes(ist.dayKey)) return { kind: "diwali", screen: "lanterns", note: "It is Diwali today." };
   if (args.relationshipDay >= 365 && args.createdDayKey.slice(5) === ist.dayKey.slice(5)) {
     return { kind: "anniversary", screen: "confetti", note: "It is one year since you and the user met." };
   }
-  if (ist.month === 7 && ist.dom === 1 && args.rainMentioned) {
+  if (indian && ist.month === 7 && ist.dom === 1 && args.rainMentioned) {
     return { kind: "rain", screen: "rain", note: "First of July, and the user mentioned rain." };
   }
   if (args.userMsgCount === 100) return { kind: "msg100", screen: "balloons", note: "That was the 100th message the user has sent you." };
@@ -283,8 +299,8 @@ export function now(
   ms: number,
   persona: Persona
 ): HeartNow {
-  const ist = istNow(ms);
-  const created = istNow(companion.createdAt);
+  const ist = localNow(ms, persona);
+  const created = localNow(companion.createdAt, persona);
   const relationshipDay = Math.max(
     0,
     Math.round((Date.UTC(ist.year, ist.month - 1, ist.dom) - Date.UTC(created.year, created.month - 1, created.dom)) / DAY_MS)

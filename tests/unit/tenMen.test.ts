@@ -203,12 +203,12 @@ describe("clocks (IST)", () => {
 
 describe("isLive", () => {
   const c = (templateId: string, primary: CoreId | null) => ({ templateId, core: { primary } });
-  it("each man is live for a qa owner with a matching primary, and not for a normal owner", () => {
+  it("each man is live for every owner with a matching primary", () => {
     for (const id of MEN) {
-      expect((LIVE_TEMPLATES as Record<string, string>)[id]).toBe("qa");
+      expect((LIVE_TEMPLATES as Record<string, string>)[id]).toBe("all");
       expect(personaFor(id).id).toBe(id);
       expect(isLive(c(id, brainOf(id)), true), id).toBe(true);
-      expect(isLive(c(id, brainOf(id)), false), id).toBe(false);
+      expect(isLive(c(id, brainOf(id)), false), id).toBe(true);
     }
   });
   it("a mismatched primary is never live", () => {

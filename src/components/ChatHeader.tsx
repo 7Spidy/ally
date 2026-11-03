@@ -4,7 +4,8 @@ import { useRef } from "react";
 import type { Template } from "@/lib/engine";
 import { Avatar } from "@/components/Avatar";
 import { PRESENCE } from "@/lib/copy";
-import { isDaytimeIST, now } from "@/lib/clock";
+import { isDaytimeIn, now } from "@/lib/clock";
+import { PERSONA_TZ } from "@/lib/presenceTz";
 import { firstNameFromFull } from "@/lib/engine";
 import { LONG_PRESS_MS } from "@/lib/config";
 import styles from "./ChatHeader.module.css";
@@ -44,7 +45,7 @@ export function ChatHeader({
   }
 
   const presence = PRESENCE[template.id];
-  const presenceLine = presenceOverride ?? (presence ? (isDaytimeIST(now()) ? presence.day : presence.night) : "");
+  const presenceLine = presenceOverride ?? (presence ? (isDaytimeIn(now(), PERSONA_TZ[template.id]) ? presence.day : presence.night) : "");
 
   return (
     <div className={styles.header}>

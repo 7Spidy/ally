@@ -51,8 +51,9 @@ interface CompanionJson {
 }
 
 const addCompanion = (u: TestUser, templateId: string) => rpc<CompanionJson>(u, "qa_add_companion", { template_id: templateId });
-const createCompanion = (u: TestUser, templateId: string) =>
-  rpc<CompanionJson>(u, "create_companion", { template_id: templateId, deck_gender: "woman", answers: ANSWERS, core: ROMANTIC, display_name: "" });
+const PSYCH = { primary: "PSYCH", secondary: null, weight: 100, ranked: [{ id: "PSYCH", score: 9 }] };
+const createCompanion = (u: TestUser, templateId: string, core: object = ROMANTIC) =>
+  rpc<CompanionJson>(u, "create_companion", { template_id: templateId, deck_gender: "woman", answers: ANSWERS, core, display_name: "" });
 
 let normal: TestUser;
 let qa: TestUser;
@@ -132,7 +133,7 @@ describe("qa_add_companion", () => {
   });
 
   it("rejects M99 and unknown templates (template_not_testable)", async () => {
-    for (const t of ["M99", "F06", "", "F02; drop table companions"]) {
+    for (const t of ["M99", "", "F02; drop table companions"]) {
       const { error } = await qa.client.rpc("qa_add_companion", { template_id: t });
       expect(error?.message, t).toContain("template_not_testable");
     }
@@ -140,12 +141,18 @@ describe("qa_add_companion", () => {
 });
 
 describe("is_live", () => {
-  it("is true for a qa-owned F02 and false for a normal-owned F02", async () => {
+  it("is true for a qa-owned F02 and for a normal-owned F02 with its own ROMANTIC core", async () => {
     const q = await addCompanion(qa, "F02");
     expect(q.live).toBe(true);
-    // A normal user can own an F02 through the usual create path.
+    // The audience is now "all": a normal user's F02 is live when its primary matches.
     const n = await createCompanion(normal, "F02");
-    expect(n.live).toBe(false);
+    expect(n.live).toBe(true);
+  });
+
+  it("is false for a normal-owned F02 whose core is not ROMANTIC", async () => {
+    const u = await makeUser("normal-f02-psych");
+    const c = await createCompanion(u, "F02", PSYCH);
+    expect(c.live).toBe(false);
   });
 
   it("F01 is live for a normal user", async () => {
@@ -154,29 +161,31 @@ describe("is_live", () => {
     expect(c.live).toBe(true);
   });
 
-  it("follows the owner's role: demoting a qa owner turns their F02 off", async () => {
+  it("does not follow the owner's role any more: demoting a qa owner keeps their F02 live", async () => {
     const u = await makeUser("qa-demote", "qa");
     const c = await addCompanion(u, "F02");
     expect(c.live).toBe(true);
     await service.from("profiles").update({ role: "user" }).eq("id", u.id);
     const state = await rpc<{ companions: CompanionJson[] }>(u, "get_my_state");
-    expect(state.companions.find((x) => x.id === c.id)?.live).toBe(false);
+    expect(state.companions.find((x) => x.id === c.id)?.live).toBe(true);
   });
 });
 
-describe("mocked path for a normal user's F02", () => {
-  it("receive_reply and seed_opener still work (not live_companion)", async () => {
+describe("mocked path for a mismatched companion", () => {
+  it("receive_reply and seed_opener still work when the core does not match (not live_companion)", async () => {
     const u = await makeUser("normal-mock");
-    const c = await createCompanion(u, "F02");
+    const c = await createCompanion(u, "F02", PSYCH);
     const opener = await rpc<{ message: { text: string } | null }>(u, "seed_opener", { companion_id: c.id, body: "hi there" });
     expect(opener.message?.text).toBe("hi there");
     const reply = await rpc<{ message: { text: string } }>(u, "receive_reply", { companion_id: c.id, body: "hello" });
     expect(reply.message.text).toBe("hello");
   });
 
-  it("a qa-owned F02 is refused on the mocked path (live_companion)", async () => {
+  it("a live F02 is refused on the mocked path (live_companion), for qa and normal owners", async () => {
     const c = await addCompanion(qa, "F02");
     const { error } = await qa.client.rpc("receive_reply", { companion_id: c.id, body: "hi" });
     expect(error?.message).toContain("live_companion");
+    const n = await createCompanion(await makeUser("normal-live"), "F02");
+    expect(n.live).toBe(true);
   });
 });

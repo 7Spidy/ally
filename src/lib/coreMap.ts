@@ -1,7 +1,9 @@
 /**
- * Casting sheet v7: which cores each face can serve. A face belongs to a
- * core's deck when its primary or secondary core matches. Never shown to
- * the user.
+ * Casting sheet v7: each face's primary and secondary core. A face belongs to
+ * a core's deck only when its PRIMARY core matches, because a face is live
+ * (a real brain, no mock reply) only for a user whose matched core equals its
+ * primary. The secondary core is texture on the persona, never a way into a
+ * deck. Never shown to the user.
  */
 
 import type { CoreId } from "@/state/schema";
@@ -18,11 +20,8 @@ export const CORE_MAP: Record<string, [CoreId, CoreId | null]> = {
   M13: ["PSYCH", null], M14: ["ROMANTIC", null], M15: ["FRIEND", "TRAINER"], M16: ["ROMANTIC", null],
 };
 
-/** Hide a face from these core decks even though the map lists it (F01's Money brain and F02's Psych brain do not exist yet). */
-export const DECK_HIDDEN: Record<string, CoreId[]> = { F01: ["MONEY"], F02: ["PSYCH"] };
-
-export function castsAs(id: string, core: CoreId): boolean {
+/** True when the face's primary core is `core`: the only faces that may appear in that core's deck. */
+export function servesCore(id: string, core: CoreId): boolean {
   const entry = CORE_MAP[id];
-  if (!entry) return false;
-  return entry[0] === core || entry[1] === core;
+  return !!entry && entry[0] === core;
 }

@@ -6,7 +6,7 @@ import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
 import { useManifest } from "@/state/useManifest";
 import { active, excludedFaces } from "@/lib/selectors";
-import { computeCore } from "@/lib/engine";
+import { computeCore, coreForFace } from "@/lib/engine";
 import { buyPass, createCompanion, partCompanion } from "@/lib/supabase/queries";
 import type { Answers, Gender } from "@/state/schema";
 import styles from "./DebugPanel.module.css";
@@ -88,7 +88,7 @@ export function DebugPanel() {
     if (!allowed.length) return;
     const t = allowed[Math.floor(Math.random() * allowed.length)];
     const answers = randomAnswers();
-    const core = computeCore(answers);
+    const core = coreForFace(computeCore(answers), t.id);
     // create_companion still enforces the slot limit.
     createCompanion({ templateId: t.id, deckGender: t.gender as Gender, answers, core, displayName: "" })
       .then((companion) => dispatch({ type: "DEBUG_SEED_COMPANION", companion }))

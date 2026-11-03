@@ -8,6 +8,7 @@ import { useManifest } from "@/state/useManifest";
 import { useToast } from "@/state/useToast";
 import { ManifestGate } from "@/components/ManifestGate";
 import { createCompanion, rpcErrorMessage } from "@/lib/supabase/queries";
+import { coreForFace } from "@/lib/engine";
 import type { Gender } from "@/state/schema";
 import styles from "./page.module.css";
 
@@ -60,7 +61,7 @@ function RevealScreen() {
         templateId: flow.proposed,
         deckGender: flow.deckGender as Gender,
         answers: flow.answers,
-        core: flow.core,
+        core: coreForFace(flow.core, flow.proposed),
         displayName: flow.displayName,
       });
       dispatch({ type: "CONFIRM_LOCK", companion });

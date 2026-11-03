@@ -6,8 +6,8 @@
  * five cores scored by direct points, and bound each deck to the user's core.
  */
 
-import type { CoreId, Pressure, Gender, Answers } from "@/state/schema";
-import { DECK_HIDDEN, castsAs } from "@/lib/coreMap";
+import type { Core, CoreId, Pressure, Gender, Answers } from "@/state/schema";
+import { CORE_MAP, servesCore } from "@/lib/coreMap";
 
 // ---- Cores. Hardcoded by contract. Never shown to the user. ----
 export const PRESSURES: Pressure[] = ["money", "health", "head", "alone", "notgood", "change"];
@@ -148,17 +148,31 @@ export function computeCore(answers: Answers): ComputedCore {
 // ---- Deck ----
 
 /**
- * Gender is the base filter; `core` keeps only faces cast for that core
- * (minus `DECK_HIDDEN`); `excluded` removes active/parted faces (spec §7.1,
- * §8.3). Omit `core` for a gender-only pool.
+ * Gender is the base filter; `core` keeps only faces whose PRIMARY core is
+ * that core, so every card in a deck is live for the user (B7); `excluded`
+ * removes active/parted faces (spec §7.1, §8.3). Omit `core` for a
+ * gender-only pool.
  */
 export function deckTemplates(templates: Template[], gender: Gender, excluded?: ReadonlySet<string>, core?: CoreId): Template[] {
   return templates.filter(
     (t) =>
       t.gender === gender &&
       !(excluded && excluded.has(t.id)) &&
-      (!core || (castsAs(t.id, core) && !DECK_HIDDEN[t.id]?.includes(core)))
+      (!core || servesCore(t.id, core))
   );
+}
+
+/**
+ * The core to store on a companion created from `templateId`. When the deck
+ * fell back to another ranked core (the user's own deck was empty), the face's
+ * primary core is not the user's, and a companion whose core differs from its
+ * face's primary is not live (mock replies). Align it to the face's own core.
+ * Unknown ids and matching cores come back untouched.
+ */
+export function coreForFace(core: Core, templateId: string): Core {
+  const entry = CORE_MAP[templateId];
+  if (!entry || core.primary === entry[0]) return core;
+  return { ...core, primary: entry[0], secondary: entry[1], weight: entry[1] ? 70 : 100 };
 }
 
 /** Alias matching §8.3's `pool(templates, gender, excluded)` signature. */
@@ -167,8 +181,8 @@ export const pool = deckTemplates;
 /**
  * The deck for a user's ranked cores: their core's deck, else the next
  * ranked core's, and so on down all five (D4, extended). The user is never
- * told. Every face is cast for at least one core, so this is empty only when
- * the gender's pool is empty. Ordered by `orderDeck` when `user` is given.
+ * told. Every face is the primary of exactly one core, so this is empty only
+ * when the gender's pool is empty. Ordered by `orderDeck` when `user` is given.
  */
 export function buildCoreDeck(
   templates: Template[],

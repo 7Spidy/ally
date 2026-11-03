@@ -60,15 +60,20 @@ export function formatTimeIST(ms: number): string {
   return fmt.format(new Date(ms)).replace(/\s?([ap])m$/i, (_m, p) => ` ${p.toLowerCase()}m`);
 }
 
-/** Day (07:00-19:59) vs night presence variant, in Asia/Kolkata. */
-export function isDaytimeIST(ms: number): boolean {
+/** Day (07:00-19:59) vs night presence variant, on the wall clock of `tz` (a face's own zone). */
+export function isDaytimeIn(ms: number, tz: string = "Asia/Kolkata"): boolean {
   const fmt = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
+    timeZone: tz,
     hour: "2-digit",
     hour12: false,
   });
   const hour = Number(fmt.format(new Date(ms)));
   return hour >= 7 && hour < 20;
+}
+
+/** Day (07:00-19:59) vs night presence variant, in Asia/Kolkata. */
+export function isDaytimeIST(ms: number): boolean {
+  return isDaytimeIn(ms);
 }
 
 /** `{d MMMM}` (+ ` {yyyy}` if not the current year), in Asia/Kolkata. */

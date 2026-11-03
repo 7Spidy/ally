@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import type { Companion } from "@/state/schema";
 import type { Template } from "@/lib/engine";
 import { PRESENCE, COPY, fill } from "@/lib/copy";
-import { isDaytimeIST, now } from "@/lib/clock";
+import { isDaytimeIn, now } from "@/lib/clock";
+import { PERSONA_TZ } from "@/lib/presenceTz";
 import { firstNameFromFull } from "@/lib/engine";
 import styles from "./CompanionCard.module.css";
 
@@ -19,7 +20,7 @@ export function CompanionCard({ companion, template }: { companion: Companion; t
   const firstName = firstNameFromFull(template.name);
   const occupation = template.occupation.split(",")[0].toLowerCase();
   const presence = PRESENCE[template.id];
-  const presenceLine = presence ? (isDaytimeIST(now()) ? presence.day : presence.night) : "";
+  const presenceLine = presence ? (isDaytimeIn(now(), PERSONA_TZ[template.id]) ? presence.day : presence.night) : "";
   const lastMessage = companion.messages[companion.messages.length - 1];
 
   return (

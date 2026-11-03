@@ -329,7 +329,8 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
     await page2.waitForURL("**/onboarding/deck");
     const moneyDeck = (await storedFlow(page2))?.deckOrder as string[];
     expect(moneyDeck).not.toContain("F01");
-    expect([...moneyDeck].sort()).toEqual(["F11", "F13", "F16"]);
+    // B7: a deck holds only faces whose primary core is the user's, so F16 (Romantic primary, Money secondary) is out.
+    expect([...moneyDeck].sort()).toEqual(["F11", "F13"]);
     await money.close();
     assertHealthy(health);
   });

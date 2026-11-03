@@ -183,11 +183,11 @@ describe("Zoya's clock (F05, Wednesday)", () => {
 
 describe("isLive", () => {
   const c = (templateId: string, primary: CoreId | null) => ({ templateId, core: { primary } });
-  it("each of the eight is live for a qa owner with a matching primary, and not for a normal owner", () => {
+  it("each of the eight is live for every owner with a matching primary", () => {
     for (const id of NEW_IDS) {
-      expect((LIVE_TEMPLATES as Record<string, string>)[id]).toBe("qa");
+      expect((LIVE_TEMPLATES as Record<string, string>)[id]).toBe("all");
       expect(isLive(c(id, brainOf(id)), true), id).toBe(true);
-      expect(isLive(c(id, brainOf(id)), false), id).toBe(false);
+      expect(isLive(c(id, brainOf(id)), false), id).toBe(true);
     }
   });
   it("a mismatched primary is never live", () => {
@@ -195,9 +195,9 @@ describe("isLive", () => {
     expect(isLive(c("F13", "FRIEND"), true)).toBe(false);
     expect(isLive(c("F04", "ROMANTIC"), true)).toBe(false);
   });
-  it("F01 and F02 behave as before", () => {
+  it("F01 and F02 are live for every owner when the primary matches", () => {
     expect(isLive(c("F01", "ROMANTIC"), false)).toBe(true);
-    expect(isLive(c("F02", "ROMANTIC"), false)).toBe(false);
+    expect(isLive(c("F02", "ROMANTIC"), false)).toBe(true);
     expect(isLive(c("F02", "ROMANTIC"), true)).toBe(true);
     expect(isLive(c("F02", "PSYCH"), true)).toBe(false);
   });

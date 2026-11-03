@@ -341,7 +341,9 @@ describe("create_companion", () => {
 describe("purge and get_my_state", () => {
   it("get_my_state purges a parted companion past purge_at but keeps the face excluded", async () => {
     const u = await makeUser("purge");
-    const c = await createCompanion(u, "F07");
+    // F08 is a Trainer face and the test core is PSYCH, so the companion is mismatched and stays on the mocked path
+    // (F07 is a live Psych face for everyone since B7, and seed_opener refuses a live companion).
+    const c = await createCompanion(u, "F08");
     await rpc(u, "seed_opener", { companion_id: c.id, body: "Hi." });
     await rpc(u, "send_message", { companion_id: c.id, body: "hey" });
     await rpc(u, "part_companion", { companion_id: c.id });

@@ -36,6 +36,8 @@ export interface MoodRule {
 /** Everything the engine used to hardcode for Ira. Times are "H:MM" IST. */
 export interface PersonaEngine {
   city: string;
+  /** IANA zone the persona lives in. Absent means Asia/Kolkata (every Indian face). */
+  tz?: string;
   emojiVoice: string;
   blockStarts: string[];
   nightEnd: string;
