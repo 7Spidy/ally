@@ -100,13 +100,15 @@ html[data-rm="1"] *::after {
 }
 
 /* Full document layout & scrolling for legal/policy reader pages */
-body:has(#privacyPage) {
+body:has(#privacyPage),
+body:has(#deleteAccountPage) {
   display: block !important;
   height: auto !important;
   min-height: 100% !important;
   overflow-y: auto !important;
 }
-body:has(#privacyPage) #app {
+body:has(#privacyPage) #app,
+body:has(#deleteAccountPage) #app {
   width: 100% !important;
   max-width: 100% !important;
   height: auto !important;

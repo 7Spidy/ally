@@ -7,13 +7,14 @@ import { useManifest } from "@/state/useManifest";
 import { useCompanionPrefs } from "@/state/useCompanionPrefs";
 import { useToast } from "@/state/useToast";
 import { ManifestGate } from "@/components/ManifestGate";
-import { active } from "@/lib/selectors";
+import { active, lastOpened } from "@/lib/selectors";
 import { COPY } from "@/lib/copy";
 import { firstNameFromFull } from "@/lib/engine";
 import {
   getNotificationPermissionStatus,
   requestNotificationPermission,
   dispatchNotification,
+  triggerTestDailyReminder,
 } from "@/lib/notifications";
 import styles from "./page.module.css";
 
@@ -160,6 +161,61 @@ function NotificationsContent() {
             </button>
           </div>
         )}
+
+        <div className={styles.sectionHeader}>Daily Check-Ins</div>
+        <p className={styles.intro} style={{ marginTop: 0 }}>
+          Ally automatically notifies you twice a day (at 1:00 PM and 8:00 PM) to check in and chat with your waiting characters.
+        </p>
+
+        <div className={styles.testContainer} style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className={styles.testBtn}
+            onClick={async () => {
+              if (permStatus !== "granted") {
+                await handleRequestPermission();
+              }
+              const primary = lastOpened(state) ?? activeList[0];
+              const template = primary ? templates.find((t) => t.id === primary.templateId) : undefined;
+              const name = template ? firstNameFromFull(template.name) : undefined;
+              await triggerTestDailyReminder(
+                {
+                  companionName: name,
+                  companionId: primary?.id,
+                  companionCount: activeList.length,
+                },
+                "midday"
+              );
+              showToast("Midday reminder sent!");
+            }}
+          >
+            Test Midday Reminder (1:00 PM)
+          </button>
+          <button
+            type="button"
+            className={styles.testBtn}
+            style={{ marginTop: 8 }}
+            onClick={async () => {
+              if (permStatus !== "granted") {
+                await handleRequestPermission();
+              }
+              const primary = lastOpened(state) ?? activeList[0];
+              const template = primary ? templates.find((t) => t.id === primary.templateId) : undefined;
+              const name = template ? firstNameFromFull(template.name) : undefined;
+              await triggerTestDailyReminder(
+                {
+                  companionName: name,
+                  companionId: primary?.id,
+                  companionCount: activeList.length,
+                },
+                "evening"
+              );
+              showToast("Evening reminder sent!");
+            }}
+          >
+            Test Evening Reminder (8:00 PM)
+          </button>
+        </div>
       </div>
     </div>
   );

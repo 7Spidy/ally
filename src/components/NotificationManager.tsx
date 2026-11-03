@@ -4,9 +4,15 @@ import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
-import { active } from "@/lib/selectors";
+import { active, lastOpened } from "@/lib/selectors";
 import { firstNameFromFull } from "@/lib/engine";
-import { initNotificationService, dispatchNotification } from "@/lib/notifications";
+import {
+  initNotificationService,
+  dispatchNotification,
+  scheduleDailyReminders,
+  getNotificationPermissionStatus,
+  requestNotificationPermission,
+} from "@/lib/notifications";
 
 export function NotificationManager() {
   const router = useRouter();
@@ -14,16 +20,47 @@ export function NotificationManager() {
   const { state, dispatch, ownerId } = useAlly();
   const { templates } = useManifest();
   const activeCompanions = active(state);
+  const primaryCompanion = lastOpened(state) ?? activeCompanions[0];
 
   const lastCheckedRef = useRef<number>(Date.now());
   const inFlightRef = useRef(false);
 
-  // Initialize notification click handlers
+  // Initialize notification click handlers (opens chat or destination screen)
   useEffect(() => {
-    initNotificationService((companionId) => {
-      router.push(`/chat/${companionId}`);
+    initNotificationService((target) => {
+      if (target.startsWith("/")) {
+        router.push(target);
+      } else if (target === "home") {
+        router.push("/home");
+      } else {
+        router.push(`/chat/${target}`);
+      }
     });
   }, [router]);
+
+  // Request permission on native platform if in prompt state
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    void getNotificationPermissionStatus().then((status) => {
+      if (status === "prompt") {
+        void requestNotificationPermission();
+      }
+    });
+  }, []);
+
+  // Schedule recurring twice-a-day reminders (1:00 PM & 8:00 PM) for waiting characters
+  useEffect(() => {
+    const template = primaryCompanion
+      ? templates.find((t) => t.id === primaryCompanion.templateId)
+      : undefined;
+    const companionName = template ? firstNameFromFull(template.name) : undefined;
+
+    void scheduleDailyReminders({
+      companionName,
+      companionId: primaryCompanion?.id,
+      companionCount: activeCompanions.length,
+    });
+  }, [primaryCompanion?.id, primaryCompanion?.templateId, activeCompanions.length, templates]);
 
   // Periodic proactive ping check when NOT in the active companion's chat
   useEffect(() => {
@@ -31,7 +68,7 @@ export function NotificationManager() {
 
     async function checkProactivePings() {
       if (inFlightRef.current) return;
-      // Don't check if user was active within last 2 minutes
+      // Don't check if user was active within last minute
       if (Date.now() - lastCheckedRef.current < 60000) return;
       lastCheckedRef.current = Date.now();
 
@@ -81,6 +118,10 @@ export function NotificationManager() {
               body: data.message.text,
               companionId: companion.id,
               icon: avatarUrl,
+              extra: {
+                companionId: companion.id,
+                route: `/chat/${companion.id}`,
+              },
             });
           }
         } catch (err) {

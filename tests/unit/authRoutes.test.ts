@@ -3,7 +3,7 @@ import { routeAccess } from "@/lib/authRoutes";
 
 describe("routeAccess (spec §5.1.6)", () => {
   it("public routes", () => {
-    for (const p of ["/", "/onboarding/consent", "/blocked", "/login", "/login/reset", "/login/anything/else", "/auth/confirm", "/auth/whatever", "/api/test/session"]) {
+    for (const p of ["/", "/onboarding/consent", "/blocked", "/login", "/login/reset", "/login/anything/else", "/auth/confirm", "/auth/whatever", "/api/test/session", "/privacy", "/delete-account"]) {
       expect(routeAccess(p), p).toBe("public");
     }
   });

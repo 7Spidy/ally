@@ -114,10 +114,10 @@ export default function PrivacyPolicyPage() {
               <strong>Data Export (Portability):</strong> You can download a complete JSON export of your profile, preferences, and companion state directly inside the application at any time via <strong>Settings &gt; Privacy &gt; Download My Data</strong>.
             </li>
             <li>
-              <strong>Account &amp; Data Deletion:</strong> You can permanently delete your account and all associated messages, memories, and personal records at any time directly in the app under <strong>Settings &gt; Privacy &gt; Delete Account</strong>.
+              <strong>Account &amp; Data Deletion:</strong> You can permanently delete your account and all associated messages, memories, and personal records at any time directly in the app under <strong>Settings &gt; Privacy &gt; Delete Account</strong>, or via our public <Link href="/delete-account"><strong>Account &amp; Data Deletion Page</strong></Link>.
             </li>
             <li>
-              <strong>Manual Deletion Request:</strong> If you cannot access the app or wish to request manual deletion, you may email our privacy team at <strong>privacy@redream.in</strong> with your registered email address. We will verify and completely purge your account and all related data from our production databases within 30 days.
+              <strong>Manual Deletion Request:</strong> If you cannot access the app or wish to request manual deletion, you may visit <Link href="/delete-account">ally.redream.in/delete-account</Link> or email our privacy team directly at <strong>privacy@redream.in</strong> with your registered email address. We will verify and completely purge your account and all related data from our production databases within 30 days.
             </li>
             <li>
               <strong>Retention Period:</strong> We retain your conversation and account data only for as long as your account remains active or until you request deletion. Deleted messages are removed and replaced with tombstones server-side, preventing them from being accessed by the model or future queries.
@@ -162,7 +162,14 @@ export default function PrivacyPolicyPage() {
         </article>
 
         <footer className={styles.footer}>
-          &copy; {new Date().getFullYear()} redream.in. All rights reserved.
+          <div style={{ display: "flex", justifyContent: "center", gap: "16px", marginBottom: "10px" }}>
+            <Link href="/privacy">Privacy Policy</Link>
+            <span>&bull;</span>
+            <Link href="/delete-account">Delete Account</Link>
+            <span>&bull;</span>
+            <Link href="/">Ally Home</Link>
+          </div>
+          <div>&copy; {new Date().getFullYear()} redream.in. All rights reserved.</div>
         </footer>
       </div>
     </main>

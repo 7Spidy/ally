@@ -25,3 +25,7 @@ brag-output/
 .env.test.local
 supabase/.temp
 supabase/.branches
+
+# Android signing keys & credentials
+*.jks
+*.keystore
