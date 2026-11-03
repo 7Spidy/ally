@@ -1,5 +1,5 @@
 import type { CoreId } from "@/state/schema";
-import { LIVE_TEMPLATES, brainOf } from "@/personas/registry";
+import { LIVE_TEMPLATES, brainOf } from "@/personas/liveTemplates";
 
 /**
  * D1: the one place that decides which companions talk to a live model.

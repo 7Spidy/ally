@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { paletteFor, type Persona } from "@/personas/persona";
-import { LIVE_TEMPLATES, personaFor } from "@/personas/registry";
+import { LIVE_TEMPLATES } from "@/personas/liveTemplates";
+import { useManifest } from "@/state/useManifest";
 import { EFFECT_MIN_LEVEL } from "@/lib/llm/contract";
 import { qaAddCompanion, qaRefillMessages, qaResetChat, qaSetFreeze, qaSetLevel, qaState, type QaState } from "@/lib/supabase/queries";
 import type { Companion, Ledger } from "@/state/schema";
@@ -65,6 +66,9 @@ export function QaSheet({
   onToast: (m: string) => void;
 }) {
   const router = useRouter();
+  const { templates } = useManifest();
+  // Face names come from the manifest so this sheet does not pull every persona file into the client bundle.
+  const firstNameOf = (id: string) => templates.find((x) => x.id === id)?.name.split(" ")[0] ?? id;
   const [mode, setMode] = useState<"preview" | "force">("preview");
   const [state, setState] = useState<QaState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -123,7 +127,7 @@ export function QaSheet({
     try {
       const c = await qaAddCompanion(templateId);
       onAdded(c);
-      onToast(`${personaFor(templateId).name.split(" ")[0]} added.`);
+      onToast(`${firstNameOf(templateId)} added.`);
       onClose();
       router.push(`/chat/${c.id}`);
     } catch {
@@ -288,7 +292,7 @@ export function QaSheet({
             <div className={styles.chips}>
               {Object.keys(LIVE_TEMPLATES).map((t) => {
                 const have = activeCompanions.find((c) => c.templateId === t);
-                const first = personaFor(t).name.split(" ")[0];
+                const first = firstNameOf(t);
                 return have ? (
                   <Link key={t} href={`/chat/${have.id}`} className={styles.chip} onClick={onClose} data-testid={`qa-open-${t}`}>
                     Open {first}

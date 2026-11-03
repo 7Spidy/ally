@@ -15,7 +15,8 @@ import { firstNameFromFull } from "@/lib/engine";
 import { dayKey, now, serverNow } from "@/lib/clock";
 import { BLOCK_DAYS, LIVE_CONSENT_VERSION } from "@/lib/config";
 import * as heart from "@/lib/heart";
-import { personaFor } from "@/personas/registry";
+import { loadPersona } from "@/personas/lazy";
+import type { Persona } from "@/personas/persona";
 import { purgeMinorAndBlock } from "@/lib/minor";
 import {
   clearAgeCheck,
@@ -75,7 +76,17 @@ function ChatContent() {
   const template = companion ? templates.find((t) => t.id === companion.templateId) : undefined;
   // The server decides (ally_private.is_live); the client never recomputes it.
   const live = companion?.live === true;
-  const persona = live && companion ? personaFor(companion.templateId) : null;
+  // Loaded on demand, one file for this face, instead of all 32 personas in the page bundle.
+  const [persona, setPersona] = useState<Persona | null>(null);
+  const templateIdForPersona = live && companion ? companion.templateId : null;
+  useEffect(() => {
+    if (!templateIdForPersona) return;
+    let alive = true;
+    loadPersona(templateIdForPersona).then((p) => alive && setPersona(p)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [templateIdForPersona]);
 
   const openedRef = useRef(false);
   const seededRef = useRef(false);
@@ -136,19 +147,21 @@ function ChatContent() {
     const companionId = companion.id;
 
     if (companion.live) {
-      const persona = personaFor(companion.templateId);
       const t = now();
       const levelChanged = (companion.levelChangedAt ?? 0) > companion.lastOpenedAt;
       const stale = t - companion.lastOpenedAt >= 3 * 3600 * 1000;
       if (companion.lastCtxDay !== dayKey(t) || stale || levelChanged) {
-        const h = heart.now(companion, t, persona);
-        const key = heart.contextCardKey(h.block, h.mood, levelChanged, persona);
-        setCtxCard({
-          title: levelChanged ? persona.levels[Math.max(0, (companion.trustLevel ?? 1) - 1)]?.name : undefined,
-          line: persona.contextCards[key] ?? persona.contextCards[h.block.card],
-        });
-        markCtxShown(companionId)
-          .then(() => dispatch({ type: "LIVE_SYNC", companionId, patch: { lastCtxDay: dayKey(t) } }))
+        const snapshot = companion;
+        loadPersona(snapshot.templateId)
+          .then((persona) => {
+            const h = heart.now(snapshot, t, persona);
+            const key = heart.contextCardKey(h.block, h.mood, levelChanged, persona);
+            setCtxCard({
+              title: levelChanged ? persona.levels[Math.max(0, (snapshot.trustLevel ?? 1) - 1)]?.name : undefined,
+              line: persona.contextCards[key] ?? persona.contextCards[h.block.card],
+            });
+            return markCtxShown(companionId).then(() => dispatch({ type: "LIVE_SYNC", companionId, patch: { lastCtxDay: dayKey(t) } }));
+          })
           .catch(() => {});
       }
     }
@@ -554,10 +567,10 @@ function ChatContent() {
           onClose={() => setActionsFor(null)}
         />
       )}
-      {qaOpen && qaAccess.qa && live && (
+      {qaOpen && qaAccess.qa && live && persona && (
         <QaSheet
           companionId={companion.id}
-          persona={personaFor(companion.templateId)}
+          persona={persona}
           activeCompanions={state.companions.filter((c) => c.status === "active")}
           level={companion.trustLevel ?? 1}
           admin={qaAccess.admin}

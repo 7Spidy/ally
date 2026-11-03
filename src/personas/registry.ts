@@ -29,8 +29,6 @@ import rawM13 from "./M13.persona.json";
 import rawM14 from "./M14.persona.json";
 import rawM15 from "./M15.persona.json";
 import rawM16 from "./M16.persona.json";
-import { CORE_MAP } from "@/lib/coreMap";
-import type { CoreId } from "@/state/schema";
 import { F01, type Persona } from "./persona";
 
 export const F02: Persona = raw02 as Persona;
@@ -69,17 +67,8 @@ export const M16: Persona = rawM16 as Persona;
 
 export const PERSONAS: Record<string, Persona> = { F01, F02, F03, F04, F05, F06, F07, F08, F09, F10, F11, F12, F13, F14, F15, F16, M01, M02, M03, M04, M05, M06, M07, M08, M09, M10, M11, M12, M13, M14, M15, M16 };
 
-/** Who may talk to the live model: everyone, or only accounts with role admin or qa. Mirrored in SQL by ally_private.live_faces(). */
-export const LIVE_TEMPLATES = { F01: "all", F02: "all", F03: "all", F04: "all", F05: "all", F06: "all", F07: "all", F08: "all", F09: "all", F10: "all", F11: "all", F12: "all", F13: "all", F14: "all", F15: "all", F16: "all", M01: "all", M02: "all", M03: "all", M04: "all", M05: "all", M06: "all", M07: "all", M08: "all", M09: "all", M10: "all", M11: "all", M12: "all", M13: "all", M14: "all", M15: "all", M16: "all" } as const;
-
-export type LiveAudience = (typeof LIVE_TEMPLATES)[keyof typeof LIVE_TEMPLATES];
-
-/** A face's brain is its primary core in CORE_MAP (D1). Throws on an unknown template. */
-export function brainOf(templateId: string): CoreId {
-  const entry = CORE_MAP[templateId];
-  if (!entry) throw new Error(`No core for template ${templateId}`);
-  return entry[0];
-}
+// LIVE_TEMPLATES, LiveAudience and brainOf live in ./liveTemplates so client code can use them without pulling in every persona file.
+export { LIVE_TEMPLATES, brainOf, type LiveAudience } from "./liveTemplates";
 
 /** Throws on an unknown template; callers only reach it for live companions. */
 export function personaFor(templateId: string): Persona {
