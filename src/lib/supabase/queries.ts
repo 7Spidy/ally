@@ -124,6 +124,8 @@ export interface LiveReply {
 export interface QaReplyOptions {
   ignoreCaps: boolean;
   force: { effect?: string | null; screen?: string | null; reaction?: string | null } | null;
+  /** A QA jump up to this level: the next reply plays that level's level-up screen. */
+  celebrate?: number | null;
 }
 
 export class LiveReplyError extends Error {

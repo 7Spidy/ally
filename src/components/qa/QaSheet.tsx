@@ -237,7 +237,7 @@ export function QaSheet({
               {BUBBLE_EFFECTS.map((e) => (
                 <button key={e.id} type="button" className={`${styles.chip} ${forced("effect", e.id) ? styles.chipOn : ""}`} onClick={() => chip("effect", e.id)}>
                   {e.label}
-                  <span className={styles.gate}>L{EFFECT_MIN_LEVEL[e.id]}</span>
+                  {EFFECT_MIN_LEVEL[e.id] > 1 && <span className={styles.gate}>L{EFFECT_MIN_LEVEL[e.id]}</span>}
                 </button>
               ))}
             </div>
@@ -246,6 +246,7 @@ export function QaSheet({
               {SCREEN_EFFECTS.map((e) => (
                 <button key={e.id} type="button" className={`${styles.chip} ${forced("screen", e.id) ? styles.chipOn : ""}`} onClick={() => chip("screen", e.id)}>
                   {e.label}
+                  {e.id === "petals" && <span className={styles.gate}>L6</span>}
                 </button>
               ))}
             </div>

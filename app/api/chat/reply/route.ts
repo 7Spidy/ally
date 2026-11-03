@@ -5,7 +5,7 @@ import { isLive } from "@/lib/live";
 import { personaFor } from "@/personas/registry";
 import { dayKey } from "@/lib/clock";
 import * as heart from "@/lib/heart";
-import { compile, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
+import { compile, effectCadence, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
 import { planReply } from "@/lib/llm/replyPlan";
 import { applyQaForce, bubbleMeta, EFFECTS, grantCelebration, sanitize, SCREENS, type Effect, type MsgMeta, type QaForce } from "@/lib/llm/contract";
 import { runReply } from "@/lib/llm/reply";
@@ -52,11 +52,13 @@ interface MsgRow {
 interface QaRequest {
   ignoreCaps: boolean;
   force: QaForce | null;
+  /** A QA jump up to this level (2 to 6): the next reply plays that level's level-up screen. */
+  celebrate: number | null;
 }
 
 function parseQa(raw: unknown): QaRequest | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as { ignoreCaps?: unknown; force?: unknown };
+  const o = raw as { ignoreCaps?: unknown; force?: unknown; celebrate?: unknown };
   const f = o.force && typeof o.force === "object" ? (o.force as Record<string, unknown>) : null;
   const force: QaForce | null = f
     ? {
@@ -65,7 +67,8 @@ function parseQa(raw: unknown): QaRequest | null {
         reaction: typeof f.reaction === "string" && f.reaction.length <= 16 ? f.reaction : null,
       }
     : null;
-  return { ignoreCaps: o.ignoreCaps === true, force };
+  const celebrate = typeof o.celebrate === "number" && Number.isInteger(o.celebrate) && o.celebrate >= 2 && o.celebrate <= 6 ? o.celebrate : null;
+  return { ignoreCaps: o.ignoreCaps === true, force, celebrate };
 }
 
 const ms = (s: string | null) => (s ? Date.parse(s) : null);
@@ -186,12 +189,15 @@ export async function POST(request: Request) {
     const batch = Math.max(1, history.filter((m) => m.who === "me" && m.id > prevReplied).length);
     const total = meCount ?? 0;
     const countHit = mode === "reply" && total >= 100 && total - batch < 100 ? 100 : undefined;
+    // QA: a jump up to this exact level plays its level-up screen, through the real path below.
+    const qaCelebrate = qa?.celebrate != null && qa.celebrate === c.trust_level && mode === "reply" ? qa.celebrate : null;
+    if (qaCelebrate !== null) console.info(JSON.stringify({ evt: "qa.celebrate", level: qaCelebrate }));
     const milestone = heart.milestoneFor({
       ist: h.ist,
       createdDayKey: dayKey(createdAt),
       relationshipDay: relDay,
       rainMentioned: heart.mentionsRain(lastMe.slice(-10).map((m) => m.text)),
-      leveledUp: null,
+      leveledUp: qaCelebrate,
       userMsgCount: countHit,
       persona,
     });
@@ -218,7 +224,7 @@ export async function POST(request: Request) {
       facts: (factRows ?? []) as { id: number; category: string; fact: string }[],
       weekSummaries: ((weekRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
       daySummaries: ((dayRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
-      history: history.map((m) => ({ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m), reacted: m.who === "me" && typeof m.meta?.reaction === "string" && m.meta.reaction !== "", safety: !!m.meta?.safety })),
+      history: history.map((m) => ({ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m), reacted: m.who === "me" && typeof m.meta?.reaction === "string" && m.meta.reaction !== "", safety: !!m.meta?.safety, effect: m.who === "them" && (typeof m.meta?.effect === "string" || typeof m.meta?.screen === "string") })),
       historyOffset,
       coolOff,
       safetyMode,
@@ -227,6 +233,8 @@ export async function POST(request: Request) {
       persona,
     };
     const compiled = compile({ ...baseCtx, followUp });
+    const cadence = effectCadence(baseCtx.history);
+    const cadenceCtx = { blocked: qa?.ignoreCaps ? false : cadence.blocked };
 
     // Gates
     const effectsToday: Partial<Record<Effect, number>> = {};
@@ -269,8 +277,10 @@ export async function POST(request: Request) {
         pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0,
         milestone,
         quiet: coolOff || safetyMode,
+        cadence: cadenceCtx,
       },
     });
+    console.info(JSON.stringify({ evt: "effect.cadence", since: cadence.since, target: cadence.target, due: cadence.due, overdue: cadence.overdue, used: reply.out.screen !== null || reply.out.bubbles.some((b) => b.effect !== null) }));
     const out = reply.raw;
     // QA forcing happens before safety, so a concern or acute band still strips every effect.
     const clean = applyQaForce(reply.out, qa?.force);
@@ -319,15 +329,16 @@ export async function POST(request: Request) {
       leveledUp = r.leveledUp;
     }
 
-    let finalOut = grantCelebration(safe.out, { level: trust.level, leveledUp, milestone, screensToday, band: safe.band });
+    const effectiveLeveledUp = leveledUp ?? qaCelebrate;
+    let finalOut = grantCelebration(safe.out, { level: trust.level, leveledUp: effectiveLeveledUp, milestone, screensToday, band: safe.band });
 
     // A celebration needs a bubble to persist on (screensToday counts stored meta), so an empty follow-up that earned one gets a single bubble.
-    if (finalOut.bubbles.length === 0 && (leveledUp !== null || finalOut.screen !== null)) {
+    if (finalOut.bubbles.length === 0 && (effectiveLeveledUp !== null || finalOut.screen !== null)) {
       try {
         const rescueCompiled = compile({ ...baseCtx, followUp: plan?.followUp ? { unanswered: unansweredTurns, allowEmpty: false } : null });
-        rescueCompiled.messages[rescueCompiled.messages.length - 1].content += "'+BS+'n'+BS+'nSend exactly one short bubble.";
-        const rescue = await runReply({ compiled: rescueCompiled, companionId: c.id, userText, prevReply: undefined, quiet: coolOff || safetyMode, seed: userMsg?.id, allowEmpty: false, sanitizeCtx: { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode } });
-        const rescued = sanitize({ ...finalOut, bubbles: rescue.out.bubbles }, { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode });
+        rescueCompiled.messages[rescueCompiled.messages.length - 1].content += "\n\nSend exactly one short bubble.";
+        const rescue = await runReply({ compiled: rescueCompiled, companionId: c.id, userText, prevReply: undefined, quiet: coolOff || safetyMode, seed: userMsg?.id, allowEmpty: false, sanitizeCtx: { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode, cadence: cadenceCtx } });
+        const rescued = sanitize({ ...finalOut, bubbles: rescue.out.bubbles }, { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode, cadence: cadenceCtx });
         if (!rescued.bubbles.length) throw new Error("no_bubbles");
         finalOut = { ...finalOut, bubbles: rescued.bubbles };
         console.info(JSON.stringify({ evt: "reply.followup_rescue", outcome: "bubble", companion: c.id }));

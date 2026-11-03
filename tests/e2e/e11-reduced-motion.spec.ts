@@ -10,6 +10,7 @@ import {
   driveFirstRunIntro,
   answerSevenQuestions,
   driveMatchingThroughChat,
+  acceptLiveConsent,
 } from "./helpers";
 
 test.describe("E11 prefers-reduced-motion", () => {
@@ -61,6 +62,7 @@ test.describe("E11 prefers-reduced-motion", () => {
     await driveMatchingThroughChat(page, { reducedMotion: true, tutorial: false });
 
     await expect(page).toHaveURL(/\/chat\/c_/);
+    await acceptLiveConsent(page);
     await page.getByRole("button", { name: "Back" }).click();
     await page.waitForURL("**/home");
     const cards = page.locator('[class*="carousel"]:not([class*="carouselWrap"]) > div');

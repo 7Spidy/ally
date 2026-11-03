@@ -487,6 +487,21 @@ export async function driveMatchingThroughChat(page: Page, { reducedMotion = fal
   await page.waitForURL(/\/chat\//, { timeout: 15000 });
 }
 
+/**
+ * Every face is live now, so a fresh chat opens with the live-consent sheet over it. Accept it
+ * (the real Continue path) so the header is clickable; a no-op if the sheet never shows.
+ */
+export async function acceptLiveConsent(page: Page) {
+  const sheet = page.getByRole("dialog").filter({ hasText: "now replies live" });
+  try {
+    await sheet.waitFor({ state: "visible", timeout: 5000 });
+  } catch {
+    return;
+  }
+  await sheet.getByRole("button", { name: "Continue" }).click();
+  await sheet.waitFor({ state: "hidden", timeout: 10000 });
+}
+
 // ---- P1 auth helpers ----
 
 export function uniqueEmail(): string {

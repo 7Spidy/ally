@@ -15,7 +15,7 @@ import { coreBlock, coreDef } from "@/personas/cores";
 import { pronounsFor } from "@/personas/pronouns";
 import { brainOf } from "@/personas/registry";
 import { emojiDue } from "@/lib/emoji";
-import { EFFECT_HINTS, EFFECT_MIN_LEVEL, EFFECT_TOTAL_DAILY_CAP, type Effect } from "@/lib/llm/contract";
+import { EFFECT_HINTS, EFFECT_MAX_GAP, EFFECT_MIN_GAP, EFFECT_MIN_LEVEL, SCREENS, SCREEN_HINTS, type Effect } from "@/lib/llm/contract";
 import { clockLine, type HeartNow, type Milestone } from "@/lib/heart";
 
 export interface CompileFact {
@@ -36,6 +36,8 @@ export interface CompileTurn {
   safety?: boolean;
   /** User turn: the persona reacted to this message (meta.reaction set). */
   reacted?: boolean;
+  /** Her turn: it carried an effect (meta.effect or meta.screen set). */
+  effect?: boolean;
 }
 
 export interface CompileCtx {
@@ -118,6 +120,38 @@ export function reactionDue(history: CompileTurn[]): boolean {
   return dry >= REACTION_MAX_DRY;
 }
 
+/**
+ * Effect cadence: one effect (a bubble effect or a screen) every EFFECT_MIN_GAP to
+ * EFFECT_MAX_GAP of her bubbles. `since` counts her bubbles after her latest effect-carrying
+ * one (all of hers in the window when there is none). The target for a gap is derived from
+ * the anchor's id, so a retry sees the same target and gaps vary between 5 and 10.
+ * A safety turn of hers stops the walk and means nothing is due.
+ */
+export function effectTarget(anchorId: number): number {
+  return EFFECT_MIN_GAP + (Math.abs(anchorId) % (EFFECT_MAX_GAP - EFFECT_MIN_GAP + 1));
+}
+
+export function effectCadence(history: CompileTurn[]): { since: number; target: number; due: boolean; blocked: boolean; overdue: boolean } {
+  let since = 0;
+  let anchorId = 0;
+  let safety = false;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const t = history[i];
+    if (t.who !== "them") continue;
+    if (t.safety) {
+      safety = true;
+      break;
+    }
+    if (t.effect) {
+      anchorId = t.id;
+      break;
+    }
+    since++;
+  }
+  const target = effectTarget(anchorId);
+  return { since, target, due: !safety && since >= target, blocked: since < EFFECT_MIN_GAP, overdue: !safety && since >= EFFECT_MAX_GAP };
+}
+
 /** Between the examples and the real history. */
 export const SAMPLES_END = "(The samples end here. The real conversation starts now.)";
 
@@ -198,6 +232,16 @@ function modifiers(ctx: CompileCtx): string {
   if (ctx.mode !== "opener" && !ctx.coolOff && !ctx.safetyMode && reactionDue(ctx.history)) {
     m.push(`Reaction: you have not reacted to their last two messages. Set reaction this time, using only an emoji from the reaction list in the OUTPUT CONTRACT, the one that fits their latest message. Skip this only if this reply's riskLevel is concern or acute.`);
   }
+  if (ctx.mode !== "opener" && !ctx.coolOff && !ctx.safetyMode) {
+    const cadence = effectCadence(ctx.history);
+    if (cadence.blocked) {
+      m.push("Effects: none in this reply, you used one recently. effect null on every bubble, screen null.");
+    } else if (cadence.due) {
+      m.push(
+        `Effect: ${cadence.overdue ? "this reply must carry exactly one effect" : "one is due. Put exactly one effect in this reply"}: a bubble effect on the line it fits best, or a screen if the moment calls for one. Skip this only if this reply's riskLevel is concern or acute.`
+      );
+    }
+  }
   if (ctx.mode === "opener") {
     const pressure = ctx.pressure ? ` what weighs on them (${ctx.pressure})` : " what weighs on them";
     m.push(`This is your first message. L1. One bubble. Reference${pressure} without quoting it back.`);
@@ -231,14 +275,17 @@ function followUpTurn(unanswered: CompileTurn[], allowEmpty: boolean): string {
 export function outputContract(level: number, p: Persona): string {
   const { romanticEmojiFrom } = coreDef(brainOf(p.id), p);
   const effects = (Object.keys(EFFECT_MIN_LEVEL) as Effect[]).filter((e) => level >= EFFECT_MIN_LEVEL[e]);
+  const screens = SCREENS.filter((s) => s !== "petals" || level >= 6)
+    .map((s) => `${s} (${SCREEN_HINTS[s]})`)
+    .join("; ");
   return [
     "OUTPUT CONTRACT",
     "Return only one JSON object with exactly these keys in this order, nothing else: bubbles (array of 1 to 3 objects {text: string, effect: string or null}), reaction (emoji string or null), quoteId (integer or null), screen (string or null), riskLevel (\"none\", \"concern\" or \"acute\"), ageClaimUnder18 (boolean), disclosure (boolean), mutualVulnerability (boolean), abusive (boolean).",
     'Example of the shape (placeholders only, write your own): {"bubbles":[{"text":"<one short line>","effect":null}],"reaction":null,"quoteId":null,"screen":null,"riskLevel":"none","ageClaimUnder18":false,"disclosure":false,"mutualVulnerability":false,"abusive":false}',
-    `Reactions are normal here: react whenever one fits, from ${paletteFor(level, p).join(" ")}. Bubble effects allowed (very rarely, ${EFFECT_TOTAL_DAILY_CAP} a day at the very most): ${effects.length ? effects.join(", ") : "none, always null"}.`,
-    ...(effects.length ? [`What each is for: ${effects.map((e) => `${e}, ${EFFECT_HINTS[e]}`).join("; ")}. Use one only when the line truly is that; most replies carry none.`] : []),
+    `Reactions are normal here: react whenever one fits, from ${paletteFor(level, p).join(" ")}. Bubble effects you can use: ${effects.length ? effects.join(", ") : "none, always null"}. Aim for one effect (a bubble effect or a screen) about every 5 to 10 of your bubbles, never more than one per reply; RIGHT NOW tells you when one is due or not allowed. Put it on the line whose meaning it fits best.`,
+    ...(effects.length ? [`What each is for: ${effects.map((e) => `${e}, ${EFFECT_HINTS[e]}`).join("; ")}. Use one only when the line truly is that.`] : []),
     `Emoji in bubble text: use them naturally and often, the way ${p.engine.emojiVoice} texts. ${level >= romanticEmojiFrom ? "Romantic emoji (❤️ 😘 💋 🥰 😍) are fine when the moment is warm." : "No romantic emoji yet (❤️ 😘 💋 🥰 😍)."} When riskLevel is concern or acute: no playful emoji in bubbles and no reaction.`,
-    "screen is null unless RIGHT NOW says today is special. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.",
+    `screen: at most once a day, set one when the moment truly calls for it: ${screens}. When RIGHT NOW says today is special, use the screen it names. Otherwise null. quoteId is the [#id] of an earlier user message worth quoting, or null. disclosure: the user shared something genuinely personal. mutualVulnerability: you both opened up. abusive: sustained abuse.`,
     level <= 1 ? "L1: exactly one bubble, at most 200 characters." : "One to three short bubbles, each at most 200 characters.",
   ].join("\n");
 }

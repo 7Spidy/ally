@@ -10,6 +10,7 @@ import {
   driveFirstRunIntro,
   answerSevenQuestions,
   driveMatchingThroughChat,
+  acceptLiveConsent,
 } from "./helpers";
 
 test.describe("E1 fresh first run to first chat", () => {
@@ -37,6 +38,7 @@ test.describe("E1 fresh first run to first chat", () => {
     await screenshotScreen(page, "e1-03-first-chat");
 
     // back to home via the chat header back button
+    await acceptLiveConsent(page);
     await page.getByRole("button", { name: "Back" }).click();
     await page.waitForURL("**/home");
     await assertNoSpinner(page);

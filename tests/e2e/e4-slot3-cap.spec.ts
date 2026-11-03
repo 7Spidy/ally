@@ -11,6 +11,7 @@ import {
   answerSevenQuestions,
   assertMinFontSize,
   serverSnapshot,
+  acceptLiveConsent,
 } from "./helpers";
 
 test.describe("E4 third companion hits slot-3 unlock, then home shows cap card", () => {
@@ -61,6 +62,7 @@ test.describe("E4 third companion hits slot-3 unlock, then home shows cap card",
     await page.locator('[role="button"][aria-label="Continue"]').click();
     await page.waitForURL(/\/chat\/c_/, { timeout: 15000 });
 
+    await acceptLiveConsent(page);
     await page.getByRole("button", { name: "Back" }).click();
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e4-02-home-cap-card");

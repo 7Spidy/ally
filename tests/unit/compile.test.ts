@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compile, JSON_REMINDER, SAMPLES_END, WINDOW_MAX, reactionDue, windowStart, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
+import { compile, effectCadence, effectTarget, outputContract, JSON_REMINDER, SAMPLES_END, WINDOW_MAX, reactionDue, windowStart, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
 import { hasHandle } from "@/lib/llm/lint";
 import * as heart from "@/lib/heart";
 import { F01 } from "@/personas/persona";
@@ -246,10 +246,8 @@ describe("volatile sections", () => {
     expect(c.messages[n].content.startsWith(`${SAMPLES_END}\n\n[#5] hello`)).toBe(true);
   });
   it("allowed reactions and effects follow the level", () => {
-    expect(compile(ctx(1)).system).toContain("none, always null");
-    expect(compile(ctx(4)).system).toContain("soft, loud, stop, ink");
-    expect(compile(ctx(4)).system).not.toContain("soft, loud, stop, ink, pin");
-    expect(compile(ctx(5)).system).toContain("pin, screen");
+    // Every bubble effect is open from L1; only the reaction palette and petals grow with the level.
+    for (const level of [1, 4, 5]) expect(compile(ctx(level)).system).toContain("soft, loud, stop, ink, pin, screen, shake, sparkle, echo, bloom, heartbeat");
   });
 });
 
@@ -551,7 +549,7 @@ describe("playbook trimming", () => {
   it("an L3 prompt is much smaller than the untrimmed playbook would make it", () => {
     const l3 = compile(ctx(3, { history: [{ id: 2, who: "me", text: "rough day. everything went wrong at work" }] }));
     const chars = l3.system.length + l3.messages.reduce((n, m) => n + m.content.length, 0);
-    expect(chars).toBeLessThan(13500); // was 10500 before the ownership block (about 1,800 chars), the sample pairs as JSON and the context header; the three always-present rows, the warmth line and the emoji rule keep it near 2,500 input tokens (2,913 before the trim)
+    expect(chars).toBeLessThan(15000); // was 13500 before every effect and the screen list went into the contract at every level; was 10500 before the ownership block (about 1,800 chars), the sample pairs as JSON and the context header; the three always-present rows, the warmth line and the emoji rule keep it near 2,500 input tokens (2,913 before the trim)
   });
 });
 
@@ -663,12 +661,109 @@ describe("B3 quotes, edits and effect hints", () => {
     const c = compile(ctx(3, { history: [{ id: 4, who: "them", text: "hey you", quote: { who: "me", text: "x" } }, { id: 5, who: "me", text: "hi" }] }));
     expect(c.messages.find((m) => m.role === "assistant" && m.content.includes("hey you"))?.content).toBe("hey you");
   });
-  it("the contract tells the model what each allowed effect is for, only for the ones its level allows", () => {
-    const l3 = compile(ctx(3)).system;
-    expect(l3).toContain("shake, the bubble trembles");
-    expect(l3).toContain("sparkle, glitter on the bubble");
-    expect(l3).not.toContain("heartbeat, the bubble pulses");
-    expect(compile(ctx(5)).system).toContain("heartbeat, the bubble pulses");
-    expect(compile(ctx(2)).system).not.toContain("What each is for");
+  it("the contract tells the model what each effect is for, at every level", () => {
+    for (const level of [1, 3, 5]) {
+      const sys = compile(ctx(level)).system;
+      expect(sys).toContain("shake, the bubble trembles");
+      expect(sys).toContain("sparkle, glitter on the bubble");
+      expect(sys).toContain("heartbeat, the bubble pulses");
+    }
+  });
+});
+
+describe("effect cadence", () => {
+  let id = 0;
+  const them = (over: Partial<CompileTurn> = {}): CompileTurn => ({ id: ++id, who: "them", text: "hey", ...over });
+  const me = (): CompileTurn => ({ id: ++id, who: "me", text: "hi" });
+  const run = (n: number): CompileTurn[] => Array.from({ length: n }, () => [me(), them()]).flat();
+  const EFFECT_LINE = "Effect: ";
+  const BLOCKED_LINE = "Effects: none in this reply";
+
+  it("counts her bubbles after the last effect, anchored on that bubble's id", () => {
+    const anchor = them({ id: 100, effect: true });
+    const h = [me(), anchor, ...run(3), me()];
+    expect(effectCadence(h)).toMatchObject({ since: 3, target: effectTarget(100) });
+  });
+  it("with no effect in the window it counts all of her bubbles, anchored on 0", () => {
+    expect(effectCadence(run(4))).toMatchObject({ since: 4, target: 5 });
+    expect(effectCadence([])).toMatchObject({ since: 0, target: 5 });
+  });
+  it("the target is always 5 to 10 and stable for the same anchor", () => {
+    for (let a = 0; a < 200; a++) {
+      const t = effectTarget(a);
+      expect(t).toBeGreaterThanOrEqual(5);
+      expect(t).toBeLessThanOrEqual(10);
+      expect(effectTarget(a)).toBe(t);
+    }
+    expect(new Set(Array.from({ length: 50 }, (_, a) => effectTarget(a))).size).toBe(6);
+  });
+  it("is blocked under 5, due at the target, overdue from 10", () => {
+    const base = (n: number) => [them({ id: 1000, effect: true }), ...run(n)]; // anchor 1000: target 5 + 1000 % 6 = 9
+    expect(effectTarget(1000)).toBe(9);
+    expect(effectCadence(base(4))).toMatchObject({ since: 4, blocked: true, due: false, overdue: false });
+    expect(effectCadence(base(5))).toMatchObject({ blocked: false, due: false, overdue: false });
+    expect(effectCadence(base(8))).toMatchObject({ due: false });
+    expect(effectCadence(base(9))).toMatchObject({ due: true, overdue: false });
+    expect(effectCadence(base(10))).toMatchObject({ due: true, overdue: true });
+  });
+  it("a safety turn of hers stops the walk and nothing is due", () => {
+    const h = [them({ id: 7, effect: true }), ...run(2), them({ safety: true }), ...run(12)];
+    const c = effectCadence([them({ safety: true }), ...run(12)]);
+    expect(c.due).toBe(false);
+    expect(c.overdue).toBe(false);
+    expect(effectCadence(h).since).toBe(12);
+  });
+
+  const vol = (history: CompileTurn[], over: Partial<CompileCtx> = {}) => compile(ctx(3, { history: [...history, me()], ...over })).volatile;
+  it("blocked adds the no-effects line, and only then", () => {
+    const v = vol(run(2));
+    expect(v).toContain(BLOCKED_LINE);
+    expect(v).not.toContain(EFFECT_LINE);
+  });
+  it("due adds the one-effect line, overdue the must-carry line", () => {
+    const due = vol([them({ id: 1000, effect: true }), ...run(9)]);
+    expect(due).toContain("Effect: one is due. Put exactly one effect in this reply");
+    expect(due).not.toContain(BLOCKED_LINE);
+    const overdue = vol([them({ id: 1000, effect: true }), ...run(10)]);
+    expect(overdue).toContain("Effect: this reply must carry exactly one effect");
+    expect(overdue).not.toContain("one is due");
+  });
+  it("between the minimum and the target there is no directive", () => {
+    const v = vol([them({ id: 1000, effect: true }), ...run(6)]);
+    expect(v).not.toContain(EFFECT_LINE);
+    expect(v).not.toContain(BLOCKED_LINE);
+  });
+  it("never appears in opener mode, cool-off or safety mode", () => {
+    for (const history of [run(2), [them({ id: 1000, effect: true }), ...run(10)]]) {
+      for (const over of [{ mode: "opener" as const }, { coolOff: true }, { safetyMode: true }]) {
+        const v = vol(history, over);
+        expect(v).not.toContain(EFFECT_LINE);
+        expect(v).not.toContain(BLOCKED_LINE);
+      }
+    }
+  });
+  it("directives ride on the volatile block, never the cached system prompt", () => {
+    const c = compile(ctx(3, { history: [...run(2), me()] }));
+    expect(c.system).not.toContain(BLOCKED_LINE);
+  });
+});
+
+describe("output contract effects", () => {
+  it("lists every bubble effect from L1 and drops the old rarity wording", () => {
+    const c = outputContract(1, F01);
+    expect(c).toContain("Bubble effects you can use: soft, loud, stop, ink, pin, screen, shake, sparkle, echo, bloom, heartbeat.");
+    expect(c).toContain("about every 5 to 10 of your bubbles");
+    expect(c).not.toContain("very rarely");
+    expect(c).not.toContain("most replies carry none");
+    expect(c).not.toContain("screen is null unless");
+  });
+  it("lists the free screens with hints, and petals only from L6", () => {
+    for (const level of [1, 5]) {
+      const c = outputContract(level, F01);
+      expect(c).toContain("confetti (their good news, a win, a celebration)");
+      expect(c).toContain("shootingstar (a wish, a hope, a longing)");
+      expect(c).not.toContain("petals");
+    }
+    expect(outputContract(6, F01)).toContain("petals (a deeply romantic moment (L6 only))");
   });
 });

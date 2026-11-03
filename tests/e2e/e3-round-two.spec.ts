@@ -11,6 +11,7 @@ import {
   screenshotScreen,
   answerSevenQuestions,
   driveMatchingThroughChat,
+  acceptLiveConsent,
 } from "./helpers";
 
 test.describe("E3 round two end to end", () => {
@@ -79,6 +80,7 @@ test.describe("E3 round two end to end", () => {
     await page.waitForURL(/\/chat\/c_/, { timeout: 15000 });
     await screenshotScreen(page, "e3-05-new-companion-chat");
 
+    await acceptLiveConsent(page);
     await page.getByRole("button", { name: "Back" }).click();
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e3-06-home-two-cards");

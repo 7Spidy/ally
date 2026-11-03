@@ -20,6 +20,9 @@ import {
 
 const DAY = 86400000;
 
+/** n of her bubbles with no effect in them: enough that the effect cadence allows one (5 or more). */
+const bubblesRun = (n: number) => Array.from({ length: n }, (_, i) => ({ who: "them" as const, text: `earlier ${i + 1}`, at: FIXED_NOW - 4 * DAY + i * 60000 }));
+
 interface Opts {
   id: string;
   level?: number;
@@ -93,7 +96,7 @@ test.describe("E28 live chat with Ira", () => {
   });
 
   test("E28.3: an ink bubble is blurred, then reveals on tap", async ({ page }) => {
-    const { health } = await open(page, { id: "c_e28_3", level: 4 });
+    const { health } = await open(page, { id: "c_e28_3", level: 4, messages: bubblesRun(6) });
     await send(page, "ink please");
     const ink = page.getByTestId("ink");
     await expect(ink).toBeVisible({ timeout: 15000 });
@@ -147,13 +150,22 @@ test.describe("E28 live chat with Ira", () => {
     assertHealthy(health);
   });
 
-  test("E28.6: an effect the model asks for at L1 never renders (the server stripped it)", async ({ page }) => {
-    const { health } = await open(page, { id: "c_e28_6", level: 1 });
+  test("E28.6: at L1 an effect renders on the one bubble once the cadence allows it; a romantic reaction and a second bubble do not", async ({ page }) => {
+    const { health } = await open(page, { id: "c_e28_6", level: 1, messages: bubblesRun(6) });
+    await send(page, "effect please");
+    await expect(page.getByText("SLAM")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("[data-effect]")).toHaveCount(1);
+    await expect(page.getByTestId("reaction")).toHaveCount(0);
+    await expect(page.getByText("second")).toHaveCount(0);
+    assertHealthy(health);
+  });
+
+  test("E28.6b: an effect right after another (fewer than 5 bubbles since) is stripped by the cadence", async ({ page }) => {
+    const { health } = await open(page, { id: "c_e28_6b", level: 4 });
     await send(page, "effect please");
     await expect(page.getByText("SLAM")).toBeVisible({ timeout: 15000 });
     await expect(page.locator("[data-effect]")).toHaveCount(0);
-    await expect(page.getByTestId("reaction")).toHaveCount(0);
-    await expect(page.getByText("second")).toHaveCount(0);
+    await expect(page.getByText("second")).toHaveCount(0); // only one effect per reply: the bubble is kept, its effect is not
     assertHealthy(health);
   });
 
@@ -279,5 +291,45 @@ test.describe("E28 live chat with Ira", () => {
     expect(await p2.evaluate(() => (window as unknown as { __canvas: boolean }).__canvas)).toBe(false);
     assertHealthy(second.health);
     await ctx.close();
+  });
+
+  test.describe("QA level-jump celebration (route level)", () => {
+    const replyMeta = async (userId: string) => {
+      const snap = await serverSnapshot(userId);
+      const them = (snap.messages as unknown as { who: string; meta: { screen?: string } | null }[]).filter((m) => m.who === "them");
+      return them.map((m) => m.meta?.screen ?? null);
+    };
+    const arrange = async (page: Page, id: string, role: "qa" | "user") => {
+      const { userId } = await open(page, { id, level: 3, messages: [{ who: "them", text: "Hey.", at: FIXED_NOW - 4 * DAY }, { who: "me", text: "hello there", at: FIXED_NOW - 3 * DAY }] });
+      if (role === "qa") {
+        const { error } = await adminClient().from("profiles").update({ role: "qa" }).eq("id", userId);
+        if (error) throw error;
+      }
+      return userId;
+    };
+    const post = (page: Page, id: string, celebrate: number) => page.request.post("/api/chat/reply", { data: { companionId: id, mode: "reply", qa: { ignoreCaps: false, force: null, celebrate } } });
+
+    test("E28.14: a QA celebrate equal to the current level plays that level's level-up screen", async ({ page }) => {
+      const userId = await arrange(page, "c_e28_14", "qa");
+      const r = await post(page, "c_e28_14", 3);
+      expect(r.status()).toBe(200);
+      expect((await r.json()).screen).toBe("sparkles");
+      expect(await replyMeta(userId)).toContain("sparkles");
+    });
+
+    test("E28.15: a celebrate that does not match the companion's level is ignored", async ({ page }) => {
+      const userId = await arrange(page, "c_e28_15", "qa");
+      const r = await post(page, "c_e28_15", 4);
+      expect(r.status()).toBe(200);
+      expect((await r.json()).screen).toBeNull();
+      expect((await replyMeta(userId)).filter(Boolean)).toHaveLength(0);
+    });
+
+    test("E28.16: a celebrate from a non-QA user is refused and plays nothing", async ({ page }) => {
+      const userId = await arrange(page, "c_e28_16", "user");
+      const r = await post(page, "c_e28_16", 3);
+      expect(r.status()).toBe(403);
+      expect((await replyMeta(userId)).filter(Boolean)).toHaveLength(0);
+    });
   });
 });

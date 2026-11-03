@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { F01, paletteFor } from "@/personas/persona";
-import { LIVE_OUT_SCHEMA, cutAtSentence, cutAtWord, grantCelebration, applyQaForce, EFFECT_TOTAL_DAILY_CAP, EFFECTS, EFFECT_MIN_LEVEL, parseLiveOut, safePrefix, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
+import { LIVE_OUT_SCHEMA, cutAtSentence, cutAtWord, grantCelebration, applyQaForce, EFFECT_DAILY_CAP, SCREEN_DAILY_CAP, EFFECTS, EFFECT_MIN_LEVEL, parseLiveOut, safePrefix, sanitize, bubbleMeta, type LiveOut, type SanitizeCtx } from "@/lib/llm/contract";
 
 function out(over: Partial<LiveOut> = {}): LiveOut {
   return {
@@ -161,27 +161,26 @@ describe("quote", () => {
 });
 
 describe("effects", () => {
-  it("unlock by level", () => {
-    const cases: [LiveOut["bubbles"][number]["effect"], number][] = [
-      ["soft", 3],
-      ["loud", 3],
-      ["stop", 3],
-      ["ink", 4],
-    ];
-    for (const [e, lvl] of cases) {
-      expect(sanitize(out({ bubbles: [b("x", e)] }), ctx({ level: lvl - 1 })).bubbles[0].effect).toBeNull();
-      expect(sanitize(out({ bubbles: [b("x", e)] }), ctx({ level: lvl })).bubbles[0].effect).toBe(e);
+  it("every bubble effect unlocks at L1", () => {
+    for (const e of EFFECTS) {
+      if (e === "screen") continue;
+      expect(EFFECT_MIN_LEVEL[e]).toBe(1);
+      expect(sanitize(out({ bubbles: [b("x", e)] }), ctx({ level: 1 })).bubbles[0].effect).toBe(e);
     }
-    expect(sanitize(out({ bubbles: [b("x", "pin")] }), ctx({ level: 4 })).bubbles[0].effect).toBeNull();
-    expect(sanitize(out({ bubbles: [b("x", "pin")] }), ctx({ level: 5 })).bubbles[0].effect).toBe("pin");
+    expect(sanitize(out({ bubbles: [b("x", "pin")] }), ctx({ level: 1 })).bubbles[0].effect).toBe("pin");
   });
 
-  it("daily caps: soft 2, loud 1, stop 1, ink 1, counted from stored meta and this reply", () => {
-    const r = sanitize(out({ bubbles: [b("a", "soft"), b("b", "soft"), b("c", "soft")] }), ctx({ level: 4, effectsToday: { soft: 1 } }));
-    expect(r.bubbles.map((x) => x.effect)).toEqual(["soft", null, null]);
-    expect(sanitize(out({ bubbles: [b("a", "loud")] }), ctx({ level: 4, effectsToday: { loud: 1 } })).bubbles[0].effect).toBeNull();
-    expect(sanitize(out({ bubbles: [b("a", "stop")] }), ctx({ level: 4, effectsToday: { stop: 1 } })).bubbles[0].effect).toBeNull();
-    expect(sanitize(out({ bubbles: [b("a", "ink")] }), ctx({ level: 4, effectsToday: { ink: 1 } })).bubbles[0].effect).toBeNull();
+  it("daily caps: 3 per effect, counted from stored meta", () => {
+    for (const e of ["soft", "loud", "stop", "ink", "shake", "sparkle", "echo", "bloom", "heartbeat"] as const) {
+      expect(EFFECT_DAILY_CAP[e]).toBe(3);
+      expect(sanitize(out({ bubbles: [b("a", e)] }), ctx({ effectsToday: { [e]: 2 } })).bubbles[0].effect).toBe(e);
+      expect(sanitize(out({ bubbles: [b("a", e)] }), ctx({ effectsToday: { [e]: 3 } })).bubbles[0].effect).toBeNull();
+    }
+  });
+
+  it("there is no total daily cap: different effects each stay under their own", () => {
+    const used = { soft: 2, loud: 2, shake: 2, sparkle: 2 };
+    expect(sanitize(out({ bubbles: [b("x", "echo")] }), ctx({ level: 5, effectsToday: used })).bubbles[0].effect).toBe("echo");
   });
 
   it("pin is once per 30 days", () => {
@@ -190,36 +189,61 @@ describe("effects", () => {
     expect(r.bubbles.map((x) => x.effect)).toEqual(["pin", null]);
   });
 
-  it("screen effects need a matching milestone, L5+, one a day; petals only at L6", () => {
-    const confetti = { kind: "birthday" as const, screen: "confetti" as const, note: "" };
-    const petals = { kind: "level6" as const, screen: "petals" as const, note: "" };
-    expect(sanitize(out({ screen: "confetti" }), ctx({ level: 5 })).screen).toBeNull();
-    expect(sanitize(out({ screen: "confetti" }), ctx({ level: 4, milestone: confetti })).screen).toBeNull();
-    expect(sanitize(out({ screen: "confetti" }), ctx({ level: 5, milestone: confetti })).screen).toBe("confetti");
-    expect(sanitize(out({ screen: "rain" }), ctx({ level: 5, milestone: confetti })).screen).toBeNull();
-    expect(sanitize(out({ screen: "confetti" }), ctx({ level: 5, milestone: confetti, screensToday: 1 })).screen).toBeNull();
-    expect(sanitize(out({ screen: "petals" }), ctx({ level: 5, milestone: petals })).screen).toBeNull();
-    expect(sanitize(out({ screen: "petals" }), ctx({ level: 6, milestone: petals })).screen).toBe("petals");
+  it("a screen passes at L1 with no milestone; the screen cap is 2 a day", () => {
+    expect(SCREEN_DAILY_CAP).toBe(2);
+    expect(sanitize(out({ screen: "confetti" }), ctx({ level: 1 })).screen).toBe("confetti");
+    expect(sanitize(out({ screen: "rain" }), ctx({ level: 1, screensToday: 1 })).screen).toBe("rain");
+    expect(sanitize(out({ screen: "rain" }), ctx({ level: 1, screensToday: 2 })).screen).toBeNull();
+  });
+
+  it("petals are dropped below L6 and kept at L6", () => {
+    expect(sanitize(out({ screen: "petals" }), ctx({ level: 5 })).screen).toBeNull();
+    expect(sanitize(out({ screen: "petals" }), ctx({ level: 6 })).screen).toBe("petals");
+  });
+
+  it("any screen is stripped under concern, acute and quiet", () => {
+    expect(sanitize(out({ screen: "confetti", riskLevel: "concern" }), ctx({ level: 5 })).screen).toBeNull();
+    expect(sanitize(out({ screen: "confetti", riskLevel: "acute" }), ctx({ level: 5 })).screen).toBeNull();
+    expect(sanitize(out({ screen: "confetti" }), ctx({ level: 5, quiet: true })).screen).toBeNull();
   });
 
   it("a `screen` bubble effect survives only with a screen", () => {
-    const m = { kind: "diwali" as const, screen: "lanterns" as const, note: "" };
     expect(sanitize(out({ bubbles: [b("x", "screen")] }), ctx({ level: 5 })).bubbles[0].effect).toBeNull();
-    expect(sanitize(out({ screen: "lanterns", bubbles: [b("x", "screen")] }), ctx({ level: 5, milestone: m })).bubbles[0].effect).toBe("screen");
+    expect(sanitize(out({ screen: "lanterns", bubbles: [b("x", "screen")] }), ctx({ level: 5 })).bubbles[0].effect).toBe("screen");
   });
 
-  it("L1 effects never survive", () => {
-    const r = sanitize(out({ reaction: "❤️", bubbles: [b("x", "loud")], screen: "confetti" }), ctx({ level: 1 }));
-    expect(r.bubbles[0].effect).toBeNull();
+  it("cadence: blocked strips every bubble effect and the screen but keeps the reaction and quote", () => {
+    const r = sanitize(out({ reaction: "👀", quoteId: 4, screen: "confetti", bubbles: [b("x", "loud"), b("y", "screen")] }), ctx({ level: 5, cadence: { blocked: true } }));
     expect(r.screen).toBeNull();
+    expect(r.bubbles.map((x) => x.effect)).toEqual([null, null]);
+    expect(r.reaction).toBe("👀");
+    expect(r.quoteId).toBe(4);
+    expect(sanitize(out({ screen: "confetti" }), ctx({ level: 5, cadence: { blocked: false } })).screen).toBe("confetti");
+  });
+
+  it("one effect per reply: the screen (with its marker) beats a bubble effect", () => {
+    const r = sanitize(out({ screen: "confetti", bubbles: [b("a", "loud"), b("b", "screen"), b("c", "soft")] }), ctx({ level: 5 }));
+    expect(r.screen).toBe("confetti");
+    expect(r.bubbles.map((x) => x.effect)).toEqual([null, "screen", null]);
+  });
+
+  it("one effect per reply: two bubble effects keep only the first", () => {
+    const r = sanitize(out({ bubbles: [b("a", "soft"), b("b", "loud"), b("c", "pin")] }), ctx({ level: 5 }));
+    expect(r.bubbles.map((x) => x.effect)).toEqual(["soft", null, null]);
+  });
+
+  it("L1 keeps one bubble and it may carry an effect", () => {
+    const r = sanitize(out({ reaction: "❤️", bubbles: [b("x", "loud"), b("y")], screen: "confetti" }), ctx({ level: 1 }));
+    expect(r.bubbles).toHaveLength(1);
+    expect(r.screen).toBe("confetti");
     expect(r.reaction).toBeNull(); // romantic reactions are not in the L1 palette
   });
 
-  it("level-up to L6 grants petals server-side, once a day, never in a safety band", () => {
+  it("level-up to L6 grants petals server-side, even at the screen cap, never in a safety band", () => {
     const base = out();
     const g = (over: Partial<Parameters<typeof grantCelebration>[1]> = {}) => grantCelebration(base, { level: 6, leveledUp: 6, milestone: null, screensToday: 0, band: "none", ...over });
     expect(g().screen).toBe("petals");
-    expect(g({ screensToday: 1 }).screen).toBeNull();
+    expect(g({ screensToday: SCREEN_DAILY_CAP }).screen).toBe("petals"); // a level-up bypasses the daily screen cap
     expect(g({ level: 5, leveledUp: null }).screen).toBeNull();
     expect(g({ band: "acute" }).screen).toBeNull();
   });
@@ -231,33 +255,18 @@ describe("effects", () => {
     const m = { kind: "msg100" as const, screen: "balloons" as const, note: "x" };
     expect(grantCelebration(out(), { level: 1, leveledUp: null, milestone: m, screensToday: 0, band: "none" }).screen).toBe("balloons");
     expect(grantCelebration(out({ screen: "confetti" }), { level: 5, leveledUp: null, milestone: m, screensToday: 0, band: "none" }).screen).toBe("confetti");
-    expect(grantCelebration(out(), { level: 1, leveledUp: null, milestone: m, screensToday: 1, band: "none" }).screen).toBeNull();
+    expect(grantCelebration(out(), { level: 1, leveledUp: null, milestone: m, screensToday: SCREEN_DAILY_CAP, band: "none" }).screen).toBe("balloons");
   });
 });
 
 describe("the wider effect palette", () => {
-  it("every effect has a level gate, and the new ones sit where the spec puts them", () => {
-    for (const e of EFFECTS) expect(EFFECT_MIN_LEVEL[e]).toBeGreaterThanOrEqual(3);
-    expect([EFFECT_MIN_LEVEL.shake, EFFECT_MIN_LEVEL.sparkle, EFFECT_MIN_LEVEL.echo, EFFECT_MIN_LEVEL.bloom, EFFECT_MIN_LEVEL.heartbeat]).toEqual([3, 3, 4, 4, 5]);
+  it("every effect is open from L1", () => {
+    for (const e of EFFECTS) expect(EFFECT_MIN_LEVEL[e]).toBe(1);
   });
-  it("a new effect below its level is dropped", () => {
-    expect(sanitize(out({ bubbles: [b("x", "heartbeat")] }), ctx({ level: 4 })).bubbles[0].effect).toBeNull();
-    expect(sanitize(out({ bubbles: [b("x", "heartbeat")] }), ctx({ level: 5 })).bubbles[0].effect).toBe("heartbeat");
-    expect(sanitize(out({ bubbles: [b("x", "echo")] }), ctx({ level: 3 })).bubbles[0].effect).toBeNull();
-  });
-  it("each new effect obeys its own daily cap", () => {
-    expect(sanitize(out({ bubbles: [b("x", "shake")] }), ctx({ level: 3, effectsToday: { shake: 1 } })).bubbles[0].effect).toBeNull();
-    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 3, effectsToday: { sparkle: 1 } })).bubbles[0].effect).toBe("sparkle");
-    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 3, effectsToday: { sparkle: 2 } })).bubbles[0].effect).toBeNull();
-  });
-  it(`all capped effects together stop at ${EFFECT_TOTAL_DAILY_CAP} a day`, () => {
-    const used = { soft: 2, loud: 1, shake: 1 }; // 4 already
-    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 5, effectsToday: used })).bubbles[0].effect).toBeNull();
-    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 5, effectsToday: { soft: 2, loud: 1 } })).bubbles[0].effect).toBe("sparkle");
-  });
-  it("within one reply the total cap counts the bubbles already accepted", () => {
-    const r = sanitize(out({ bubbles: [b("a", "sparkle"), b("b", "sparkle"), b("c", "shake")] }), ctx({ level: 5, effectsToday: { soft: 2, loud: 1 } }));
-    expect(r.bubbles.map((x) => x.effect)).toEqual(["sparkle", null, null]);
+  it("each new effect obeys its own daily cap of 3", () => {
+    expect(sanitize(out({ bubbles: [b("x", "shake")] }), ctx({ level: 3, effectsToday: { shake: 3 } })).bubbles[0].effect).toBeNull();
+    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 3, effectsToday: { sparkle: 2 } })).bubbles[0].effect).toBe("sparkle");
+    expect(sanitize(out({ bubbles: [b("x", "sparkle")] }), ctx({ level: 3, effectsToday: { sparkle: 3 } })).bubbles[0].effect).toBeNull();
   });
 });
 

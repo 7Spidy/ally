@@ -113,9 +113,11 @@ function ChatContent() {
   const [qaOpen, setQaOpen] = useState(false);
   const [qaIgnoreCaps, setQaIgnoreCaps] = useState(false);
   const [qaForce, setQaForce] = useState<QaForce | null>(null);
+  // A QA jump up to this level: the next reply plays its level-up screen.
+  const [qaCelebrate, setQaCelebrate] = useState<number | null>(null);
   const [previews, setPreviews] = useState<Message[]>([]);
-  const qaRef = useRef<{ ignoreCaps: boolean; force: QaForce | null }>({ ignoreCaps: false, force: null });
-  qaRef.current = { ignoreCaps: qaAccess.qa && qaIgnoreCaps, force: qaAccess.qa ? qaForce : null };
+  const qaRef = useRef<{ ignoreCaps: boolean; force: QaForce | null; celebrate: number | null }>({ ignoreCaps: false, force: null, celebrate: null });
+  qaRef.current = { ignoreCaps: qaAccess.qa && qaIgnoreCaps, force: qaAccess.qa ? qaForce : null, celebrate: qaAccess.qa ? qaCelebrate : null };
   // The message being replied to, as it stands now (a deleted one is no longer a target).
   const replyTarget = replyTo && companion ? (companion.messages.find((m) => m.id === replyTo.id && !m.deleted) ?? null) : null;
   const accountNudgeRef = useRef<number>(0); // last exchange threshold nudged at
@@ -227,13 +229,14 @@ function ChatContent() {
       try {
         let r: LiveReply | null = null;
         const opts = qaRef.current;
-        const qaBody = opts.ignoreCaps || opts.force ? { ignoreCaps: opts.ignoreCaps, force: opts.force } : null;
+        const qaBody = opts.ignoreCaps || opts.force || opts.celebrate ? { ignoreCaps: opts.ignoreCaps, force: opts.force, celebrate: opts.celebrate } : null;
         for (let i = 0; i < 6 && !r && aliveRef.current; i++) {
           r = await requestLiveReply(companionId, mode, qaBody);
           if (!r) await sleep(2000);
         }
         // "Next reply" means one reply: the forced effects are spent once it has come back.
         if (r && opts.force) setQaForce(null);
+        if (r && opts.celebrate) setQaCelebrate(null);
         setTyping(false);
         if (r?.seenUpTo != null) lastSeenUpToRef.current = r.seenUpTo;
         if (r) await play(companionId, userMessageId, r);
@@ -579,7 +582,10 @@ function ChatContent() {
           onIgnoreCaps={setQaIgnoreCaps}
           onForce={setQaForce}
           onPreview={runPreview}
-          onLevel={(trustLevel, levelChangedAt) => dispatch({ type: "LIVE_SYNC", companionId: companion.id, patch: { trustLevel, levelChangedAt } })}
+          onLevel={(trustLevel, levelChangedAt) => {
+            setQaCelebrate(trustLevel > (companion.trustLevel ?? 1) ? trustLevel : null);
+            dispatch({ type: "LIVE_SYNC", companionId: companion.id, patch: { trustLevel, levelChangedAt } });
+          }}
           onLedger={(ledger) => dispatch({ type: "LEDGER_SYNC", ledger })}
           onAdded={(c) => dispatch({ type: "ADD_COMPANION", companion: c })}
           onClose={() => setQaOpen(false)}

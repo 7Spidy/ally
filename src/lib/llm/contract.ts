@@ -38,12 +38,26 @@ export const MAX_BUBBLES = 3;
 export const MAX_BUBBLE_CHARS = 280;
 
 /** Level from which each bubble effect may appear. */
-export const EFFECT_MIN_LEVEL: Record<Effect, number> = { soft: 3, loud: 3, stop: 3, ink: 4, pin: 5, screen: 5, shake: 3, sparkle: 3, echo: 4, bloom: 4, heartbeat: 5 };
+export const EFFECT_MIN_LEVEL: Record<Effect, number> = { soft: 1, loud: 1, stop: 1, ink: 1, pin: 1, screen: 1, shake: 1, sparkle: 1, echo: 1, bloom: 1, heartbeat: 1 };
 /** Daily caps per IST day, counted from stored meta. Pin is 1 per 30 days instead. */
-export const EFFECT_DAILY_CAP: Partial<Record<Effect, number>> = { soft: 2, loud: 1, stop: 1, ink: 1, shake: 1, sparkle: 2, echo: 1, bloom: 1, heartbeat: 1 };
-/** Across every capped bubble effect together, so a wide palette never turns into a busy chat. */
-export const EFFECT_TOTAL_DAILY_CAP = 4;
-export const SCREEN_DAILY_CAP = 1;
+export const EFFECT_DAILY_CAP: Partial<Record<Effect, number>> = { soft: 3, loud: 3, stop: 3, ink: 3, shake: 3, sparkle: 3, echo: 3, bloom: 3, heartbeat: 3 };
+export const SCREEN_DAILY_CAP = 2;
+
+/** One effect (a bubble effect or a screen) every EFFECT_MIN_GAP to EFFECT_MAX_GAP of her bubbles. */
+export const EFFECT_MIN_GAP = 5;
+export const EFFECT_MAX_GAP = 10;
+
+/** When each screen fits, told to the model next to the names it may pick. */
+export const SCREEN_HINTS: Record<ScreenKind, string> = {
+  confetti: "their good news, a win, a celebration",
+  balloons: "a happy occasion, a lighthearted cheer",
+  fireworks: "something big landing",
+  shootingstar: "a wish, a hope, a longing",
+  rain: "rain in the conversation, a cosy or wistful mood",
+  lanterns: "a festival, a warm night",
+  sparkles: "something sweet or magical",
+  petals: "a deeply romantic moment (L6 only)",
+};
 
 /** What each effect is for, told to the model next to the names it may use. */
 export const EFFECT_HINTS: Record<Effect, string> = {
@@ -59,9 +73,6 @@ export const EFFECT_HINTS: Record<Effect, string> = {
   bloom: "the bubble swells softly and warm: an affectionate line",
   heartbeat: "the bubble pulses like a heartbeat: a rare tender or romantic beat",
 };
-
-/** The bubble effects that count towards EFFECT_TOTAL_DAILY_CAP. */
-const COUNTED_EFFECTS: Effect[] = ["soft", "loud", "stop", "ink", "shake", "sparkle", "echo", "bloom", "heartbeat"];
 
 /** The JSON Schema sent to the provider (strict: every key present, nullable via anyOf). */
 export const LIVE_OUT_SCHEMA = {
@@ -203,6 +214,8 @@ export interface SanitizeCtx {
   milestone: Milestone | null;
   /** Cool-off or safety mode: no effects, no reaction. */
   quiet: boolean;
+  /** Effect cadence: she used an effect too recently, so this reply carries none. */
+  cadence?: { blocked: boolean };
   /** A follow-up that may send no bubbles: it then always carries a reaction. */
   allowEmpty?: boolean;
 }
@@ -312,20 +325,17 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
     console.info(JSON.stringify({ evt: "llm.followup_reaction_forced" }));
   }
 
-  // Screen effect: level, milestone, one per day, and petals only at L6.
+  // Screen effect: any screen the model picks, up to the daily cap; petals only at L6.
   let screen = out.screen;
   const screenOk =
     screen !== null &&
-    level >= EFFECT_MIN_LEVEL.screen &&
-    ctx.milestone !== null &&
-    ctx.milestone.screen === screen &&
+    SCREENS.includes(screen) &&
     ctx.screensToday < SCREEN_DAILY_CAP &&
     (screen !== "petals" || level >= 6);
   if (!screenOk) screen = null;
 
   // Bubble effects: unlock level, then daily caps counted from stored meta and this reply.
   const used: Partial<Record<Effect, number>> = { ...ctx.effectsToday };
-  let usedTotal = COUNTED_EFFECTS.reduce((n, e) => n + (used[e] ?? 0), 0);
   let pinUsed = ctx.pinInLast30d;
   let screenBubbleUsed = false;
   bubbles = bubbles.map((b) => {
@@ -342,11 +352,26 @@ function sanitizeUnsafe(out: LiveOut, ctx: SanitizeCtx): LiveOut {
       return b;
     }
     const cap = EFFECT_DAILY_CAP[e] ?? 0;
-    if ((used[e] ?? 0) >= cap || usedTotal >= EFFECT_TOTAL_DAILY_CAP) return { ...b, effect: null };
+    if ((used[e] ?? 0) >= cap) return { ...b, effect: null };
     used[e] = (used[e] ?? 0) + 1;
-    usedTotal += 1;
     return b;
   });
+
+  // Cadence: a blocked reply carries no effect at all. Otherwise at most one effect per reply:
+  // the screen (and its marker bubble) first, else the first surviving bubble effect.
+  if (ctx.cadence?.blocked) {
+    screen = null;
+    bubbles = bubbles.map((b) => ({ ...b, effect: null }));
+  } else if (screen !== null) {
+    bubbles = bubbles.map((b) => (b.effect === "screen" ? b : { ...b, effect: null }));
+  } else {
+    let kept = false;
+    bubbles = bubbles.map((b) => {
+      if (b.effect === null || kept) return { ...b, effect: null };
+      kept = true;
+      return b;
+    });
+  }
 
   let cleaned: LiveOut = { ...out, reaction, quoteId, screen, bubbles };
 
@@ -362,14 +387,14 @@ export const LEVELUP_SCREEN: Partial<Record<number, ScreenKind>> = { 3: "sparkle
 /**
  * Celebrations the server grants after the trust engine has run: the screen a
  * level-up earns, or the screen of a count milestone (the 100th message).
- * Neither needs L5 the way a model-chosen screen does. One screen a day, and
- * never in a safety band.
+ * Both bypass the daily screen cap (they are rare by construction, and a free
+ * confetti at 10 am must not eat a level-up). Never in a safety band.
  */
 export function grantCelebration(
   out: LiveOut,
   args: { level: number; leveledUp: number | null; milestone: Milestone | null; screensToday: number; band: Band }
 ): LiveOut {
-  if (args.band !== "none" || args.screensToday >= SCREEN_DAILY_CAP) return out;
+  if (args.band !== "none") return out;
   if (args.leveledUp !== null && args.level >= args.leveledUp) {
     const screen = LEVELUP_SCREEN[args.leveledUp];
     if (screen) return { ...out, screen };

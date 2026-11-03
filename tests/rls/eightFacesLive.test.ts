@@ -207,8 +207,9 @@ describe("is_live by owner and core", () => {
   it("a normal user's F02 with ROMANTIC is live and with PSYCH is not", async () => {
     const u = await makeUser("normal-f02");
     expect((await createCompanion(u, "F02", "ROMANTIC")).live).toBe(true);
-    await rpc(u, "unlock_slot", { amount: 199 });
-    expect((await createCompanion(u, "F02", "PSYCH")).live).toBe(false);
+    // A user cannot hold the same template twice, so the PSYCH case is a second user.
+    const other = await makeUser("normal-f02-psych");
+    expect((await createCompanion(other, "F02", "PSYCH")).live).toBe(false);
   });
 
   it("a qa user's F03 with a TRAINER primary is not live (secondary-core mismatch)", async () => {
