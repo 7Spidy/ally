@@ -9,6 +9,7 @@ import { SheetHost } from "@/components/Sheet";
 import { NamePromptHost } from "@/components/sheets/NamePromptSheet";
 import { ToastHost } from "@/components/Toast";
 import { NotificationManager } from "@/components/NotificationManager";
+import { StatusBarManager } from "@/components/StatusBarManager";
 import { AllyGate } from "@/components/AllyGate";
 import { DebugPanel } from "@/debug/DebugPanel";
 import "./globals.css";
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <NamePromptHost />
                   <ToastHost />
                   <NotificationManager />
+                  <StatusBarManager />
                 </ToastProvider>
               </SheetProvider>
             </ManifestProvider>
