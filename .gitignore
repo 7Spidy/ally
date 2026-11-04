@@ -29,3 +29,5 @@ supabase/.branches
 # Android signing keys & credentials
 *.jks
 *.keystore
+*.apk
+*.aab
