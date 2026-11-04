@@ -35,13 +35,22 @@ export default function PrivacySettingsPage() {
       </div>
       <div className={styles.body}>
         <a href="/privacy" target="_blank" rel="noopener noreferrer" className={styles.row}>
-          {COPY.privacy.policy}
+          <span className={styles.rowLabel}>{COPY.privacy.policy}</span>
+          <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+          </svg>
         </a>
         <button type="button" className={styles.row} onClick={downloadData}>
-          {COPY.privacy.download}
+          <span className={styles.rowLabel}>{COPY.privacy.download}</span>
+          <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+          </svg>
         </button>
-        <button type="button" className={styles.row} onClick={() => openSheet("delete")}>
-          {COPY.privacy.delete}
+        <button type="button" className={`${styles.row} ${styles.dangerRow}`} onClick={() => openSheet("delete")}>
+          <span className={styles.rowLabel}>{COPY.privacy.delete}</span>
+          <svg className={styles.chevron} viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 6l6 6-6 6" />
+          </svg>
         </button>
       </div>
     </div>

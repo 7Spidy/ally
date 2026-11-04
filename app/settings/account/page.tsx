@@ -174,21 +174,27 @@ export default function AccountSettingsPage() {
 
       <div className={styles.body}>
         <div className={styles.group}>
-          <div className={styles.row}>
+          <div className={`${styles.row} ${styles.staticRow}`}>
             <span className={styles.rowLabel}>{COPY.account.field}</span>
             <span className={styles.rowValue}>{anonymous ? COPY.settings.notSaved : email}</span>
           </div>
           {anonymous && (
-            <button type="button" className={styles.row} onClick={openSaveAccount}>
+            <button type="button" className={`${styles.row} ${styles.actionRow}`} onClick={openSaveAccount}>
               <span className={styles.rowLabel}>{COPY.settings.saveAccount}</span>
+              <svg className={styles.chevron} viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
             </button>
           )}
         </div>
 
         {!anonymous && (
           <div className={styles.group}>
-            <button type="button" className={styles.row} aria-expanded={panel === "password"} onClick={() => open(panel === "password" ? null : "password")}>
+            <button type="button" className={`${styles.row} ${styles.actionRow}`} aria-expanded={panel === "password"} onClick={() => open(panel === "password" ? null : "password")}>
               <span className={styles.rowLabel}>{auth.hasPassword ? COPY.settings.changePassword : COPY.settings.setPassword}</span>
+              <svg className={`${styles.chevron} ${panel === "password" ? styles.expanded : ""}`} viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
             </button>
             {panel === "password" && (
               <div className={`stack ${styles.panel}`}>
@@ -210,11 +216,17 @@ export default function AccountSettingsPage() {
         )}
 
         <div className={styles.group}>
-          <button type="button" className={styles.row} disabled={busy} onClick={() => void logOut("local")}>
+          <button type="button" className={`${styles.row} ${styles.actionRow}`} disabled={busy} onClick={() => void logOut("local")}>
             <span className={styles.rowLabel}>{COPY.settings.logOut}</span>
+            <svg className={styles.chevron} viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
           </button>
-          <button type="button" className={styles.row} aria-expanded={panel === "logoutAll"} onClick={() => open(panel === "logoutAll" ? null : "logoutAll")}>
+          <button type="button" className={`${styles.row} ${styles.actionRow}`} aria-expanded={panel === "logoutAll"} onClick={() => open(panel === "logoutAll" ? null : "logoutAll")}>
             <span className={styles.rowLabel}>{COPY.settings.logOutAll}</span>
+            <svg className={`${styles.chevron} ${panel === "logoutAll" ? styles.expanded : ""}`} viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
           </button>
           {panel === "logoutAll" && (
             <div className={`stack ${styles.panel}`}>
@@ -231,8 +243,11 @@ export default function AccountSettingsPage() {
 
         {!anonymous && (
           <div className={styles.group}>
-            <button type="button" className={styles.row} aria-expanded={panel === "delete"} onClick={() => open(panel === "delete" ? null : "delete")}>
+            <button type="button" className={`${styles.row} ${styles.actionRow} ${styles.dangerRow}`} aria-expanded={panel === "delete"} onClick={() => open(panel === "delete" ? null : "delete")}>
               <span className={styles.rowLabel}>{COPY.settings.delete}</span>
+              <svg className={`${styles.chevron} ${panel === "delete" ? styles.expanded : ""}`} viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
             </button>
             {panel === "delete" && (
               <div className={`stack ${styles.panel}`}>

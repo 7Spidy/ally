@@ -9,6 +9,7 @@
   align-items: center;
   padding: calc(16px + var(--safe-t)) 16px 8px;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .title {
@@ -23,10 +24,12 @@
 }
 
 .row {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
   text-align: left;
-  padding: 18px 4px;
+  padding: 16px 8px;
   border-bottom: 1px solid var(--line);
   font-size: 15.5px;
   background: none;
@@ -36,4 +39,63 @@
   color: var(--fg);
   text-decoration: none;
   cursor: pointer;
+  border-radius: 10px;
+  transition: background-color 150ms ease, opacity 150ms ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.row:hover {
+  background-color: rgba(244, 239, 230, 0.05);
+}
+
+.row:active {
+  background-color: rgba(244, 239, 230, 0.1);
+  transform: scale(0.992);
+}
+
+.rowLabel {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.dangerRow .rowLabel {
+  color: #ff6b6b;
+}
+
+.dangerRow .chevron {
+  stroke: #ff6b6b;
+}
+
+.dangerRow:hover {
+  background-color: rgba(255, 107, 107, 0.08);
+}
+
+.dangerRow:active {
+  background-color: rgba(255, 107, 107, 0.15);
+}
+
+.chevron,
+.icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--dim);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+  transition: stroke 150ms ease, transform 150ms ease;
+}
+
+.row:hover .chevron,
+.row:active .chevron,
+.row:hover .icon,
+.row:active .icon {
+  stroke: var(--fg);
+}
+
+.row:hover .chevron,
+.row:active .chevron {
+  transform: translateX(2px);
 }

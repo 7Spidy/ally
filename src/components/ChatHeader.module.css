@@ -4,6 +4,7 @@
   gap: 12px;
   padding: calc(16px + var(--safe-t)) 16px 14px;
   position: relative;
+  flex-shrink: 0;
 }
 
 .identity {
