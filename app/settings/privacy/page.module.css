@@ -7,7 +7,7 @@
 .header {
   display: flex;
   align-items: center;
-  padding: calc(16px + var(--safe-t)) 16px 8px;
+  padding: calc(12px + var(--safe-t)) 16px 8px;
   gap: 12px;
   flex-shrink: 0;
 }

@@ -3,7 +3,8 @@
   justify-content: center;
   align-items: center;
   gap: 10px;
-  padding: 14px 0;
+  padding: 10px 0 calc(10px + var(--safe-b));
+  flex-shrink: 0;
 }
 
 .pip {
