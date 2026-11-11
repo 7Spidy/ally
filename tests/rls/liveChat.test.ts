@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { PASS_CAP } from "@/lib/config";
+import { dayKey } from "@/lib/clock";
+import { HIDDEN_DAILY_CAPS } from "@/lib/config";
 
 // B2 live chat (supabase/migrations/20261001000001_live_chat.sql), against the
 // local Supabase stack (`npm run db:start`, `npm run e2e:env`).
@@ -12,6 +13,22 @@ const CAPTCHA = "XXXX.DUMMY.TOKEN.XXXX";
 
 const noPersist = { auth: { persistSession: false, autoRefreshToken: false } };
 const service = createClient(URL, SECRET, noPersist);
+
+type PaidPlan = "pro" | "max" | "ultra";
+
+/** The server-side entry point a verified Play purchase would use (service role only). */
+async function grantPlan(uid: string, plan: PaidPlan): Promise<void> {
+  const { error } = await service.rpc("set_subscription", {
+    p_user_id: uid,
+    p_plan: plan,
+    p_status: "active",
+    p_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+    p_purchase_token: `tok-${uid}`,
+    p_product_id: `ally_${plan}`,
+  });
+  if (error) throw new Error(`set_subscription: ${error.code} ${error.message}`);
+}
+
 const createdIds: string[] = [];
 
 interface TestUser {
@@ -58,7 +75,7 @@ beforeAll(async () => {
   b = await makeUser("b");
   adm = await makeUser("adm", "admin");
   live = await create(a, "F01", ROMANTIC);
-  await rpc(a, "unlock_slot", { amount: 199 });
+  await grantPlan(a.id, "max");
   mocked = await create(a, "M01", PSYCH);
   bLive = await create(b, "F01", ROMANTIC);
 });
@@ -324,16 +341,16 @@ describe("trust decay (ally_private.trust_decay)", () => {
   });
 });
 
-describe("D12: the day-pass cap is 200", () => {
-  it("caps a pass at 200 sends", async () => {
-    expect(PASS_CAP).toBe(200);
+describe("the hidden fair-use cap replaces the day-pass cap", () => {
+  it("stops a Pro user at the Pro cap with FAIR_USE_CAP", async () => {
+    expect(HIDDEN_DAILY_CAPS.pro).toBe(300);
     const u = await makeUser("cap");
+    await grantPlan(u.id, "pro");
     const c = await create(u, "M01", PSYCH);
-    await rpc(u, "buy_pass");
-    await service.from("ledgers").update({ pass_used: 199 }).eq("user_id", u.id);
+    await service.from("ledgers").update({ day: dayKey(Date.now()), free_used: HIDDEN_DAILY_CAPS.pro - 1 }).eq("user_id", u.id);
     const ok = await rpc<{ blocked: boolean }>(u, "send_message", { companion_id: c.id, body: "one" });
     expect(ok.blocked).toBe(false);
     const capped = await rpc<{ blocked: boolean; status: string }>(u, "send_message", { companion_id: c.id, body: "two" });
-    expect(capped).toMatchObject({ blocked: true, status: "capped" });
+    expect(capped).toMatchObject({ blocked: true, status: "FAIR_USE_CAP" });
   });
 });

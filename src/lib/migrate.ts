@@ -7,7 +7,7 @@
  */
 
 import { dayKey } from "@/lib/clock";
-import { emptyAnswers, emptyCore, freshFlow, freshLedger, type AllyState, type Answers, type Core, type CoreId, type Companion, type Gender, type OnboardingFlow } from "@/state/schema";
+import { emptyAnswers, emptyCore, freshEntitlement, freshFlow, freshLedger, type AllyState, type Answers, type Core, type CoreId, type Companion, type Gender, type OnboardingFlow } from "@/state/schema";
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -39,11 +39,12 @@ export function wipeLegacy(storage: RemovableStorage): void {
 /**
  * P2 (spec D1, §6.4): companions and the ledger are server-owned. The local
  * `ally_v2:<uid>` blob keeps only `flow` and `user`; whatever companions or
- * ledger it holds (including pre-P2 data) are replaced by empty defaults,
- * never read. Used on both hydrate and persist.
+ * ledger it holds (including pre-P2 data) are replaced by empty defaults, never
+ * read; the entitlement is a placeholder until the server answers. Used on both
+ * hydrate and persist.
  */
 export function localOnly(state: AllyState, day: string): AllyState {
-  return { ...state, companions: [], ledger: freshLedger(day) };
+  return { ...state, companions: [], ledger: freshLedger(day), entitlement: freshEntitlement() };
 }
 
 /** True while a v1 under-18 block is still in force (ported from #ally-engine). */
@@ -329,6 +330,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
         user,
         companions: [companion],
         ledger: freshLedger(day),
+        entitlement: freshEntitlement(),
         flow: null,
       };
     } else {
@@ -339,6 +341,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
         user,
         companions: [],
         ledger: freshLedger(day),
+        entitlement: freshEntitlement(),
         flow: upgradeFlow({
           kind: "first",
           step,
@@ -383,6 +386,7 @@ export function migrate(storage: StorageLike, now: number, key: string = STATE_K
       },
       companions: [],
       ledger: freshLedger(day),
+      entitlement: freshEntitlement(),
       flow: freshFlow("first", "consent"),
     };
   }

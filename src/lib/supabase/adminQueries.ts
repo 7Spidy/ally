@@ -16,27 +16,14 @@ export function adminSetStatus(target: string, status: "active" | "suspended") {
   return call("admin_set_status", { target, status });
 }
 
-export function adminSetSlots(target: string, slots: number) {
-  return call("admin_set_slots", { target, slots });
-}
-
 /** null clears the override. */
 export function adminSetFreeDailyOverride(target: string, value: number | null) {
   return call("admin_set_free_daily_override", { target, value });
 }
 
-/** null clears the override. */
+/** The daily fair-use cap of a paid plan. null clears the override. */
 export function adminSetPassCapOverride(target: string, value: number | null) {
   return call("admin_set_pass_cap_override", { target, value });
-}
-
-/** hours null uses the default pass length. */
-export function adminGrantPass(target: string, hours: number | null = null) {
-  return call("admin_grant_pass", { target, hours });
-}
-
-export function adminEndPass(target: string) {
-  return call("admin_end_pass", { target });
 }
 
 export async function adminForceLogout(target: string): Promise<{ revoked: number }> {

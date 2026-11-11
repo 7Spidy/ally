@@ -6,6 +6,7 @@ import { lintReply } from "@/lib/llm/lint";
 import * as heart from "@/lib/heart";
 import { isLive } from "@/lib/live";
 import { addCardState } from "@/lib/addCard";
+import { freshEntitlement } from "@/state/schema";
 import { F01 } from "@/personas/persona";
 import { F02, LIVE_TEMPLATES, PERSONAS, personaFor } from "@/personas/registry";
 import { examplePairs } from "@/personas/cores/romantic";
@@ -203,10 +204,13 @@ describe("lint on F02's golden set", () => {
 });
 
 describe("addCard", () => {
-  it("returns cap at 3 and at 4", () => {
-    expect(addCardState(3, false)).toBe("cap");
-    expect(addCardState(4, false)).toBe("cap");
-    expect(addCardState(2, false)).toBe("add");
-    expect(addCardState(2, true)).toBe("exhausted");
+  it("returns cap only for Ultra with every slot full", () => {
+    const ultra = { ...freshEntitlement(), plan: "ultra" as const, slotLimit: 4 };
+    expect(addCardState(4, false, ultra)).toBe("cap");
+    expect(addCardState(3, false, ultra)).toBe("add");
+    expect(addCardState(2, true, ultra)).toBe("exhausted");
+    // a full Pro or Max set is an "add" card whose button leads to the plans screen
+    expect(addCardState(1, false, { ...freshEntitlement(), plan: "pro", slotLimit: 1 })).toBe("add");
+    expect(addCardState(2, false, { ...freshEntitlement(), plan: "max", slotLimit: 2 })).toBe("add");
   });
 });

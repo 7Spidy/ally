@@ -17,9 +17,9 @@ import {
 test.describe("E12 screenshots of remaining screens", () => {
   test("settings, notifications, privacy, how, profile, leave sheet", async ({ page }) => {
     const companion = makeCompanion({ id: "c_e12", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000 });
-    // slotsUnlocked=2 so the intro sheet's Start routes straight to
-    // /onboarding/gender (skipping the unlock sheet, already covered by E3/E4).
-    const state = makeState({ companions: [companion], ledger: { slotsUnlocked: 2 } });
+    // A Max plan (2 slots) so the intro sheet's Start routes straight to
+    // /onboarding/gender (the plans screen is covered by E31).
+    const state = makeState({ companions: [companion], plan: "max" });
     await setClock(page, FIXED_NOW);
     await seedState(page, state);
 

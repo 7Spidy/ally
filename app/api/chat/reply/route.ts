@@ -10,7 +10,7 @@ import { planReply } from "@/lib/llm/replyPlan";
 import { applyQaForce, bubbleMeta, EFFECTS, grantCelebration, sanitize, SCREENS, type Effect, type MsgMeta, type QaForce } from "@/lib/llm/contract";
 import { runReply } from "@/lib/llm/reply";
 import { applySafety, backstopHit } from "@/lib/safety";
-import { applyReply, freshDay, relationshipDay, wordCount, type TrustDay, type TrustState } from "@/lib/trust";
+import { applyReply, deeperLevelAvailable, effectiveLevel, freshDay, relationshipDay, shownLevelUp, wordCount, type TrustDay, type TrustState } from "@/lib/trust";
 import type { CoreId } from "@/state/schema";
 
 export const dynamic = "force-dynamic";
@@ -108,6 +108,12 @@ export async function POST(request: Request) {
   const ownerIsQa = ownerRow?.role === "admin" || ownerRow?.role === "qa";
   if (!isLive({ templateId: c.template_id, core: c.core }, ownerIsQa)) return json({ error: "not_live" }, 409);
   if (c.paused_reason) return json({ error: "paused" }, 423);
+  // Plans: the owner's trust ceiling, and whether this companion is paused by the plan (expired, or outside its slots).
+  const { data: gateRaw } = await db.rpc("reply_gate", { p_companion_id: c.id });
+  const gate = gateRaw as { max_level: number; locked: boolean } | null;
+  if (!gate) return json({ error: "not_found" }, 404);
+  if (gate.locked) return json({ error: "companion_locked" }, 403);
+  const maxLevel = gate.max_level;
   const persona = personaFor(c.template_id);
 
   const now = Date.now();
@@ -122,10 +128,10 @@ export async function POST(request: Request) {
     const { data: claimed } = await db.from("companions").update({ last_replied_msg: userMsg.id }).eq("id", c.id).lt("last_replied_msg", userMsg.id).select("id");
     if (!claimed?.length) {
       const { data: existing } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).eq("in_reply_to", userMsg.id).order("id");
-      if (existing?.length) return json({ replayed: true, reaction: null, bubbles: bubblesOf(existing as MsgRow[]), seenUpTo: userMsg.id, trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
+      if (existing?.length) return json({ replayed: true, reaction: null, bubbles: bubblesOf(existing as MsgRow[]), seenUpTo: userMsg.id, trustLevel: effectiveLevel(c.trust_level, maxLevel), leveledUp: null, resourceCard: false, paused: false });
       // A reply with no bubbles is a tapback alone. The reaction is written atomically with the reply, so its presence means the reply is done.
       const done = userMsg.meta?.reaction;
-      if (typeof done === "string" && done !== "") return json({ replayed: true, reaction: done, bubbles: [], seenUpTo: userMsg.id, trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
+      if (typeof done === "string" && done !== "") return json({ replayed: true, reaction: done, bubbles: [], seenUpTo: userMsg.id, trustLevel: effectiveLevel(c.trust_level, maxLevel), leveledUp: null, resourceCard: false, paused: false });
       return json({ pending: true }, 202);
     }
   } else {
@@ -180,7 +186,8 @@ export async function POST(request: Request) {
     // compile() windows the 40 fetched rows in steps of 10, so it needs where they sit among all the messages.
     const historyOffset = Math.max(0, (totalMsgs ?? history.length) - history.length);
 
-    const level = c.trust_level;
+    // The engine only sees the plan's ceiling. The stored trust keeps climbing underneath it.
+    const level = effectiveLevel(c.trust_level, maxLevel);
     const createdAt = Date.parse(c.created_at);
     const relDay = relationshipDay(createdAt, messageAt);
     const h = heart.now({ id: c.id, createdAt }, messageAt, persona);
@@ -289,7 +296,7 @@ export async function POST(request: Request) {
     if (userMsg) {
       const { data: still } = await db.from("messages").select("deleted_at").eq("id", userMsg.id).maybeSingle();
       if (!still || still.deleted_at) {
-        return json({ reaction: null, screen: null, bubbles: [], seenUpTo: null, trustLevel: c.trust_level, leveledUp: null, resourceCard: false, paused: false });
+        return json({ reaction: null, screen: null, bubbles: [], seenUpTo: null, trustLevel: level, leveledUp: null, resourceCard: false, paused: false });
       }
     }
 
@@ -329,8 +336,11 @@ export async function POST(request: Request) {
       leveledUp = r.leveledUp;
     }
 
-    const effectiveLeveledUp = leveledUp ?? qaCelebrate;
-    let finalOut = grantCelebration(safe.out, { level: trust.level, leveledUp: effectiveLeveledUp, milestone, screensToday, band: safe.band });
+    // Past the ceiling the level-up is stored but not played: no celebration for a level this plan does not have.
+    const shownLevel = effectiveLevel(trust.level, maxLevel);
+    const shownLeveledUp = shownLevelUp(leveledUp, maxLevel);
+    const effectiveLeveledUp = shownLeveledUp ?? qaCelebrate;
+    let finalOut = grantCelebration(safe.out, { level: shownLevel, leveledUp: effectiveLeveledUp, milestone, screensToday, band: safe.band });
 
     // A celebration needs a bubble to persist on (screensToday counts stored meta), so an empty follow-up that earned one gets a single bubble.
     if (finalOut.bubbles.length === 0 && (effectiveLeveledUp !== null || finalOut.screen !== null)) {
@@ -376,8 +386,9 @@ export async function POST(request: Request) {
       screen: finalOut.screen,
       bubbles: result.bubbles,
       seenUpTo: mode === "reply" ? (plan?.seenUpTo ?? null) : null,
-      trustLevel: trust.level,
-      leveledUp,
+      trustLevel: shownLevel,
+      deeperLevelAvailable: deeperLevelAvailable(trust.level, maxLevel),
+      leveledUp: shownLeveledUp,
       resourceCard: safe.resourceCard,
       paused: safe.paused,
     });

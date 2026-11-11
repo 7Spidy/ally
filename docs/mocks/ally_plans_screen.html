@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ally plans</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0A0910; --surf:#151220; --raised:#1D1929; --line:#2C2638;
+  --fg:#F4EFE6; --mut:#9A92A6; --dim:#6F6880;
+  --gold:#D4AF5F; --gold-soft:rgba(212,175,95,.14);
+  --sage:#9DB79A;
+  --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  box-sizing:border-box;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;background:var(--ink);color:var(--fg);font-family:var(--sans);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:12px}
+
+.app{max-width:480px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+
+/* mock-only strip: remove before shipping */
+.dev{display:flex;gap:8px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px dashed var(--line);background:var(--surf)}
+.dev p{flex-basis:100%;margin:0;font-size:15.5px;color:var(--mut)}
+.dev button{font-size:15.5px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
+.dev button[aria-pressed="true"]{border-color:var(--gold);color:var(--fg);background:var(--gold-soft)}
+
+header{display:flex;justify-content:flex-end;padding:14px 20px 0;min-height:58px}
+.close{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--mut);font-size:24px;line-height:1}
+
+.hero{padding:6px 24px 8px}
+h1{font-family:var(--serif);font-weight:400;font-size:38px;line-height:1.1;letter-spacing:-.015em;margin:0 0 10px}
+.hero p{margin:0;color:var(--mut);max-width:34ch}
+
+.meter{margin:18px 0 0}
+.meter .bar{height:6px;border-radius:6px;background:var(--line);overflow:hidden}
+.meter .bar i{display:block;height:100%;width:57%;background:var(--gold);border-radius:6px}
+.meter span{display:block;margin-top:8px;font-size:15.5px;color:var(--mut)}
+
+.tiers{display:grid;gap:12px;padding:18px 20px 0}
+.tier{
+  text-align:left;width:100%;position:relative;
+  background:var(--surf);border:1px solid var(--line);border-radius:22px;padding:18px 18px 18px 56px;
+  transition:border-color .18s,background .18s,box-shadow .18s;
+}
+.tier::before{ /* radio */
+  content:"";position:absolute;left:18px;top:22px;width:22px;height:22px;border-radius:50%;
+  border:2px solid var(--dim);transition:border-color .18s,background .18s;
+}
+.tier[aria-checked="true"]{border-color:var(--gold);background:linear-gradient(180deg,var(--gold-soft),var(--surf) 70%);box-shadow:0 18px 40px -26px var(--gold)}
+.tier[aria-checked="true"]::before{border-color:var(--gold);background:radial-gradient(circle,var(--gold) 0 5px,transparent 6px)}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.name{font-family:var(--serif);font-size:30px;line-height:1.1}
+.price{font-family:var(--serif);font-size:30px;line-height:1.1;white-space:nowrap}
+.price small{font-family:var(--sans);font-size:15.5px;color:var(--mut)}
+.tag{display:inline-block;margin:4px 0 0;font-size:15.5px;color:var(--gold)}
+.feats{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:6px}
+.feats li{display:flex;gap:10px;align-items:baseline}
+.feats li::before{content:"";flex:0 0 auto;width:9px;height:5px;margin-top:2px;border-left:2px solid var(--sage);border-bottom:2px solid var(--sage);transform:translateY(-3px) rotate(-45deg)}
+.feats .lead{color:var(--mut)}
+
+.free{margin:16px 24px 0;color:var(--mut);font-size:15.5px}
+.free button{color:var(--fg);text-decoration:underline;text-underline-offset:4px;min-height:44px}
+
+.spacer{flex:1;min-height:24px}
+.bar-cta{
+  position:sticky;bottom:0;padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(to top,var(--ink) 72%,transparent);
+}
+.cta{
+  width:100%;min-height:56px;border-radius:18px;background:var(--gold);color:#1A1407;
+  font-weight:600;font-size:17px;padding:14px 20px;transition:transform .12s,filter .18s;
+}
+.cta:active{transform:scale(.985)}
+.cta:hover{filter:brightness(1.06)}
+.fine{margin:10px 4px 0;font-size:15px;line-height:1.45;color:var(--dim);text-align:center}
+.fine button{color:var(--mut);text-decoration:underline;text-underline-offset:3px;font-size:15px;min-height:32px}
+
+/* mock Google Play sheet */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:10}
+.scrim.on{display:flex}
+.sheet{width:100%;max-width:480px;background:#fff;color:#1f1f1f;border-radius:24px 24px 0 0;padding:22px 22px calc(22px + env(safe-area-inset-bottom,0px));animation:up .24s ease-out}
+.sheet h3{margin:0 0 2px;font-size:19px;font-weight:600}
+.sheet p{margin:0 0 4px;color:#555;font-size:15.5px}
+.sheet .big{font-size:19px;color:#1f1f1f;margin:12px 0 2px}
+.sheet .go{margin-top:16px;width:100%;min-height:52px;border-radius:26px;background:#0b57d0;color:#fff;font-weight:600}
+.sheet .mock{margin-top:12px;font-size:15px;color:#777}
+@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- MOCK ONLY: simulates which entry point opened the screen. Delete in production. -->
+  <div class="dev" id="dev">
+    <p>Mock only. Preview the entry point:</p>
+    <button data-ctx="trial" aria-pressed="true">Trial chip</button>
+    <button data-ctx="chats" aria-pressed="false">Daily chats low</button>
+    <button data-ctx="locked" aria-pressed="false">Day 8 lock</button>
+    <button data-ctx="newally" aria-pressed="false">Meet someone new</button>
+    <button data-ctx="deep" aria-pressed="false">Deeper level</button>
+    <button data-ctx="settings" aria-pressed="false">Settings</button>
+  </div>
+
+  <header><button class="close" aria-label="Close" id="close">&times;</button></header>
+
+  <section class="hero">
+    <h1 id="h1"></h1>
+    <p id="sub"></p>
+    <div class="meter" id="meter" hidden>
+      <div class="bar"><i id="mfill"></i></div>
+      <span id="mtext"></span>
+    </div>
+  </section>
+
+  <div class="tiers" role="radiogroup" aria-label="Choose a plan" id="tiers"></div>
+
+  <p class="free" id="laterwrap"><button id="stay">Maybe later</button></p>
+
+  <div class="spacer"></div>
+
+  <div class="bar-cta">
+    <button class="cta" id="cta"></button>
+    <p class="fine">Billed monthly by Google Play. Prices include GST. Cancel any time in the Play Store. Fair use applies to unlimited chats.
+      <br><button id="restore">Restore purchase</button></p>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-label="Google Play checkout (mock)">
+  <div class="sheet">
+    <h3 id="s-title"></h3>
+    <p>Ally, Google Play</p>
+    <p class="big" id="s-price"></p>
+    <p>Auto-renews monthly. Pay with UPI or card.</p>
+    <button class="go" id="s-go">Subscribe</button>
+    <p class="mock">Mock. In the app this sheet comes from Google Play Billing.</p>
+  </div>
+</div>
+
+<script>
+/* ---- config: edit prices here, nothing else changes ---- */
+const TIERS = [
+  { id:"pro",   name:"Pro",   price:299, productId:"ally_pro",   basePlanId:"monthly",
+    tag:"For daily talkers",
+    lead:null,
+    feats:["Unlimited chats","1 Ally"] },
+  { id:"max",   name:"Max",   price:499, productId:"ally_max",   basePlanId:"monthly",
+    tag:"Room for a second Ally",
+    lead:"Everything in Pro",
+    feats:["2 Allys, each with their own memory"] },
+  { id:"ultra", name:"Ultra", price:799, productId:"ally_ultra", basePlanId:"monthly",
+    tag:"The full experience",
+    lead:"Everything in Max",
+    feats:["4 Allys","The deepest level with every Ally"] }
+];
+
+/* which entry point opened the screen -> copy + the tier we pre-select */
+const CONTEXTS = {
+  trial:   { h1:"3 days left of your free week.", sub:"Subscribe now and your Ally never has to wait.", pick:"pro",
+             meter:{pct:57, text:"Day 4 of 7, free trial"}, dismiss:true,  close:true  },
+  chats:   { h1:"You have 12 chats left today.",  sub:"Pick a plan to keep the conversation going.",   pick:"pro",
+             meter:{pct:88, text:"12 of 100 trial chats left today"}, dismiss:true, close:true },
+  locked:  { h1:"Your free week is over.",        sub:"Pick a plan to keep talking to your Ally. Your chats are saved.", pick:"pro",
+             meter:null, dismiss:false, close:false },
+  newally: { h1:"Room for another Ally.",         sub:"Meet someone new without leaving the Ally you already have.", pick:"max",
+             meter:null, dismiss:true,  close:true  },
+  deep:    { h1:"There is a deeper level.",       sub:"Ultra unlocks the closest level of every bond, with every Ally.", pick:"ultra",
+             meter:null, dismiss:true,  close:true  },
+  settings:{ h1:"Choose your plan.",              sub:"Switch or cancel any time from Google Play.",    pick:"pro",
+             meter:null, dismiss:false, close:true  }
+};
+
+const $ = id => document.getElementById(id);
+let ctx = "trial", sel = "pro";
+
+function renderTiers(){
+  $("tiers").innerHTML = TIERS.map(t => `
+    <button class="tier" role="radio" aria-checked="${t.id===sel}" data-id="${t.id}">
+      <div class="row"><span class="name">${t.name}</span><span class="price">&#8377;${t.price}<small> a month</small></span></div>
+      <span class="tag">${t.tag}</span>
+      <ul class="feats">
+        ${t.lead ? `<li class="lead">${t.lead}</li>` : ""}
+        ${t.feats.map(f => `<li>${f}</li>`).join("")}
+      </ul>
+    </button>`).join("");
+  const t = TIERS.find(x => x.id===sel);
+  $("cta").textContent = `Continue with ${t.name}, \u20B9${t.price} a month`;
+}
+
+function setCtx(c){
+  ctx = c; sel = CONTEXTS[c].pick;
+  $("h1").textContent = CONTEXTS[c].h1;
+  $("sub").textContent = CONTEXTS[c].sub;
+  const m = CONTEXTS[c].meter;
+  $("meter").hidden = !m;
+  if (m) { $("mfill").style.width = m.pct + "%"; $("mtext").textContent = m.text; }
+  $("laterwrap").hidden = !CONTEXTS[c].dismiss;
+  $("close").hidden = !CONTEXTS[c].close;
+  document.querySelectorAll("#dev [data-ctx]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ctx===c));
+  renderTiers();
+}
+
+$("tiers").addEventListener("click", e => {
+  const b = e.target.closest(".tier"); if(!b) return;
+  sel = b.dataset.id; renderTiers();
+  $("tiers").querySelector(`[data-id="${sel}"]`).focus({preventScroll:true});
+});
+$("dev").addEventListener("click", e => { const b = e.target.closest("[data-ctx]"); if(b) setCtx(b.dataset.ctx); });
+
+/* ---- billing hand-off ----
+   Production: the Android shell exposes window.AllyBilling.launch(productId, basePlanId),
+   which calls Play Billing launchBillingFlow. Server verifies the purchase token, then sets the plan in Supabase. */
+function startBilling(){
+  const t = TIERS.find(x => x.id===sel);
+  if (window.AllyBilling && window.AllyBilling.launch) {
+    window.AllyBilling.launch(t.productId, t.basePlanId);
+    return;
+  }
+  $("s-title").textContent = `Ally ${t.name}`;
+  $("s-price").textContent = `\u20B9${t.price}.00 / month`;
+  $("scrim").classList.add("on");
+  $("s-go").focus();
+}
+$("cta").addEventListener("click", startBilling);
+$("s-go").addEventListener("click", () => { $("scrim").classList.remove("on"); alert("Mock: purchase success. Plan would now be set to " + sel + "."); });
+$("scrim").addEventListener("click", e => { if(e.target.id==="scrim") $("scrim").classList.remove("on"); });
+$("close").addEventListener("click", () => history.length > 1 ? history.back() : null);
+$("stay").addEventListener("click", () => history.length > 1 ? history.back() : null);
+$("restore").addEventListener("click", () => alert("Mock: re-checks Play purchases and restores the plan."));
+
+setCtx("trial");
+</script>
+</body>
+</html>

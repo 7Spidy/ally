@@ -112,3 +112,10 @@
   margin-top: 28px;
   text-align: center;
 }
+
+.actionRow .rowValue {
+  margin-left: auto;
+  margin-right: 6px;
+  color: var(--mut);
+  text-align: right;
+}

@@ -5,15 +5,17 @@
  */
 
 export interface AdminLedger {
-  slots_unlocked: number;
+  /** The plan the limits are judged on (a bypassing admin reads as ultra). */
+  plan: "trial" | "expired" | "pro" | "max" | "ultra";
+  /** True once admin_set_plan forced a plan on the account. */
+  plan_forced: boolean;
+  trial_ends_at: string | null;
+  slot_limit: number;
   free_used: number;
   free_daily: number;
   free_left: number;
-  pass_cap: number;
-  pass_active: boolean;
-  pass_started_at: string | null;
-  pass_ends_at: string | null;
-  pass_used: number | null;
+  /** The daily fair-use cap of the user's paid tier (the Ultra cap for a non-paid user). */
+  fair_use_cap: number;
 }
 
 export interface AdminUserRow {
@@ -66,6 +68,7 @@ export type AdminAction =
   | "set_slots"
   | "set_free_daily_override"
   | "set_pass_cap_override"
+  | "set_plan"
   | "force_logout";
 
 export interface AdminAuditEntry {
@@ -85,7 +88,7 @@ export interface AdminUserDetail extends AdminUserRow {
     updated_at: string;
     updated_by: string | null;
   } | null;
-  defaults: { free_daily: number; pass_cap: number; pass_hours: number; max_companions: number };
+  defaults: { free_daily: number; fair_use_cap: number; trial_days: number };
   companions: AdminCompanion[];
   /** B2: safety events in the last 30 days, by kind. Counts only, never text. */
   safety_counts?: Partial<Record<"concern" | "acute" | "age_claim" | "backstop", number>>;
@@ -116,10 +119,11 @@ export function userLabel(u: Pick<AdminUserRow, "email" | "is_anonymous">): stri
   return u.is_anonymous ? "Anonymous" : "No email";
 }
 
-/** One line on the user's balance: the pass while one is active, else free messages left today. */
+/** One line on the user's plan: the trial with its chats left today, or the paid tier. */
 export function ledgerSummary(l: AdminLedger): string {
-  if (l.pass_active) return `Pass until ${formatWhen(l.pass_ends_at)}, ${l.pass_used ?? 0} of ${l.pass_cap} used`;
-  return `${l.free_left} of ${l.free_daily} free left today`;
+  if (l.plan === "trial") return `Trial until ${formatWhen(l.trial_ends_at)}, ${l.free_left} of ${l.free_daily} chats left today`;
+  if (l.plan === "expired") return "No active plan";
+  return `${l.plan[0].toUpperCase()}${l.plan.slice(1)}${l.plan_forced ? " (forced)" : ""}`;
 }
 
 /**
@@ -141,8 +145,9 @@ const ACTION_LABEL: Record<AdminAction, string> = {
   grant_pass: "Granted a pass",
   end_pass: "Ended the pass",
   set_slots: "Changed slots",
-  set_free_daily_override: "Changed free daily limit",
-  set_pass_cap_override: "Changed pass cap",
+  set_free_daily_override: "Changed trial daily chats",
+  set_pass_cap_override: "Changed fair-use cap",
+  set_plan: "Forced a plan",
   force_logout: "Logged out everywhere",
 };
 
@@ -162,6 +167,8 @@ export function auditLine(a: Pick<AdminAuditEntry, "action" | "old_value" | "new
       return `${label}: ${show(a.old_value?.free_daily_override)} → ${show(a.new_value?.free_daily_override)}`;
     case "set_pass_cap_override":
       return `${label}: ${show(a.old_value?.pass_cap_override)} → ${show(a.new_value?.pass_cap_override)}`;
+    case "set_plan":
+      return `${label}: ${show(a.old_value?.plan)} → ${show(a.new_value?.plan)}`;
     case "grant_pass":
       return `${label} (${show(a.new_value?.hours)}h)`;
     case "force_logout":

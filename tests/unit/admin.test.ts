@@ -2,15 +2,14 @@ import { describe, it, expect } from "vitest";
 import { auditLine, formatWhen, ledgerSummary, parseOverride, userLabel, type AdminLedger } from "@/lib/admin";
 
 const LEDGER: AdminLedger = {
-  slots_unlocked: 1,
+  plan: "trial",
+  plan_forced: false,
+  trial_ends_at: "2026-09-25T04:30:00Z",
+  slot_limit: 1,
   free_used: 30,
   free_daily: 100,
   free_left: 70,
-  pass_cap: 2000,
-  pass_active: false,
-  pass_started_at: null,
-  pass_ends_at: null,
-  pass_used: null,
+  fair_use_cap: 300,
 };
 
 describe("admin console helpers (P3)", () => {
@@ -27,10 +26,11 @@ describe("admin console helpers (P3)", () => {
     expect(userLabel({ email: "", is_anonymous: true })).toBe("Anonymous");
   });
 
-  it("ledgerSummary shows free messages left, or the pass while one is active", () => {
-    expect(ledgerSummary(LEDGER)).toBe("70 of 100 free left today");
-    const onPass = { ...LEDGER, pass_active: true, pass_ends_at: "2026-09-25T04:30:00Z", pass_used: 12 };
-    expect(ledgerSummary(onPass)).toMatch(/^Pass until 25 Sept? 2026, 10:00, 12 of 2000 used$/);
+  it("ledgerSummary shows the trial with chats left today, no plan, or the paid tier", () => {
+    expect(ledgerSummary(LEDGER)).toMatch(/^Trial until 25 Sept? 2026, 10:00, 70 of 100 chats left today$/);
+    expect(ledgerSummary({ ...LEDGER, plan: "expired" })).toBe("No active plan");
+    expect(ledgerSummary({ ...LEDGER, plan: "max" })).toBe("Max");
+    expect(ledgerSummary({ ...LEDGER, plan: "ultra", plan_forced: true })).toBe("Ultra (forced)");
   });
 
   it("parseOverride: empty clears, whole numbers pass, anything else is refused", () => {
@@ -44,7 +44,7 @@ describe("admin console helpers (P3)", () => {
   it("auditLine describes each action with its old and new values", () => {
     expect(auditLine({ action: "set_slots", old_value: { slots_unlocked: 1 }, new_value: { slots_unlocked: 3 } })).toBe("Changed slots: 1 → 3");
     expect(auditLine({ action: "set_free_daily_override", old_value: { free_daily_override: null }, new_value: { free_daily_override: 5 } })).toBe(
-      "Changed free daily limit: default → 5"
+      "Changed trial daily chats: default → 5"
     );
     expect(auditLine({ action: "grant_pass", old_value: null, new_value: { hours: 24 } })).toBe("Granted a pass (24h)");
     expect(auditLine({ action: "force_logout", old_value: { sessions: 2 }, new_value: { sessions: 0 } })).toBe("Logged out everywhere (2 sessions)");

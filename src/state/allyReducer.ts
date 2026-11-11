@@ -1,13 +1,11 @@
-import type { AllyState, Answers, Companion, Gender, Ledger, Message, OnboardingFlow } from "@/state/schema";
-import { emptyAnswers, emptyCore, freshFlow } from "@/state/schema";
+import type { AllyState, Answers, Companion, Entitlement, Gender, Ledger, Message, OnboardingFlow } from "@/state/schema";
+import { emptyAnswers, emptyCore, freshEntitlement, freshFlow, freshLedger } from "@/state/schema";
 import { computeCore } from "@/lib/engine";
-import { MAX_COMPANIONS } from "@/lib/config";
 
 /*
  * P2 (spec D6): companions, messages and the ledger are server-owned. The
  * actions that change them (CONFIRM_LOCK, SEND_MESSAGE, RECEIVE_REPLY,
- * SEED_OPENER, OPEN_CHAT, PART_COMPANION, UNLOCK_SLOT, BUY_PASS,
- * LEDGER_SYNC, SET_NOTIFY, SET_SOUND) are dispatched only after the matching
+ * SEED_OPENER, OPEN_CHAT, PART_COMPANION, LEDGER_SYNC, SET_NOTIFY, SET_SOUND) are dispatched only after the matching
  * RPC in src/lib/supabase/queries.ts succeeds, and carry the server's
  * confirmed values. Nothing here computes a new ledger or companion on its
  * own. Onboarding flow and user preference actions stay purely local.
@@ -41,21 +39,20 @@ export type AllyAction =
   /** QA: a test companion added by qa_add_companion, merged by id (idempotent). */
   | { type: "ADD_COMPANION"; companion: Companion }
   | { type: "ROUTER_LOCK_CLEAR" }
-  | { type: "SEND_MESSAGE"; companionId: string; message: Message; exchanges: number; ledger: Ledger }
+  | { type: "SEND_MESSAGE"; companionId: string; message: Message; exchanges: number; ledger: Ledger; entitlement: Entitlement }
   | { type: "RECEIVE_REPLY"; companionId: string; message: Message }
   | { type: "SEED_OPENER"; companionId: string; message: Message }
   /** B3: an edited or deleted message, exactly as the server returned it. */
   | { type: "REPLACE_MESSAGE"; companionId: string; message: Message }
   | { type: "SET_CONSENT_VERSION"; version: string }
   | { type: "SET_REACTION"; companionId: string; messageId: number; reaction: string }
-  | { type: "LIVE_SYNC"; companionId: string; patch: Pick<Partial<Companion>, "trustLevel" | "levelChangedAt" | "pausedReason" | "lastCtxDay"> }
+  | { type: "LIVE_SYNC"; companionId: string; patch: Pick<Partial<Companion>, "trustLevel" | "levelChangedAt" | "pausedReason" | "lastCtxDay" | "deeperLevelAvailable" | "deeperShown"> }
   | { type: "OPEN_CHAT"; companionId: string; lastOpenedAt: number }
   | { type: "ACCOUNT_SAVE"; contact: string; kind: "phone" | "email"; now: number }
   | { type: "ACCOUNT_DISMISS" }
-  | { type: "UNLOCK_SLOT"; ledger: Ledger }
-  | { type: "BUY_PASS"; ledger: Ledger }
-  | { type: "LEDGER_SYNC"; ledger: Ledger }
-  | { type: "PART_COMPANION"; companionId: string; partedAt: number; purgeAt: number; ledger: Ledger }
+  /** The server's fresh ledger and/or entitlement (a blocked send, a QA refill, a purchase result). */
+  | { type: "LEDGER_SYNC"; ledger?: Ledger; entitlement?: Entitlement }
+  | { type: "PART_COMPANION"; companionId: string; partedAt: number; purgeAt: number; ledger: Ledger; entitlement: Entitlement }
   | { type: "PURGE_PARTED"; now: number }
   | { type: "SET_NOTIFY"; companionId: string; notify: boolean }
   | { type: "SET_SOUND"; companionId: string; sound: boolean }
@@ -219,6 +216,7 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
           exchanges: action.exchanges,
         })),
         ledger: action.ledger,
+        entitlement: action.entitlement,
       };
 
     case "RECEIVE_REPLY":
@@ -265,15 +263,14 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
     case "ACCOUNT_DISMISS":
       return { ...state, user: { ...state.user, accountDismissed: state.user.accountDismissed + 1 } };
 
-    case "UNLOCK_SLOT":
-    case "BUY_PASS":
     case "LEDGER_SYNC":
-      return { ...state, ledger: action.ledger };
+      return { ...state, ledger: action.ledger ?? state.ledger, entitlement: action.entitlement ?? state.entitlement };
 
     case "PART_COMPANION":
       return {
         ...updateCompanion(state, action.companionId, (c) => ({ ...c, status: "parted", partedAt: action.partedAt, purgeAt: action.purgeAt })),
         ledger: action.ledger,
+        entitlement: action.entitlement,
       };
 
     // Client-side mirror of ally_private.purge_parted() in the P2 migration.
@@ -307,13 +304,14 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
         savedAt: action.now,
         user: { displayName: "", consentAt: null, consentMarketing: false, accountAt: null, accountContact: null, accountKind: null, accountDismissed: 0, soundOn: true, unmuted: false },
         companions: [],
-        ledger: { slotsUnlocked: 1, unlocks: [], parted: [], day: state.ledger.day, freeUsed: 0, pass: null, passes: [] },
+        ledger: freshLedger(state.ledger.day),
+        entitlement: freshEntitlement(),
         flow: freshFlow("first", "consent"),
       };
 
     // Debug panel only: a companion the panel already created via create_companion.
     case "DEBUG_SEED_COMPANION":
-      if (state.companions.filter((c) => c.status === "active").length >= MAX_COMPANIONS) return state;
+      if (state.companions.filter((c) => c.status === "active").length >= state.entitlement.slotLimit) return state;
       return { ...state, companions: [...state.companions, action.companion] };
 
     default:

@@ -41,8 +41,17 @@ async function makeAnonymous(): Promise<TestUser> {
 const ANSWERS = { q5: 0, q6: 0, q7: 0, q8: 0, q9: 0, q10: "head", q11: ["music"], tb: null };
 const CORE = { primary: "PSYCH", secondary: null, weight: 100, ranked: [{ id: "PSYCH", score: 9 }] };
 
-async function unlock(u: TestUser, slots: number) {
-  const { error } = await admin.from("ledgers").upsert({ user_id: u.id, day: "2026-01-01", slots_unlocked: slots });
+/** Puts a user on the plan with exactly this many Ally slots (1 is the trial, so nothing to do). */
+async function withSlots(u: TestUser, slots: 2 | 4) {
+  const plan = slots === 2 ? "max" : "ultra";
+  const { error } = await admin.rpc("set_subscription", {
+    p_user_id: u.id,
+    p_plan: plan,
+    p_status: "active",
+    p_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+    p_purchase_token: `tok-${u.id}`,
+    p_product_id: `ally_${plan}`,
+  });
   if (error) throw error;
 }
 
@@ -105,10 +114,9 @@ describe("merge_anonymous", () => {
   it("skips with reason full when the target is at the cap", async () => {
     const anon = await makeAnonymous();
     const target = await makeUser();
-    await unlock(target, 3);
+    await withSlots(target, 2);
     await createCompanion(target, "F01");
     await createCompanion(target, "F02");
-    await createCompanion(target, "F03");
     const extra = await createCompanion(anon, "F04");
 
     const { data } = await admin.rpc("merge_anonymous", { p_anon: anon.id, p_target: target.id });

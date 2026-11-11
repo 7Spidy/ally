@@ -6,9 +6,7 @@ export type SheetName =
   | "confirm"
   | "account"
   | "intro"
-  | "unlock"
   | "leave"
-  | "paywall"
   | "switcher"
   | "part"
   | "delete";

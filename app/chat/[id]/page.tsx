@@ -9,10 +9,10 @@ import { useManifest } from "@/state/useManifest";
 import { useToast } from "@/state/useToast";
 import { ManifestGate } from "@/components/ManifestGate";
 import { byId } from "@/lib/selectors";
-import { canSend, freeLeft, passActive } from "@/lib/ledger";
-import { openerFor, replyFor, COPY } from "@/lib/copy";
+import { composerGate, isSendCode, lockedCompanionIds } from "@/lib/entitlement";
+import { openerFor, replyFor, COPY, fill } from "@/lib/copy";
 import { firstNameFromFull } from "@/lib/engine";
-import { dayKey, now, serverNow } from "@/lib/clock";
+import { dayKey, now } from "@/lib/clock";
 import { BLOCK_DAYS, LIVE_CONSENT_VERSION } from "@/lib/config";
 import * as heart from "@/lib/heart";
 import { loadPersona } from "@/personas/lazy";
@@ -22,6 +22,7 @@ import {
   clearAgeCheck,
   insertConsent,
   markCtxShown,
+  markDeeperShown,
   deleteMessage,
   editMessage,
   openChat,
@@ -36,7 +37,7 @@ import {
 import type { Message, Pressure } from "@/state/schema";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
-import { Composer, type ComposerVariant } from "@/components/Composer";
+import { Composer, type PlansFrom } from "@/components/Composer";
 import { ContextCard } from "@/components/chat/ContextCard";
 import { LevelBadge } from "@/components/chat/LevelBadge";
 import { useLevelBadge } from "@/components/chat/useLevelBadge";
@@ -73,6 +74,7 @@ function ChatContent() {
   const showToast = useToast();
 
   const companion = byId(state, id);
+  const locked = companion ? lockedCompanionIds(state.companions, state.entitlement.slotLimit).has(companion.id) : false;
   const template = companion ? templates.find((t) => t.id === companion.templateId) : undefined;
   // The server decides (ally_private.is_live); the client never recomputes it.
   const live = companion?.live === true;
@@ -104,6 +106,8 @@ function ChatContent() {
   const [failedMode, setFailedMode] = useState<"reply" | "opener" | null>(null);
   const [screenFx, setScreenFx] = useState<ScreenKind | null>(null);
   const [ageError, setAgeError] = useState(false);
+  // Plans: the one-time "deeper level" banner, decided when the chat is opened.
+  const [deeperBanner, setDeeperBanner] = useState(false);
   // B3: the message menu, the reply and edit being written.
   const [actionsFor, setActionsFor] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<{ id: number } | null>(null);
@@ -147,6 +151,14 @@ function ChatContent() {
     const isFirstOpenEver = companion.messages.length === 0 && companion.lastOpenedAt === companion.createdAt;
     dividerBeforeAtRef.current = isFirstOpenEver ? null : companion.lastOpenedAt;
     const companionId = companion.id;
+
+    // The stored trust is past this plan's ceiling: say so once for this companion. Its row on the plans screen stays.
+    if (companion.deeperLevelAvailable && !companion.deeperShown) {
+      setDeeperBanner(true);
+      markDeeperShown(companionId)
+        .then(() => dispatch({ type: "LIVE_SYNC", companionId, patch: { deeperShown: true } }))
+        .catch(() => {});
+    }
 
     if (companion.live) {
       const t = now();
@@ -204,7 +216,11 @@ function ChatContent() {
       dispatch({
         type: "LIVE_SYNC",
         companionId,
-        patch: { trustLevel: r.trustLevel, ...(r.paused ? { pausedReason: "age_check" as const } : {}) },
+        patch: {
+          trustLevel: r.trustLevel,
+          ...(r.deeperLevelAvailable !== undefined ? { deeperLevelAvailable: r.deeperLevelAvailable } : {}),
+          ...(r.paused ? { pausedReason: "age_check" as const } : {}),
+        },
       });
       if (r.resourceCard) setResourceOpen(true);
       if (r.screen && aliveRef.current) setScreenFx(r.screen);
@@ -268,7 +284,8 @@ function ChatContent() {
     if (companion.messages.length > 0) return;
     if (!companion.core.primary) return;
     if (live) {
-      if (needsConsent) return;
+      // A paused companion (expired plan, or outside the plan's slots) takes no new messages, so no opener either.
+      if (needsConsent || locked || state.entitlement.plan === "expired") return;
       seededRef.current = true;
       void fetchAndPlay(companion.id, "opener");
       return;
@@ -288,7 +305,7 @@ function ChatContent() {
         showToast(rpcErrorMessage(e));
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companion?.id, companion?.messages.length, live, needsConsent, state.user.consentVersion, state.user.displayName]);
+  }, [companion?.id, companion?.messages.length, live, needsConsent, locked, state.entitlement.plan, state.user.consentVersion, state.user.displayName]);
 
   // Account sheet nudge, spec §8.1's exchange-count rule applied to THIS
   // chat's companion (see report — the spec literally says
@@ -334,11 +351,13 @@ function ChatContent() {
     }
     setReplyTo(null);
     if (res.blocked || !res.message) {
-      // Out of messages server-side: show the matching bar or paywall state.
-      dispatch({ type: "LEDGER_SYNC", ledger: res.ledger });
+      // Refused server-side (TRIAL_LIMIT, PLAN_EXPIRED, FAIR_USE_CAP or COMPANION_LOCKED): the fresh
+      // entitlement makes the composer show the matching bar.
+      dispatch({ type: "LEDGER_SYNC", ledger: res.ledger, entitlement: res.entitlement });
+      if (!isSendCode(res.status)) showToast(COPY.auth.network);
       return;
     }
-    dispatch({ type: "SEND_MESSAGE", companionId, message: res.message, exchanges: res.exchanges, ledger: res.ledger });
+    dispatch({ type: "SEND_MESSAGE", companionId, message: res.message, exchanges: res.exchanges, ledger: res.ledger, entitlement: res.entitlement });
     if (live) {
       void fetchAndPlay(companionId, "reply", res.message.id);
       return;
@@ -482,14 +501,8 @@ function ChatContent() {
     router.replace("/blocked");
   }
 
-  // Ledger state is judged on the server's clock (spec D8), never the debug clock.
-  const status = canSend(state.ledger, serverNow());
-  const onPass = passActive(state.ledger, serverNow());
-  const n = freeLeft(state.ledger, serverNow());
-  let variant: ComposerVariant = "normal";
-  if (status === "capped") variant = "capped";
-  else if (status === "empty") variant = "empty";
-  else if (!onPass && n === 1) variant = "oneLeft";
+  // What the composer shows comes from the entitlement the server sent, never from the device clock.
+  const variant = composerGate(state.entitlement, locked);
 
   const firstName = firstNameFromFull(template.name);
   const paused = companion.pausedReason === "age_check";
@@ -509,6 +522,16 @@ function ChatContent() {
       {levelBadge && persona && <LevelBadge name={persona.levels[Math.min(5, Math.max(0, (companion.trustLevel ?? 1) - 1))].name} level={companion.trustLevel ?? 1} />}
       {/* The badge goes first; a due context card waits until it has gone. */}
       {ctxCard && !levelBadge && <ContextCard title={ctxCard.title} line={ctxCard.line} onGone={() => setCtxCard(null)} />}
+      {deeperBanner && (
+        <div className={styles.deeper} role="status" data-testid="deeper-banner">
+          <button type="button" className={styles.deeperLink} onClick={() => router.push("/plans?from=deep")}>
+            {fill(COPY.chat.deeperBanner, { name: firstName })}
+          </button>
+          <button type="button" className={styles.deeperClose} aria-label={COPY.plans.close} onClick={() => setDeeperBanner(false)}>
+            ×
+          </button>
+        </div>
+      )}
       {showOverflow && (
         <div className={styles.overflowMenu} role="menu">
           <button
@@ -549,9 +572,8 @@ function ChatContent() {
       {!paused && (
         <Composer
           variant={variant}
-          persona={firstName}
           onSend={(text) => void handleSend(text)}
-          onOpenPaywall={() => openSheet("paywall")}
+          onOpenPlans={(from: PlansFrom) => router.push(`/plans?from=${from}`)}
           replyingTo={replyTarget ? { label: replyTarget.who === "me" ? COPY.chat.quoteYou : firstName, text: replyTarget.text } : null}
           onCancelReply={() => setReplyTo(null)}
           editing={editing}
@@ -586,7 +608,7 @@ function ChatContent() {
             setQaCelebrate(trustLevel > (companion.trustLevel ?? 1) ? trustLevel : null);
             dispatch({ type: "LIVE_SYNC", companionId: companion.id, patch: { trustLevel, levelChangedAt } });
           }}
-          onLedger={(ledger) => dispatch({ type: "LEDGER_SYNC", ledger })}
+          onLedger={(ledger, entitlement) => dispatch({ type: "LEDGER_SYNC", ledger, entitlement })}
           onAdded={(c) => dispatch({ type: "ADD_COMPANION", companion: c })}
           onClose={() => setQaOpen(false)}
           onToast={showToast}

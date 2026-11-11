@@ -23,14 +23,58 @@ describe("copy", () => {
     const all = collectStrings(COPY);
     const expected = [
       "{n} left today",
-      "Day pass until {time}",
+      "Free trial, {n} days left",
+      "Free trial, 1 day left",
+      "Free trial, last day",
+      "That's four",
+      "Four Allys is the most Ally keeps at once. Part ways with one to make room for someone new.",
+      "Choose a plan",
+      "Out of chats for today. Choose a plan to keep going.",
+      "Your free week is over. Choose a plan.",
+      "You have reached today's fair-use limit. It resets at midnight.",
+      "This Ally is paused on your current plan.",
+      "There is a deeper level with {name}.",
+      "No active plan",
+      "{n} days left of your free week.",
+      "Subscribe now and your Ally never has to wait.",
+      "You have {n} chats left today.",
+      "Pick a plan to keep the conversation going.",
+      "Your free week is over.",
+      "Pick a plan to keep talking to your Ally. Your chats are saved.",
+      "Room for another Ally.",
+      "Meet someone new without leaving the Ally you already have.",
+      "There is a deeper level.",
+      "Ultra unlocks the closest level of every bond, with every Ally.",
+      "Choose your plan.",
+      "Switch or cancel any time from Google Play.",
+      "Day {day} of {total}, free trial",
+      "{n} of {total} trial chats left today",
+      "For daily talkers",
+      "Unlimited chats",
+      "1 Ally",
+      "Room for a second Ally",
+      "Everything in Pro",
+      "2 Allys, each with their own memory",
+      "The full experience",
+      "Everything in Max",
+      "4 Allys",
+      "The deepest level with every Ally",
+      "Continue with {tier}, {price} a month",
+      "Current plan",
+      "Switch to {tier}",
+      "Get Ally on Google Play",
+      "Maybe later",
+      "Read your chats",
+      "Restore purchase",
+      "Manage in Google Play",
+      "Your plan",
+      "Billed monthly by Google Play. Prices include GST. Cancel any time in the Play Store. Fair use applies to unlimited chats.",
+      "Payment did not go through. Try again.",
       "{n} new",
       "Meet someone new",
       "A few questions, a new face. They won't know about each other.",
       "A few questions, a new face.",
       "Start",
-      "That's three",
-      "Three companions is the most Ally keeps at once.",
       "You've met everyone",
       "There are no new faces left to meet.",
       "Someone new",
@@ -38,13 +82,6 @@ describe("copy", () => {
       "{a} won't know. Nothing you tell one companion ever reaches another.",
       "{a} and {b} won't know. Nothing you tell one companion ever reaches another.",
       "Not now",
-      "Make room for someone new",
-      "A second companion is a one-time unlock. The slot stays yours.",
-      "A third companion is a one-time unlock. The slot stays yours.",
-      "One-time",
-      "₹{price}",
-      "Unlock with UPI",
-      "Unlocked. Let's find them.",
       "Things may have changed since last time",
       "No new faces left here",
       "Leave?",
@@ -53,14 +90,6 @@ describe("copy", () => {
       "Leave",
       "Since you left",
       "1 free message left today",
-      "Get a day pass",
-      "You're out of free messages for today",
-      "{persona}'s done for the night. Back tomorrow.",
-      "Out of messages for today",
-      "Free messages come back at midnight. Or keep talking now.",
-      "Day pass, 24 hours",
-      "Wait till tomorrow",
-      "Day pass on until {time}.",
       "Switch to",
       "Here now",
       "Home",
@@ -81,9 +110,6 @@ describe("copy", () => {
       "Name",
       "Signed in with",
       "Email",
-      "Free",
-      "Day pass",
-      "Until {time}",
       "Privacy and data",
       "How Ally works",
       "Ally is an AI. Every character here is fictional.",
@@ -114,12 +140,19 @@ describe("copy", () => {
   const OLD_CORE_IDS = ["KIAAN", "MEHER", "ANANYA", "VEER", "PRIYA", "ANAY"];
   const banned = ["%", "score", "level", "2000"];
 
+  // The plans copy has to say "deeper level" (the spec's own wording). It never carries a number or "L6".
+  const DEEPER_LEVEL = /\b(deeper|deepest|closest) level\b/;
+
   function expectNoLeak(label: string, strings: string[]) {
     for (const s of strings) {
       for (const id of [...CORE_IDS, ...OLD_CORE_IDS]) {
         expect(s.includes(id), `${label}: "${s}" must not contain the core id ${id}`).toBe(false);
       }
       for (const b of banned) {
+        if (b === "level" && DEEPER_LEVEL.test(s)) {
+          expect(/\bL\d\b|level \d/i.test(s), `${label}: "${s}" must not name a level number`).toBe(false);
+          continue;
+        }
         expect(s.toUpperCase().includes(b.toUpperCase()), `${label}: "${s}" must not contain "${b}"`).toBe(false);
       }
     }

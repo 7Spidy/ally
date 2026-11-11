@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { allyReducer } from "@/state/allyReducer";
-import { freshState, freshLedger, emptyAnswers, type AllyState, type Companion, type Ledger } from "@/state/schema";
+import { freshState, freshLedger, emptyAnswers, type AllyState, type Companion, type Entitlement, type Ledger } from "@/state/schema";
 import { localOnly } from "@/lib/migrate";
 
 // P2 (spec D6, §6.2): server-owned actions apply the RPC's confirmed values
@@ -38,26 +38,40 @@ function stateWith(c: Companion): AllyState {
 const serverLedger: Ledger = {
   ...freshLedger(DAY),
   freeUsed: 37,
-  slotsUnlocked: 2,
-  unlocks: [{ slot: 2, at: NOW, amount: 199 }],
   parted: ["M04"],
+};
+
+const serverEntitlement: Entitlement = {
+  plan: "max",
+  trialEndsAt: null,
+  trialDay: null,
+  slotLimit: 2,
+  maxLevel: 5,
+  canSend: true,
+  chatsLeftToday: null,
+  capReached: false,
 };
 
 describe("allyReducer: server-confirmed actions", () => {
   it("SEND_MESSAGE appends the returned message and takes exchanges and ledger from the server", () => {
     const s = stateWith(companion({ exchanges: 4 }));
     const message = { who: "me" as const, text: "hi", at: NOW + 5 };
-    const next = allyReducer(s, { type: "SEND_MESSAGE", companionId: "c_test", message, exchanges: 9, ledger: serverLedger });
+    const next = allyReducer(s, { type: "SEND_MESSAGE", companionId: "c_test", message, exchanges: 9, ledger: serverLedger, entitlement: serverEntitlement });
     expect(next.companions[0].messages).toEqual([message]);
     expect(next.companions[0].exchanges).toBe(9); // not 4 + 1
     expect(next.ledger).toBe(serverLedger);
+    expect(next.entitlement).toBe(serverEntitlement);
   });
 
-  it("LEDGER_SYNC (a blocked send) replaces only the ledger", () => {
+  it("LEDGER_SYNC (a blocked send) replaces only the ledger and entitlement", () => {
     const s = stateWith(companion());
-    const next = allyReducer(s, { type: "LEDGER_SYNC", ledger: serverLedger });
+    const next = allyReducer(s, { type: "LEDGER_SYNC", ledger: serverLedger, entitlement: serverEntitlement });
     expect(next.ledger).toBe(serverLedger);
+    expect(next.entitlement).toBe(serverEntitlement);
     expect(next.companions).toBe(s.companions);
+    // either half may be sent alone
+    expect(allyReducer(s, { type: "LEDGER_SYNC", entitlement: serverEntitlement }).ledger).toBe(s.ledger);
+    expect(allyReducer(s, { type: "LEDGER_SYNC", ledger: serverLedger }).entitlement).toBe(s.entitlement);
   });
 
   it("RECEIVE_REPLY appends the stored reply and bumps unread", () => {
@@ -89,16 +103,18 @@ describe("allyReducer: server-confirmed actions", () => {
       partedAt: NOW,
       purgeAt: NOW + 123,
       ledger: serverLedger,
+      entitlement: serverEntitlement,
     });
     expect(next.companions[0]).toMatchObject({ status: "parted", partedAt: NOW, purgeAt: NOW + 123 });
     expect(next.ledger).toBe(serverLedger);
+    expect(next.entitlement).toBe(serverEntitlement);
   });
 
-  it("UNLOCK_SLOT and BUY_PASS replace the ledger with the server's", () => {
+  it("the old UNLOCK_SLOT and BUY_PASS actions are gone", () => {
     const s = stateWith(companion());
-    expect(allyReducer(s, { type: "UNLOCK_SLOT", ledger: serverLedger }).ledger).toBe(serverLedger);
-    const withPass = { ...serverLedger, pass: { startedAt: NOW, endsAt: NOW + 1, used: 0 } };
-    expect(allyReducer(s, { type: "BUY_PASS", ledger: withPass }).ledger).toBe(withPass);
+    const gone = (type: string) => allyReducer(s, { type, ledger: serverLedger } as never);
+    expect(gone("UNLOCK_SLOT")).toBe(s);
+    expect(gone("BUY_PASS")).toBe(s);
   });
 
   it("CONFIRM_LOCK appends the server companion, clears the flow and keeps the flow's display name", () => {

@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { FREE_DAILY, MAX_COMPANIONS, PASS_CAP, PASS_HOURS } from "@/lib/config";
+import { HIDDEN_DAILY_CAPS, PLAN_CONFIG } from "@/lib/config";
+
+const FREE_DAILY = PLAN_CONFIG.trial.dailyChats;
 
 // P3 admin console (supabase/migrations/20260925000001_admin_console.sql),
 // against the local Supabase stack (`npm run db:start`, `npm run e2e:env`).
@@ -67,18 +69,29 @@ async function auditRows(target: string) {
 async function ledgerRow(uid: string) {
   const { data, error } = await service.from("ledgers").select("*").eq("user_id", uid).maybeSingle();
   if (error) throw error;
-  return data as { free_used: number; slots_unlocked: number; pass_used: number | null; pass_started_at: string | null; pass_ends_at: string | null } | null;
+  return data as { free_used: number } | null;
+}
+
+/** The server-side entry point a verified Play purchase would use (service role only). */
+async function grantPlan(uid: string, plan: "pro" | "max" | "ultra"): Promise<void> {
+  const { error } = await service.rpc("set_subscription", {
+    p_user_id: uid,
+    p_plan: plan,
+    p_status: "active",
+    p_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+    p_purchase_token: `tok-${uid}`,
+    p_product_id: `ally_${plan}`,
+  });
+  if (error) throw new Error(`set_subscription: ${error.code} ${error.message}`);
 }
 
 const ADMIN_RPCS: [string, (target: string) => Record<string, unknown>][] = [
   ["admin_list_users", () => ({})],
   ["admin_get_user", (t) => ({ target: t })],
   ["admin_set_status", (t) => ({ target: t, status: "suspended" })],
-  ["admin_set_slots", (t) => ({ target: t, slots: 3 })],
   ["admin_set_free_daily_override", (t) => ({ target: t, value: 999 })],
   ["admin_set_pass_cap_override", (t) => ({ target: t, value: 999 })],
-  ["admin_grant_pass", (t) => ({ target: t })],
-  ["admin_end_pass", (t) => ({ target: t })],
+  ["admin_set_plan", (t) => ({ p_user_id: t, p_plan_or_state: "ultra" })],
 ];
 
 let admin: TestUser;
@@ -132,7 +145,7 @@ describe("access: only admins reach the admin RPCs and tables", () => {
 
   it("a non-admin can't read user_limits or admin_audit, not even rows about themselves", async () => {
     await rpc(admin, "admin_set_free_daily_override", { target: plain.id, value: 50 });
-    await rpc(admin, "admin_set_slots", { target: plain.id, slots: 2 });
+    await rpc(admin, "admin_set_pass_cap_override", { target: plain.id, value: 500 });
     for (const table of ["user_limits", "admin_audit"]) {
       const own = await plain.client.from(table).select("*");
       expect(own.error, table).toBeNull();
@@ -217,7 +230,7 @@ describe("admin_list_users and admin_get_user", () => {
       role: "user",
       companion_count: 1,
       message_count: 1,
-      ledger: { slots_unlocked: 1, free_used: 1, free_daily: FREE_DAILY, free_left: FREE_DAILY - 1, pass_active: false, pass_cap: PASS_CAP },
+      ledger: { plan: "trial", plan_forced: false, slot_limit: 1, free_used: 1, free_daily: FREE_DAILY, free_left: FREE_DAILY - 1, fair_use_cap: HIDDEN_DAILY_CAPS.ultra },
     });
     expect(typeof users[0].created_at).toBe("string");
     expect(typeof users[0].last_sign_in_at).toBe("string");
@@ -228,7 +241,7 @@ describe("admin_list_users and admin_get_user", () => {
     expect(detail.companions).toEqual([
       expect.objectContaining({ id: targetCompanion, template_id: "F01", status: "active", exchanges: 1, message_count: 1 }),
     ]);
-    expect(detail.defaults).toEqual({ free_daily: FREE_DAILY, pass_cap: PASS_CAP, pass_hours: PASS_HOURS, max_companions: MAX_COMPANIONS });
+    expect(detail.defaults).toEqual({ free_daily: FREE_DAILY, fair_use_cap: HIDDEN_DAILY_CAPS.ultra, trial_days: PLAN_CONFIG.trialDays });
     expect(JSON.stringify(detail)).not.toContain("a private thought");
   });
 
@@ -258,49 +271,51 @@ describe("admin writes are applied and audited", () => {
     expect(error?.message).toBe("cannot_suspend_self");
   });
 
-  it("admin_set_slots creates the ledger if absent, validates the range and logs old/new", async () => {
-    const u = await makeUser("slots");
-    expect(await ledgerRow(u.id)).toBeNull();
-    await rpc(admin, "admin_set_slots", { target: u.id, slots: 3 });
-    expect((await ledgerRow(u.id))?.slots_unlocked).toBe(3);
-    for (const bad of [0, MAX_COMPANIONS + 1]) {
-      const { error } = await admin.client.rpc("admin_set_slots", { target: u.id, slots: bad });
-      expect(error?.code, String(bad)).toBe("22023");
+  it("admin_set_plan forces a trial day, expired, or a paid plan on a user, validates input and logs old/new", async () => {
+    const u = await makeUser("plan");
+    type Forced = { changed: boolean; entitlement: { plan: string; trial_day: number | null; slot_limit: number } };
+
+    const day4 = await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: "trial", p_trial_day: 4 });
+    expect(day4.entitlement).toMatchObject({ plan: "trial", trial_day: 4, slot_limit: 1 });
+    const day7 = await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: "trial", p_trial_day: 7 });
+    expect(day7.entitlement).toMatchObject({ plan: "trial", trial_day: 7 });
+    const day8 = await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: "trial", p_trial_day: 8 });
+    expect(day8.entitlement.plan).toBe("expired"); // day 8 is the first day after the free week
+    expect((await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: "expired" })).entitlement).toMatchObject({ plan: "expired", slot_limit: 0 });
+    for (const [plan, slots] of [["pro", 1], ["max", 2], ["ultra", 4]] as const) {
+      const r = await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: plan });
+      expect(r.entitlement, plan).toMatchObject({ plan, slot_limit: slots });
     }
-    expect((await auditRows(u.id)).map((r) => [r.action, r.old_value, r.new_value])).toEqual([
-      ["set_slots", { slots_unlocked: 1 }, { slots_unlocked: 3 }],
-    ]);
-    // The user can now actually hold three companions.
-    for (const t of ["F02", "F03", "F04"]) await rpc(u, "create_companion", createArgs(t));
+    // what the user sees for themselves agrees
+    const state = await rpc<{ entitlement: { plan: string } }>(u, "get_my_state");
+    expect(state.entitlement.plan).toBe("ultra");
+
+    for (const bad of [{ p_plan_or_state: "gold" }, { p_plan_or_state: "trial", p_trial_day: 0 }, { p_plan_or_state: "trial", p_trial_day: 9 }]) {
+      const { error } = await admin.client.rpc("admin_set_plan", { p_user_id: u.id, ...bad });
+      expect(error?.code, JSON.stringify(bad)).toBe("22023");
+    }
+    const rows = await auditRows(u.id);
+    expect(rows.every((r) => r.action === "set_plan" && r.actor_id === admin.id)).toBe(true);
+    expect(rows[0]).toMatchObject({ old_value: { plan: "trial" }, new_value: { plan: "trial", trial_day: 4 } });
   });
 
-  it("admin_grant_pass starts a default-length pass with an amount-0 ledger_passes row; admin_end_pass ends it", async () => {
-    const u = await makeUser("pass");
-    const noPass = await rpc<{ changed: boolean }>(admin, "admin_end_pass", { target: u.id });
-    expect(noPass.changed).toBe(false);
+  it("an admin bypasses every limit until they force a plan on themselves, and 'admin' hands the bypass back", async () => {
+    const adm = await makeAdmin("planadmin");
+    type Ent = { entitlement: { plan: string; can_send: boolean; slot_limit: number } };
+    const base = await rpc<{ entitlement: Ent["entitlement"] }>(adm, "get_my_state");
+    expect(base.entitlement).toMatchObject({ can_send: true });
+    expect(base.entitlement.slot_limit).toBeGreaterThan(PLAN_CONFIG.tiers.ultra.slots);
 
-    await rpc(admin, "admin_grant_pass", { target: u.id });
-    const row = await ledgerRow(u.id);
-    expect(row?.pass_used).toBe(0);
-    expect(Date.parse(row!.pass_ends_at!) - Date.parse(row!.pass_started_at!)).toBe(PASS_HOURS * 3600000);
-    const { data: passes } = await service.from("ledger_passes").select("amount").eq("user_id", u.id);
-    expect(passes).toEqual([{ amount: 0 }]);
+    const c = await rpc<{ id: string }>(adm, "create_companion", createArgs("F09"));
+    await rpc(adm, "admin_set_plan", { p_user_id: adm.id, p_plan_or_state: "expired" });
+    const blocked = await rpc<{ blocked: boolean; status: string }>(adm, "send_message", { companion_id: c.id, body: "x" });
+    expect(blocked).toMatchObject({ blocked: true, status: "PLAN_EXPIRED" });
+    const { error } = await adm.client.rpc("create_companion", createArgs("F10"));
+    expect(error?.message).toBe("SLOT_LIMIT");
 
-    // The user's own view of the ledger reflects it.
-    const state = await rpc<{ ledger: { pass: { used: number; endsAt: number } | null } }>(u, "get_my_state");
-    expect(state.ledger.pass?.used).toBe(0);
-    expect(state.ledger.pass!.endsAt).toBeGreaterThan(Date.now());
-
-    const ended = await rpc<{ changed: boolean; ledger: { pass_active: boolean } }>(admin, "admin_end_pass", { target: u.id });
-    expect(ended).toMatchObject({ changed: true, ledger: { pass_active: false } });
-    const after = await rpc<{ ledger: { pass: { endsAt: number } } }>(u, "get_my_state");
-    expect(after.ledger.pass.endsAt).toBeLessThanOrEqual(Date.now());
-
-    // One grant and one end logged; the no-op end before the grant was not.
-    expect((await auditRows(u.id)).map((r) => r.action)).toEqual(["grant_pass", "end_pass"]);
-
-    const { error } = await admin.client.rpc("admin_grant_pass", { target: u.id, hours: 0 });
-    expect(error?.code).toBe("22023");
+    await rpc(adm, "admin_set_plan", { p_user_id: adm.id, p_plan_or_state: "admin" });
+    const ok = await rpc<{ blocked: boolean }>(adm, "send_message", { companion_id: c.id, body: "x" });
+    expect(ok.blocked).toBe(false);
   });
 
   it("overrides upsert user_limits, a null clears one, and each change is logged", async () => {
@@ -333,7 +348,7 @@ describe("admin writes are applied and audited", () => {
 });
 
 describe("suspension is enforced by the P2 RPCs", () => {
-  it("a suspended user's send_message, create_companion, unlock_slot and buy_pass all fail; an active user's don't", async () => {
+  it("a suspended user's send_message and create_companion fail; an active user's don't", async () => {
     const u = await makeUser("suspended");
     const c = await rpc<{ id: string }>(u, "create_companion", createArgs("M01"));
     await rpc(admin, "admin_set_status", { target: u.id, status: "suspended" });
@@ -342,8 +357,6 @@ describe("suspension is enforced by the P2 RPCs", () => {
     const attempts: [string, Record<string, unknown> | undefined][] = [
       ["send_message", { companion_id: c.id, body: "blocked?" }],
       ["create_companion", createArgs("M02")],
-      ["unlock_slot", { amount: 199 }],
-      ["buy_pass", undefined],
     ];
     for (const [fn, args] of attempts) {
       const { error } = await u.client.rpc(fn, args);
@@ -365,9 +378,8 @@ describe("suspension is enforced by the P2 RPCs", () => {
     await rpc(admin, "admin_set_status", { target: u.id, status: "active" });
     const sent = await rpc<{ blocked: boolean }>(u, "send_message", { companion_id: c.id, body: "back" });
     expect(sent.blocked).toBe(false);
-    await rpc(u, "unlock_slot", { amount: 199 });
+    await grantPlan(u.id, "max");
     await rpc(u, "create_companion", createArgs("M02"));
-    await rpc(u, "buy_pass");
   });
 });
 
@@ -377,17 +389,17 @@ describe("limit overrides change send_message's real behaviour", () => {
     const c = await rpc<{ id: string }>(u, "create_companion", createArgs("F05"));
     await rpc(admin, "admin_set_free_daily_override", { target: u.id, value: 2 });
 
-    type Send = { blocked: boolean; status: string; ledger: { freeUsed: number; freeDaily: number } };
+    type Send = { blocked: boolean; status: string; ledger: { freeUsed: number }; entitlement: { chats_left_today: number | null } };
     const one = await rpc<Send>(u, "send_message", { companion_id: c.id, body: "1" });
-    expect(one).toMatchObject({ blocked: false, ledger: { freeUsed: 1, freeDaily: 2 } });
+    expect(one).toMatchObject({ blocked: false, ledger: { freeUsed: 1 }, entitlement: { chats_left_today: 1 } });
     await rpc(u, "send_message", { companion_id: c.id, body: "2" });
     const three = await rpc<Send>(u, "send_message", { companion_id: c.id, body: "3" });
-    expect(three).toMatchObject({ blocked: true, status: "empty" });
+    expect(three).toMatchObject({ blocked: true, status: "TRIAL_LIMIT" });
     expect((await ledgerRow(u.id))?.free_used).toBe(2);
 
     await rpc(admin, "admin_set_free_daily_override", { target: u.id, value: null });
     const again = await rpc<Send>(u, "send_message", { companion_id: c.id, body: "3 again" });
-    expect(again).toMatchObject({ blocked: false, ledger: { freeUsed: 3, freeDaily: FREE_DAILY } });
+    expect(again).toMatchObject({ blocked: false, ledger: { freeUsed: 3 }, entitlement: { chats_left_today: FREE_DAILY - 3 } });
   });
 
   it("a free_daily_override above the default lets a user past FREE_DAILY", async () => {
@@ -401,16 +413,16 @@ describe("limit overrides change send_message's real behaviour", () => {
     expect(ok).toMatchObject({ blocked: false, ledger: { freeUsed: FREE_DAILY + 1 } });
   });
 
-  it("a pass_cap_override caps an active pass at the override", async () => {
+  it("a pass_cap_override caps a paid plan's daily chats at the override (FAIR_USE_CAP)", async () => {
     const u = await makeUser("passcap");
+    await grantPlan(u.id, "pro");
     const c = await rpc<{ id: string }>(u, "create_companion", createArgs("F07"));
-    await rpc(admin, "admin_grant_pass", { target: u.id });
     await rpc(admin, "admin_set_pass_cap_override", { target: u.id, value: 1 });
-    type Send = { blocked: boolean; status: string; ledger: { passCap: number; pass: { used: number } } };
-    const first = await rpc<Send>(u, "send_message", { companion_id: c.id, body: "on pass" });
-    expect(first).toMatchObject({ blocked: false, ledger: { passCap: 1, pass: { used: 1 } } });
+    type Send = { blocked: boolean; status: string };
+    const first = await rpc<Send>(u, "send_message", { companion_id: c.id, body: "one" });
+    expect(first.blocked).toBe(false);
     const second = await rpc<Send>(u, "send_message", { companion_id: c.id, body: "over" });
-    expect(second).toMatchObject({ blocked: true, status: "capped" });
+    expect(second).toMatchObject({ blocked: true, status: "FAIR_USE_CAP" });
   });
 });
 

@@ -77,7 +77,8 @@ describe("migrate", () => {
     expect(c.createdAt).toBe(lockedAt);
     expect(c.lastOpenedAt).toBe(savedAt);
     expect(c.status).toBe("active");
-    expect(out.ledger.slotsUnlocked).toBe(1);
+    expect(out.ledger).toEqual({ parted: [], day: expect.any(String), freeUsed: 0 });
+    expect(out.entitlement.plan).toBe("trial"); // a placeholder until the server answers
     expect(out.flow).toBeNull();
   });
 

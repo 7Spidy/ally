@@ -94,7 +94,7 @@ function PartSheet({ companionId }: { companionId: string }) {
       // P2: part_companion sets the purge date and adds the face to the
       // permanent exclusion list server-side.
       const res = await partCompanion(companionId);
-      dispatch({ type: "PART_COMPANION", companionId, partedAt: res.partedAt, purgeAt: res.purgeAt, ledger: res.ledger });
+      dispatch({ type: "PART_COMPANION", companionId, partedAt: res.partedAt, purgeAt: res.purgeAt, ledger: res.ledger, entitlement: res.entitlement });
     } catch (e) {
       showToast(rpcErrorMessage(e));
       setBusy(false);

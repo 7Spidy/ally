@@ -7,6 +7,7 @@ import { localOnly, migrate, stateKeyFor, type RemovableStorage } from "@/lib/mi
 import { dayKey, now, setServerTime } from "@/lib/clock";
 import { assembleServerState, getMyState } from "@/lib/supabase/queries";
 import { useAuth } from "@/state/useAuth";
+import { installPurchaseResultHook } from "@/lib/billing";
 
 /** Delay before retrying a failed get_my_state on boot. */
 const LOAD_RETRY_MS = 3000;
@@ -153,7 +154,7 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
         const nowMs = now();
         // Only flow and user are read from the local blob (spec D1, §6.4).
         const local = localOnly(migrate(storage, nowMs, key), dayKey(nowMs));
-        const { companions, ledger } = assembleServerState(server);
+        const { companions, ledger, entitlement } = assembleServerState(server);
         // D7: the display name and consent come from profiles/consents when
         // the server has them (a new device has no local copy).
         const user = {
@@ -166,7 +167,7 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
         // A first-run flow can't coexist with companions (CONFIRM_LOCK clears
         // it); on a new device the fresh local blob would otherwise carry one.
         const flow = companions.length > 0 && local.flow?.kind === "first" ? null : local.flow;
-        dispatch({ type: "HYDRATE", state: { ...local, user, flow, companions, ledger } });
+        dispatch({ type: "HYDRATE", state: { ...local, user, flow, companions, ledger, entitlement } });
         // A permanent user logging in on a device where the account step never ran.
         if (!isAnonymous && email && user.accountAt === null) {
           dispatch({ type: "ACCOUNT_SAVE", contact: email, kind: "email", now: nowMs });
@@ -206,14 +207,20 @@ export function AllyProvider({ children }: { children: React.ReactNode }) {
   const reloadServerState = useCallback(async () => {
     const server = await getMyState();
     setServerTime(server.server_now);
-    const { companions, ledger } = assembleServerState(server);
+    const { companions, ledger, entitlement } = assembleServerState(server);
     const cur = stateRef.current;
     const flow = companions.length > 0 && cur.flow?.kind === "first" ? null : cur.flow;
     dispatch({
       type: "HYDRATE",
-      state: { ...cur, user: { ...cur.user, displayName: server.profile?.display_name || cur.user.displayName }, flow, companions, ledger },
+      state: { ...cur, user: { ...cur.user, displayName: server.profile?.display_name || cur.user.displayName }, flow, companions, ledger, entitlement },
     });
   }, []);
+
+  // The app-wide purchase hook: a success reported while no plans screen is open just refreshes the state.
+  useEffect(
+    () => installPurchaseResultHook({ refetchState: reloadServerState, onSuccess: () => {}, onError: () => {} }),
+    [reloadServerState]
+  );
 
   const ready = auth.ready && hydrated && owner === uid;
   const value = useMemo(

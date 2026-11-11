@@ -38,7 +38,8 @@ test.describe("E11 prefers-reduced-motion", () => {
       deckGender: "woman",
       createdAt: FIXED_NOW - 500000,
     });
-    const state = makeState({ companions: [companion] });
+    // A Max user: the second slot is free, so round two goes straight on.
+    const state = makeState({ companions: [companion], plan: "max" });
 
     await page.emulateMedia({ reducedMotion: "reduce" });
     await setClock(page, FIXED_NOW);
@@ -51,9 +52,6 @@ test.describe("E11 prefers-reduced-motion", () => {
     await page.getByRole("button", { name: "Start" }).click();
     const introDialog = page.getByRole("dialog");
     await introDialog.getByRole("button", { name: "Start" }).click();
-
-    await expect(page.getByText("Make room for someone new")).toBeVisible({ timeout: 5000 });
-    await page.getByRole("button", { name: "Unlock with UPI" }).click();
 
     await page.waitForURL("**/onboarding/gender");
     await page.getByRole("button", { name: "A man" }).click();

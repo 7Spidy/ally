@@ -1,3 +1,5 @@
+import { PLAN_CONFIG, type EffectivePlan } from "@/lib/config";
+
 export type CoreId = "ROMANTIC" | "PSYCH" | "MONEY" | "TRAINER" | "FRIEND";
 export type Pressure = "money" | "health" | "head" | "alone" | "notgood" | "change";
 export type Gender = "woman" | "man";
@@ -69,38 +71,37 @@ export interface Companion {
   lastCtxDay?: string | null;
   /** Server-computed: this companion replies from the live model (see ally_private.is_live). */
   live?: boolean;
+  /** Plans: the stored trust is past this plan's ceiling (trustLevel is clamped). */
+  deeperLevelAvailable?: boolean;
+  /** Plans: the "deeper level" chat banner has been shown for this companion. */
+  deeperShown?: boolean;
 }
 
-export interface LedgerUnlock {
-  slot: number;
-  at: number;
-  amount: number;
-}
-
-export interface LedgerPass {
-  startedAt: number;
-  endsAt: number;
-  used: number;
-}
-
-export interface LedgerPassHistory {
-  startedAt: number;
-  amount: number;
-}
-
+/**
+ * What is left of the old ledger: the Asia/Kolkata day, how many chats were
+ * sent that day, and the faces that were parted. The plan, the allowance and
+ * the slots now come from the server as an `Entitlement`.
+ */
 export interface Ledger {
-  slotsUnlocked: number; // 1..3
-  unlocks: LedgerUnlock[];
   parted: string[]; // templateIds, permanent
   day: string; // Asia/Kolkata YYYY-MM-DD
   freeUsed: number;
-  /** P3: this user's effective limits, sent by the server (an admin override,
-   * else the global default). Absent in a locally built ledger, where
-   * FREE_DAILY / PASS_CAP apply. */
-  freeDaily?: number;
-  passCap?: number;
-  pass: LedgerPass | null;
-  passes: LedgerPassHistory[];
+}
+
+/** What the caller's plan allows, from the server (get_my_state / get_entitlement). Never trusted from storage. */
+export interface Entitlement {
+  plan: EffectivePlan;
+  /** Epoch ms. Set on the trial only. */
+  trialEndsAt: number | null;
+  /** 1..7 on the trial, else null. */
+  trialDay: number | null;
+  slotLimit: number;
+  /** Highest trust level the engine uses for this plan. */
+  maxLevel: number;
+  canSend: boolean;
+  /** Set on the trial only. A paid plan's hidden cap is never sent. */
+  chatsLeftToday: number | null;
+  capReached: boolean;
 }
 
 export interface OnboardingFlow {
@@ -150,6 +151,7 @@ export interface AllyState {
   user: AllyUser;
   companions: Companion[];
   ledger: Ledger;
+  entitlement: Entitlement;
   flow: OnboardingFlow | null;
 }
 
@@ -190,14 +192,20 @@ export function freshFlow(kind: "first" | "round2", step: string): OnboardingFlo
 }
 
 export function freshLedger(day: string): Ledger {
+  return { parted: [], day, freeUsed: 0 };
+}
+
+/** The placeholder before the server has answered: a new user on day 1 of the trial. Replaced on hydrate. */
+export function freshEntitlement(): Entitlement {
   return {
-    slotsUnlocked: 1,
-    unlocks: [],
-    parted: [],
-    day,
-    freeUsed: 0,
-    pass: null,
-    passes: [],
+    plan: "trial",
+    trialEndsAt: null,
+    trialDay: 1,
+    slotLimit: PLAN_CONFIG.trial.slots,
+    maxLevel: PLAN_CONFIG.trial.maxLevel,
+    canSend: true,
+    chatsLeftToday: PLAN_CONFIG.trial.dailyChats,
+    capReached: false,
   };
 }
 
@@ -218,6 +226,7 @@ export function freshState(nowMs: number, day: string): AllyState {
     },
     companions: [],
     ledger: freshLedger(day),
+    entitlement: freshEntitlement(),
     flow: freshFlow("first", "consent"),
   };
 }

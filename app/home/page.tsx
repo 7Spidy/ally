@@ -8,7 +8,6 @@ import { ManifestGate } from "@/components/ManifestGate";
 import { active, lastOpened } from "@/lib/selectors";
 import { deckTemplates } from "@/lib/engine";
 import { excludedFaces } from "@/lib/selectors";
-import { serverNow } from "@/lib/clock";
 import { addCardState } from "@/lib/addCard";
 import { HomeBar } from "@/components/HomeBar";
 import { CompanionCard } from "@/components/CompanionCard";
@@ -38,7 +37,7 @@ function HomeContent() {
   const bothPoolsEmpty =
     deckTemplates(templates, "woman", excluded).length === 0 &&
     deckTemplates(templates, "man", excluded).length === 0;
-  const addKind = addCardState(activeList.length, bothPoolsEmpty);
+  const addKind = addCardState(activeList.length, bothPoolsEmpty, state.entitlement);
 
   const items = useMemo(
     () => [
@@ -98,7 +97,7 @@ function HomeContent() {
 
   return (
     <div className={styles.page}>
-      <HomeBar ledger={state.ledger} now={serverNow()} displayName={state.user.displayName} />
+      <HomeBar entitlement={state.entitlement} displayName={state.user.displayName} />
       <div className={styles.carouselWrap}>
         <div className={styles.carousel} ref={carouselRef} onScroll={handleScroll}>
           {items.map((item) => (

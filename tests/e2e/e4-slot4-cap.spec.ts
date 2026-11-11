@@ -14,14 +14,12 @@ import {
   acceptLiveConsent,
 } from "./helpers";
 
-test.describe("E4 third companion hits slot-3 unlock, then home shows cap card", () => {
-  test("E4: slot-3 unlock at the higher price -> lock third companion -> cap card", async ({ page }) => {
+test.describe("E4 fourth companion fills Ultra, then home shows the cap card", () => {
+  test("E4: Ultra user adds the fourth Ally -> cap card says part ways to make room", async ({ page }) => {
     const c1 = makeCompanion({ id: "c_e4a", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 900000 });
     const c2 = makeCompanion({ id: "c_e4b", templateId: "M01", deckGender: "man", createdAt: FIXED_NOW - 800000 });
-    const state = makeState({
-      companions: [c1, c2],
-      ledger: { slotsUnlocked: 2, unlocks: [{ slot: 2, at: FIXED_NOW - 850000, amount: 199 }] },
-    });
+    const c3 = makeCompanion({ id: "c_e4c", templateId: "M02", deckGender: "man", createdAt: FIXED_NOW - 700000 });
+    const state = makeState({ companions: [c1, c2, c3], plan: "ultra" });
 
     await setClock(page, FIXED_NOW);
     const userId = await seedState(page, state);
@@ -34,12 +32,7 @@ test.describe("E4 third companion hits slot-3 unlock, then home shows cap card",
     const introDialog = page.getByRole("dialog");
     await introDialog.getByRole("button", { name: "Start" }).click();
 
-    // slot-3 unlock, higher price than slot-2's 199
-    await expect(page.getByText("Make room for someone new")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("₹349")).toBeVisible();
-    await screenshotScreen(page, "e4-01-unlock-slot3");
-    await page.getByRole("button", { name: "Unlock with UPI" }).click();
-
+    // Ultra has a fourth slot free: straight on, no plans screen
     await page.waitForURL("**/onboarding/gender");
     await page.getByRole("button", { name: "A woman" }).click();
     await answerSevenQuestions(page);
@@ -67,18 +60,14 @@ test.describe("E4 third companion hits slot-3 unlock, then home shows cap card",
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e4-02-home-cap-card");
 
-    await expect(page.getByText("That's three")).toBeVisible();
-    await expect(page.getByText("Three companions is the most Ally keeps at once.")).toBeVisible();
+    await expect(page.getByText("That's four")).toBeVisible();
+    await expect(page.getByText("Four Allys is the most Ally keeps at once. Part ways with one to make room for someone new.")).toBeVisible();
     await assertMinFontSize(page);
 
-    // P2: the unlock and the third companion are server rows.
+    // The plan came from a subscription row; the fourth companion is a server row.
     const snap = await serverSnapshot(userId);
-    expect(snap.ledger).toMatchObject({ slots_unlocked: 3 });
-    expect(snap.unlocks.map((u) => [u.slot, u.amount])).toEqual([
-      [2, 199],
-      [3, 349],
-    ]);
-    expect(snap.companions.filter((c) => c.status === "active")).toHaveLength(3);
+    expect(snap.subscription).toMatchObject({ plan: "ultra", status: "active" });
+    expect(snap.companions.filter((c) => c.status === "active")).toHaveLength(4);
 
     assertHealthy(health);
   });

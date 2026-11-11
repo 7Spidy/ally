@@ -133,17 +133,13 @@ test.describe("E26 first-run visuals", () => {
 
   test("E26.4: round two with every woman taken or parted: women river is empty and inert, men still commit", async ({ page }) => {
     // One active woman (F01) plus the other 15 women parted empties the
-    // women pool. Two slots unlocked (with the matching unlock record) so
-    // round two starts without the unlock sheet; one active companion is
-    // within the cap.
+    // women pool. A Max plan (two slots) so round two starts without the
+    // plans screen; one active companion is within the cap.
     const active = makeCompanion({ id: "c_e26active", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000 });
     const state = makeState({
       companions: [active],
-      ledger: {
-        slotsUnlocked: 2,
-        unlocks: [{ slot: 2, at: FIXED_NOW - 400000, amount: 199 }],
-        parted: WOMEN.slice(1),
-      },
+      plan: "max",
+      ledger: { parted: WOMEN.slice(1) },
     });
     await setClock(page, FIXED_NOW);
     await seedState(page, state);

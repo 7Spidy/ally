@@ -19,10 +19,7 @@ test.describe("E5 part with one companion", () => {
   }) => {
     const c1 = makeCompanion({ id: "c_e5a", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 900000 });
     const c2 = makeCompanion({ id: "c_e5b", templateId: "F02", deckGender: "woman", createdAt: FIXED_NOW - 800000 });
-    const state = makeState({
-      companions: [c1, c2],
-      ledger: { slotsUnlocked: 2, unlocks: [{ slot: 2, at: FIXED_NOW - 850000, amount: 199 }] },
-    });
+    const state = makeState({ companions: [c1, c2], plan: "max" });
 
     await setClock(page, FIXED_NOW);
     const userId = await seedState(page, state);
@@ -64,7 +61,7 @@ test.describe("E5 part with one companion", () => {
     await switcherDialog.getByText("Home").click();
     await page.waitForURL("**/home");
 
-    // round two needs no unlock (1 active < slotsUnlocked 2) and Noor's face
+    // round two needs no plan change (1 active < 2 Max slots) and Noor's face
     // (F02) never reappears in the deck, alongside F01 (still active).
     await page.getByRole("button", { name: "Start" }).click();
     const introDialog = page.getByRole("dialog");

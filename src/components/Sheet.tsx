@@ -11,8 +11,7 @@ const REGISTRY = { ...onboardingSheets, ...hubSheets, ...ledgerSheets };
 
 /**
  * Reusable scrim + panel wrapper. Traps focus while open (spec §9.2).
- * Individual sheets (ConfirmSheet, AccountSheet, IntroSheet, UnlockSheet,
- * LeaveSheet, PaywallSheet, SwitcherSheet, PartSheet, DeleteSheet) render
+ * Individual sheets (ConfirmSheet, AccountSheet, IntroSheet, LeaveSheet, SwitcherSheet, PartSheet, DeleteSheet) render
  * their own content inside this and are wired into `SheetHost` below.
  */
 export function Sheet({ children, labelledBy }: { children: React.ReactNode; labelledBy?: string }) {

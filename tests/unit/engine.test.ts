@@ -24,7 +24,7 @@ import {
   type Template,
 } from "@/lib/engine";
 import { allyReducer } from "@/state/allyReducer";
-import { freshFlow, freshState, emptyAnswers, type Answers, type Core, type Gender } from "@/state/schema";
+import { freshEntitlement, freshFlow, freshState, emptyAnswers, type Answers, type Core, type Gender } from "@/state/schema";
 import { COPY } from "@/lib/copy";
 import { pool as selectorPool } from "@/lib/selectors";
 import { applyGate } from "@/lib/gate";
@@ -369,9 +369,11 @@ describe("Round two", () => {
   it("41. add-card state follows §8.4 across active-count x pool-emptiness", () => {
     // addCardState() (src/lib/addCard.ts) is the pure rule home/page.tsx
     // evaluates in order: cap first, then exhausted, then add.
+    // Only the top plan (Ultra) with every slot full is a dead end; every other full set leads to the plans screen.
+    const ultra = { ...freshEntitlement(), plan: "ultra" as const, slotLimit: MAX_COMPANIONS };
     for (let activeCount = 0; activeCount <= MAX_COMPANIONS; activeCount++) {
       for (const bothPoolsEmpty of [false, true]) {
-        const kind = addCardState(activeCount, bothPoolsEmpty);
+        const kind = addCardState(activeCount, bothPoolsEmpty, ultra);
         if (activeCount === MAX_COMPANIONS) expect(kind).toBe("cap");
         else if (bothPoolsEmpty) expect(kind).toBe("exhausted");
         else expect(kind).toBe("add");

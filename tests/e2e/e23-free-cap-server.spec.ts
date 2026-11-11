@@ -12,7 +12,7 @@ import {
   userClientFor,
 } from "./helpers";
 
-test.describe("E23 the free daily cap is enforced by send_message", () => {
+test.describe("E23 the trial daily cap is enforced by send_message", () => {
   test("E23: sends up to the cap through the UI; the cap survives a reload and a direct RPC can't get past it", async ({ page, context }) => {
     const companion = makeCompanion({ id: "c_e23", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000, exchanges: 3 });
     const state = makeState({ companions: [companion], ledger: { freeUsed: 98 } });
@@ -32,7 +32,7 @@ test.describe("E23 the free daily cap is enforced by send_message", () => {
 
     await page.getByLabel("Message").fill("one hundred");
     await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByText("You're out of free messages for today")).toBeVisible();
+    await expect(page.getByText("Out of chats for today. Choose a plan to keep going.")).toBeVisible();
 
     // The server holds the same count, not just the client cache.
     let snap = await serverSnapshot(userId);
@@ -42,7 +42,7 @@ test.describe("E23 the free daily cap is enforced by send_message", () => {
 
     // A reload re-reads the server: still out of messages.
     await page.reload();
-    await expect(page.getByText("You're out of free messages for today")).toBeVisible();
+    await expect(page.getByText("Out of chats for today. Choose a plan to keep going.")).toBeVisible();
     await screenshotScreen(page, "e23-01-capped-after-reload");
 
     // Going around the UI: the same user's session calling the RPC directly
@@ -50,7 +50,7 @@ test.describe("E23 the free daily cap is enforced by send_message", () => {
     const client = await userClientFor(context);
     const { data, error } = await client.rpc("send_message", { companion_id: "c_e23", body: "sneaky" });
     expect(error).toBeNull();
-    expect(data).toMatchObject({ blocked: true, status: "empty", message: null });
+    expect(data).toMatchObject({ blocked: true, status: "TRIAL_LIMIT", message: null });
     const write = await client.from("ledgers").update({ free_used: 0 }).eq("user_id", userId);
     expect(write.error?.code).toBe("42501");
 

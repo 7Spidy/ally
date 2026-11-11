@@ -7,13 +7,22 @@
   flex-shrink: 0;
 }
 
-.chip {
+.chips {
   justify-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.chip {
   font-size: 15.5px;
   color: var(--mut);
   background: var(--raised);
+  border: 0;
   border-radius: 999px;
   padding: 6px 14px;
+  min-height: 36px;
   white-space: nowrap;
 }
 

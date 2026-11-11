@@ -17,10 +17,7 @@ test.describe("E9 switcher via long-press + overflow Home", () => {
   }) => {
     const c1 = makeCompanion({ id: "c_e9a", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 900000 });
     const c2 = makeCompanion({ id: "c_e9b", templateId: "M01", deckGender: "man", createdAt: FIXED_NOW - 800000 });
-    const state = makeState({
-      companions: [c1, c2],
-      ledger: { slotsUnlocked: 2, unlocks: [{ slot: 2, at: FIXED_NOW - 850000, amount: 199 }] },
-    });
+    const state = makeState({ companions: [c1, c2], plan: "max" });
 
     await setClock(page, FIXED_NOW);
     await seedState(page, state);

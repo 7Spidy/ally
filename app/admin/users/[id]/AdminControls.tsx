@@ -3,16 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/state/useToast";
-import { formatWhen, parseOverride, userLabel, type AdminUserDetail } from "@/lib/admin";
-import {
-  adminEndPass,
-  adminForceLogout,
-  adminGrantPass,
-  adminSetFreeDailyOverride,
-  adminSetPassCapOverride,
-  adminSetSlots,
-  adminSetStatus,
-} from "@/lib/supabase/adminQueries";
+import { ledgerSummary, parseOverride, userLabel, type AdminUserDetail } from "@/lib/admin";
+import { adminForceLogout, adminSetFreeDailyOverride, adminSetPassCapOverride, adminSetStatus } from "@/lib/supabase/adminQueries";
 import styles from "../../admin.module.css";
 
 const ERRORS: Record<string, string> = {
@@ -20,7 +12,6 @@ const ERRORS: Record<string, string> = {
   forbidden: "Only admins can do that.",
   user_not_found: "That user no longer exists.",
   cannot_suspend_self: "You can't suspend your own account.",
-  invalid_slots: "Slots must be between 1 and 3.",
   invalid_value: "Enter a whole number, or leave it empty for the default.",
 };
 
@@ -115,76 +106,34 @@ function OverrideField({
 export function LedgerControls({ user }: { user: AdminUserDetail }) {
   const { run, pending, locked } = useAdminAction();
   const l = user.ledger;
-  const slots = Array.from({ length: user.defaults.max_companions }, (_, i) => i + 1);
 
   return (
     <section className={styles.group} aria-labelledby="ledger">
       <h2 id="ledger" className={styles.groupLabel}>
-        Ledger
+        Plan and limits
       </h2>
 
       <div className={styles.row}>
-        <span className={styles.rowLabel}>Free today</span>
+        <span className={styles.rowLabel}>Plan</span>
+        <span className={styles.rowValue}>{ledgerSummary(l)}</span>
+      </div>
+      <div className={styles.row}>
+        <span className={styles.rowLabel}>Active Ally slots</span>
+        <span className={styles.rowValue}>{l.slot_limit}</span>
+      </div>
+      <div className={styles.row}>
+        <span className={styles.rowLabel}>Chats today</span>
         <span className={styles.rowValue}>
-          {l.free_used} used of {l.free_daily}, {l.free_left} left
+          {l.free_used} used (trial allows {l.free_daily}, paid plans stop at their fair-use cap of {l.fair_use_cap})
         </span>
       </div>
-
-      <div className={styles.control}>
-        <div className={styles.controlHead}>
-          <span>Day pass</span>
-          {l.pass_active ? (
-            <span className={`${styles.badge} ${styles.badgePass}`}>Active</span>
-          ) : (
-            <span className={styles.rowValue}>None</span>
-          )}
-        </div>
-        {l.pass_active && (
-          <p className={styles.note}>
-            Until {formatWhen(l.pass_ends_at)}, {l.pass_used ?? 0} of {l.pass_cap} messages used.
-          </p>
-        )}
-        <button
-          type="button"
-          className="btn secondary"
-          disabled={locked}
-          onClick={() => void run("grant", () => adminGrantPass(user.id), "Pass granted.")}
-        >
-          {pending === "grant" ? "Saving…" : `Grant a ${user.defaults.pass_hours}-hour pass`}
-        </button>
-        {l.pass_active && (
-          <button type="button" className="btn secondary" disabled={locked} onClick={() => void run("end", () => adminEndPass(user.id), "Pass ended.")}>
-            {pending === "end" ? "Saving…" : "End pass now"}
-          </button>
-        )}
-      </div>
-
-      <div className={styles.control}>
-        <div className={styles.controlHead}>
-          <span id="slotsLabel">Companion slots</span>
-          <span className={styles.rowValue}>{pending === "slots" ? "Saving…" : `${l.slots_unlocked} unlocked`}</span>
-        </div>
-        <div className={styles.segmented} role="group" aria-labelledby="slotsLabel">
-          {slots.map((n) => (
-            <button
-              key={n}
-              type="button"
-              aria-pressed={l.slots_unlocked === n}
-              aria-label={`${n} ${n === 1 ? "slot" : "slots"}`}
-              disabled={locked}
-              onClick={() => {
-                if (n !== l.slots_unlocked) void run("slots", () => adminSetSlots(user.id, n));
-              }}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className={styles.note}>
+        Plans change only through a verified Google Play purchase. To test a plan, use the plan selector in the in-chat QA panel.
+      </p>
 
       <OverrideField
         key={`free-${user.limits?.free_daily_override ?? "d"}`}
-        label="Free messages per day"
+        label="Trial chats per day"
         current={user.limits?.free_daily_override ?? null}
         fallback={user.defaults.free_daily}
         locked={locked}
@@ -193,9 +142,9 @@ export function LedgerControls({ user }: { user: AdminUserDetail }) {
       />
       <OverrideField
         key={`cap-${user.limits?.pass_cap_override ?? "d"}`}
-        label="Pass message cap"
+        label="Daily fair-use cap (paid plans)"
         current={user.limits?.pass_cap_override ?? null}
-        fallback={user.defaults.pass_cap}
+        fallback={user.defaults.fair_use_cap}
         locked={locked}
         saving={pending === "cap"}
         onSave={(v) => void run("cap", () => adminSetPassCapOverride(user.id, v), "Saved.")}

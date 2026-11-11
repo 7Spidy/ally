@@ -61,9 +61,10 @@ export function IntroSheet() {
   }
 
   function handleStart() {
-    if (activeList.length >= state.ledger.slotsUnlocked) {
+    // Normally the add card already sent a full plan to the plans screen; this is the backstop.
+    if (activeList.length >= state.entitlement.slotLimit) {
       dismissForNavigation();
-      openSheet("unlock", { slot: state.ledger.slotsUnlocked + 1 });
+      router.replace(state.entitlement.plan === "expired" ? "/plans?from=locked" : "/plans?from=newally");
       return;
     }
     dispatch({ type: "START_ROUND2", templates });

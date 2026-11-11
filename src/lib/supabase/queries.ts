@@ -6,8 +6,9 @@
  * them to a toast.
  */
 
-import type { Answers, Companion, Core, Gender, Ledger, Message } from "@/state/schema";
-import type { SendStatus } from "@/lib/ledger";
+import type { Answers, Companion, Core, Entitlement, Gender, Ledger, Message } from "@/state/schema";
+import { parseEntitlement, type RawEntitlement, type SendStatus } from "@/lib/entitlement";
+import type { EffectivePlan } from "@/lib/config";
 import { getBrowserClient } from "@/lib/supabase/browser";
 import { COPY } from "@/lib/copy";
 
@@ -28,6 +29,7 @@ export function rpcErrorMessage(err: unknown): string {
   const m = (err as { message?: string } | null)?.message;
   if (m === "edit_window_closed") return COPY.chat.editWindowClosed;
   if (m === "edit_limit") return COPY.chat.editLimit;
+  if (m === "SLOT_LIMIT") return COPY.plans.slotLimit;
   if (m === "message_deleted" || m === "message_not_found" || m === "quote_not_found") return COPY.chat.messageGone;
   return COPY.auth.network;
 }
@@ -37,15 +39,17 @@ export interface ServerState {
   companions: Omit<Companion, "messages">[];
   messages_by_companion: Record<string, Message[]>;
   ledger: Ledger;
+  entitlement: RawEntitlement;
   profile: { display_name: string | null } | null;
   consent: { granted_at: number; marketing: boolean; version?: string } | null;
 }
 
-/** Companions with their messages attached, plus the ledger, as the client cache holds them. */
-export function assembleServerState(s: ServerState): { companions: Companion[]; ledger: Ledger } {
+/** Companions with their messages attached, plus the ledger and entitlement, as the client cache holds them. */
+export function assembleServerState(s: ServerState): { companions: Companion[]; ledger: Ledger; entitlement: Entitlement } {
   return {
     companions: s.companions.map((c) => ({ ...c, messages: s.messages_by_companion[c.id] ?? [] })),
     ledger: s.ledger,
+    entitlement: parseEntitlement(s.entitlement),
   };
 }
 
@@ -76,15 +80,22 @@ export function setDisplayName(name: string): Promise<string> {
 
 export interface SendResult {
   blocked: boolean;
+  /** "ok", or the code that blocked the send (TRIAL_LIMIT, PLAN_EXPIRED, FAIR_USE_CAP, COMPANION_LOCKED). */
   status: SendStatus;
   message: Message | null;
   exchanges: number;
   ledger: Ledger;
+  entitlement: Entitlement;
+}
+
+interface RawSendResult extends Omit<SendResult, "entitlement"> {
+  entitlement: RawEntitlement;
 }
 
 /** `replyTo` is the id of an earlier message in this chat the user is replying to. */
-export function sendMessage(companionId: string, body: string, replyTo?: number | null): Promise<SendResult> {
-  return call<SendResult>("send_message", { companion_id: companionId, body, reply_to: replyTo ?? null });
+export async function sendMessage(companionId: string, body: string, replyTo?: number | null): Promise<SendResult> {
+  const r = await call<RawSendResult>("send_message", { companion_id: companionId, body, reply_to: replyTo ?? null });
+  return { ...r, entitlement: parseEntitlement(r.entitlement) };
 }
 
 /** B3: edit one of the user's own messages (15 minutes, 5 edits). Free. */
@@ -112,6 +123,8 @@ export interface LiveReply {
   screen?: NonNullable<NonNullable<Message["meta"]>["screen"]> | null;
   bubbles: { id: number; text: string; meta: Message["meta"]; at: number }[];
   trustLevel: number;
+  /** The stored trust is past this plan's ceiling (trustLevel is clamped). */
+  deeperLevelAvailable?: boolean;
   leveledUp: number | null;
   resourceCard: boolean;
   paused: boolean;
@@ -164,16 +177,19 @@ export function openChat(companionId: string): Promise<{ lastOpenedAt: number }>
   return call("open_chat", { companion_id: companionId });
 }
 
-export function partCompanion(companionId: string): Promise<{ partedAt: number; purgeAt: number; ledger: Ledger }> {
-  return call("part_companion", { companion_id: companionId });
+export async function partCompanion(companionId: string): Promise<{ partedAt: number; purgeAt: number; ledger: Ledger; entitlement: Entitlement }> {
+  const r = await call<{ partedAt: number; purgeAt: number; ledger: Ledger; entitlement: RawEntitlement }>("part_companion", { companion_id: companionId });
+  return { ...r, entitlement: parseEntitlement(r.entitlement) };
 }
 
-export function unlockSlot(amount: number): Promise<{ ledger: Ledger }> {
-  return call("unlock_slot", { amount });
+/** The caller's entitlement, re-read from the server. */
+export async function getEntitlement(): Promise<Entitlement> {
+  return parseEntitlement(await call<RawEntitlement>("get_entitlement"));
 }
 
-export function buyPass(): Promise<{ ledger: Ledger }> {
-  return call("buy_pass");
+/** The "deeper level" banner has been shown for this companion; never show it again. */
+export function markDeeperShown(companionId: string): Promise<void> {
+  return call("mark_deeper_shown", { companion_id: companionId });
 }
 
 export function setCompanionPrefs(companionId: string, prefs: { notify?: boolean; sound?: boolean }): Promise<{ notify: boolean; sound: boolean }> {
@@ -227,8 +243,18 @@ export async function qaAddCompanion(templateId: string): Promise<Companion> {
   return { ...c, messages: c.messages ?? [] };
 }
 
-export function qaRefillMessages(): Promise<{ ledger: Ledger }> {
-  return call("qa_refill_messages");
+export async function qaRefillMessages(): Promise<{ ledger: Ledger; entitlement: Entitlement }> {
+  const r = await call<{ ledger: Ledger; entitlement: RawEntitlement }>("qa_refill_messages");
+  return { ...r, entitlement: parseEntitlement(r.entitlement) };
+}
+
+/** What admin_set_plan can force. "admin" hands the account back to the admin bypass (no limits). */
+export type ForcedPlan = EffectivePlan | "admin";
+
+/** Admin only: forces a plan or trial day on the caller's own account for testing. The server re-checks is_admin(). */
+export async function adminSetPlan(userId: string, plan: ForcedPlan, trialDay?: number): Promise<Entitlement> {
+  const r = await call<{ entitlement: RawEntitlement }>("admin_set_plan", { p_user_id: userId, p_plan_or_state: plan, p_trial_day: trialDay ?? null });
+  return parseEntitlement(r.entitlement);
 }
 
 export function qaResetChat(companionId: string): Promise<{ reset: boolean }> {

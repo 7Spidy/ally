@@ -3,18 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useAlly } from "@/state/useAlly";
 import { useAuth } from "@/state/useAuth";
-import { COPY, fill } from "@/lib/copy";
-import { freeLeft, passActive } from "@/lib/ledger";
-import { formatTimeIST, serverNow } from "@/lib/clock";
+import { COPY } from "@/lib/copy";
+import { planRowText } from "@/lib/plans";
 import styles from "./page.module.css";
 
 export default function SettingsPage() {
   const router = useRouter();
   const { state } = useAlly();
   const auth = useAuth();
-  // Ledger state is judged on the server's clock (spec D8), never the debug clock.
-  const onPass = passActive(state.ledger, serverNow());
-  const n = freeLeft(state.ledger, serverNow());
 
   return (
     <div className={styles.page}>
@@ -72,14 +68,13 @@ export default function SettingsPage() {
 
         <div className={styles.group}>
           <p className={styles.groupLabel}>{COPY.settings.groupPlan}</p>
-          <div className={`${styles.row} ${styles.staticRow}`}>
-            <span className={styles.rowLabel}>{onPass ? COPY.settings.planPass : COPY.settings.planFree}</span>
-            <span className={styles.rowValue}>
-              {onPass
-                ? fill(COPY.settings.planPassUntil, { time: formatTimeIST((state.ledger.pass as NonNullable<typeof state.ledger.pass>).endsAt) })
-                : fill(COPY.settings.planFreeLeft, { n })}
-            </span>
-          </div>
+          <button type="button" className={`${styles.row} ${styles.actionRow}`} data-testid="settings-plan" onClick={() => router.push("/plans?from=settings")}>
+            <span className={styles.rowLabel}>{COPY.settings.planRow}</span>
+            <span className={styles.rowValue}>{planRowText(state.entitlement)}</span>
+            <svg className={styles.chevron} viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
         </div>
 
         <p className={`meta ${styles.footer}`}>{COPY.settings.footer}</p>

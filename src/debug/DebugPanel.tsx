@@ -7,15 +7,15 @@ import { useSheet } from "@/state/useSheet";
 import { useManifest } from "@/state/useManifest";
 import { active, excludedFaces } from "@/lib/selectors";
 import { computeCore, coreForFace } from "@/lib/engine";
-import { buyPass, createCompanion, partCompanion } from "@/lib/supabase/queries";
+import { createCompanion, partCompanion } from "@/lib/supabase/queries";
 import type { Answers, Gender } from "@/state/schema";
 import styles from "./DebugPanel.module.css";
 
 /*
  * P2 (spec D8): the ledger and companions are server-owned. The clock skips
  * below still move window.__allyClock, but that now only changes client-side
- * date formatting; day rollover, pass expiry and purge dates use the
- * database's now(), which the client cannot skew. The seed, pass and part
+ * date formatting; day rollover, plan expiry and purge dates use the
+ * database's now(), which the client cannot skew. The seed and part
  * actions go through the real RPCs. The old "free left" and "pass used"
  * overrides are gone: they would only have desynced the cache from the
  * server. Set those columns on `ledgers` directly (SQL editor or the admin
@@ -95,17 +95,11 @@ export function DebugPanel() {
       .catch(logRpcError);
   }
 
-  function startPass() {
-    buyPass()
-      .then(({ ledger }) => dispatch({ type: "BUY_PASS", ledger }))
-      .catch(logRpcError);
-  }
-
   async function partAll() {
     for (const c of active(state)) {
       try {
         const res = await partCompanion(c.id);
-        dispatch({ type: "PART_COMPANION", companionId: c.id, partedAt: res.partedAt, purgeAt: res.purgeAt, ledger: res.ledger });
+        dispatch({ type: "PART_COMPANION", companionId: c.id, partedAt: res.partedAt, purgeAt: res.purgeAt, ledger: res.ledger, entitlement: res.entitlement });
       } catch (err) {
         logRpcError(err);
       }
@@ -141,6 +135,8 @@ export function DebugPanel() {
       </div>
       <div className={styles.section}>ledger</div>
       <pre className={styles.pre}>{JSON.stringify(state.ledger, null, 2)}</pre>
+      <div className={styles.section}>entitlement</div>
+      <pre className={styles.pre}>{JSON.stringify(state.entitlement, null, 2)}</pre>
       <div className={styles.section}>companions</div>
       {state.companions.map((c) => (
         <div key={c.id} className={styles.companion}>
@@ -162,7 +158,6 @@ export function DebugPanel() {
       <div className={styles.section}>actions</div>
       <div className={styles.actions}>
         <button onClick={seedCompanion}>Seed companion</button>
-        <button onClick={startPass}>Start pass</button>
         <button onClick={() => applyClockOffset(86400000)}>Clock +1 day (display only)</button>
         <button onClick={() => applyClockOffset(31 * 86400000)}>Clock +31 days (display only)</button>
         <button onClick={() => void partAll()}>Part all</button>

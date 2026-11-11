@@ -34,3 +34,37 @@
   padding: 24px;
   color: var(--mut);
 }
+
+/* Plans: the one-time "deeper level" banner. Slim, under the header, easy to dismiss. */
+.deeper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 16px 0;
+  padding: 2px 4px 2px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--raised);
+  font-size: 15.5px;
+  flex-shrink: 0;
+}
+.deeperLink {
+  flex: 1 1 auto;
+  min-height: 44px;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: var(--fg);
+  font-size: 15.5px;
+}
+.deeperClose {
+  width: 44px;
+  height: 44px;
+  background: none;
+  border: 0;
+  color: var(--mut);
+  font-size: 22px;
+  line-height: 1;
+}

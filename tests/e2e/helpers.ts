@@ -85,9 +85,17 @@ export function makeCompanion(o: MakeCompanionOpts) {
   };
 }
 
+/**
+ * The plan a seeded user is on. `trial` is day 1; `{ trialDay }` is any day 1 to 8 (8 is the first day after the free week).
+ * `pro`, `max` and `ultra` are written through the server's purchase entry point (set_subscription), as a verified Play
+ * purchase would be, so specs need no direct write to the subscriptions table.
+ */
+export type SeedPlan = "trial" | { trialDay: number } | "expired" | "pro" | "max" | "ultra";
+
 export interface MakeStateOpts {
   companions?: ReturnType<typeof makeCompanion>[];
   ledger?: Record<string, unknown>;
+  plan?: SeedPlan;
   user?: Record<string, unknown>;
   flow?: unknown;
   now?: number;
@@ -113,15 +121,13 @@ export function makeState(opts: MakeStateOpts = {}) {
     },
     companions: opts.companions ?? [],
     ledger: {
-      slotsUnlocked: 1,
-      unlocks: [],
       parted: [],
       day,
       freeUsed: 0,
-      pass: null,
-      passes: [],
       ...(opts.ledger ?? {}),
     },
+    // Server-side only: written by seedServerState, never persisted to localStorage.
+    plan: (opts.plan ?? "trial") as SeedPlan,
     flow: opts.flow ?? null,
   };
 }
@@ -150,9 +156,40 @@ async function must<T extends { error: { message: string } | null }>(label: stri
   return res;
 }
 
+/** Puts a seeded user on a plan: a trial day, expired, or a paid plan through set_subscription. */
+export async function seedPlan(userId: string, plan: SeedPlan): Promise<void> {
+  const admin = adminClient();
+  const DAY = 86400000;
+  const dropSubscription = () => must("clear subscription", admin.from("subscriptions").delete().eq("user_id", userId));
+  const trialStart = async (daysAgo: number) => {
+    await dropSubscription(); // a subscription outranks the trial, so a trial state starts without one
+    return must("trial", admin.from("profiles").update({ trial_started_at: new Date(Date.now() - daysAgo * DAY).toISOString() }).eq("id", userId));
+  };
+  if (plan === "trial") {
+    await trialStart(0);
+  } else if (plan === "expired") {
+    await trialStart(30);
+  } else if (typeof plan === "object") {
+    await trialStart(plan.trialDay - 1);
+  } else {
+    await trialStart(30); // the trial is over; the subscription is what grants the plan
+    await must(
+      "subscription",
+      admin.rpc("set_subscription", {
+        p_user_id: userId,
+        p_plan: plan,
+        p_status: "active",
+        p_expires_at: new Date(Date.now() + 30 * DAY).toISOString(),
+        p_purchase_token: `e2e-${userId}`,
+        p_product_id: `ally_${plan}`,
+      })
+    );
+  }
+}
+
 /**
  * P2: companions, messages and the ledger are server-owned, so a seeded
- * state's server part is written to the six tables with the service-role
+ * state's server part is written to the server tables with the service-role
  * client (the only way to set arbitrary ledger values; clients have no
  * write grants). Timestamps are shifted from the test's clock frame
  * (`state.savedAt`, normally FIXED_NOW) into real time, because the server
@@ -166,12 +203,8 @@ export async function seedServerState(userId: string, state: SeedState): Promise
   const shift = Date.now() - state.savedAt;
   const ts = (ms: number | null | undefined) => (ms === null || ms === undefined ? null : new Date(ms + shift).toISOString());
   const ledger = state.ledger as unknown as {
-    slotsUnlocked: number;
     day: string;
     freeUsed: number;
-    pass: { startedAt: number; endsAt: number; used: number } | null;
-    unlocks: { slot: number; at: number; amount: number }[];
-    passes: { startedAt: number; amount: number }[];
     parted: string[];
   };
 
@@ -220,20 +253,11 @@ export async function seedServerState(userId: string, state: SeedState): Promise
     "ledger",
     admin.from("ledgers").upsert({
       user_id: userId,
-      slots_unlocked: ledger.slotsUnlocked,
       day,
       free_used: ledger.freeUsed,
-      pass_started_at: ts(ledger.pass?.startedAt),
-      pass_ends_at: ts(ledger.pass?.endsAt),
-      pass_used: ledger.pass ? ledger.pass.used : null,
     })
   );
-  if (ledger.unlocks.length) {
-    await must("unlocks", admin.from("ledger_unlocks").insert(ledger.unlocks.map((u) => ({ user_id: userId, slot: u.slot, at: ts(u.at), amount: u.amount }))));
-  }
-  if (ledger.passes.length) {
-    await must("passes", admin.from("ledger_passes").insert(ledger.passes.map((p) => ({ user_id: userId, started_at: ts(p.startedAt), amount: p.amount }))));
-  }
+  await seedPlan(userId, state.plan);
   if (ledger.parted.length) {
     await must("parted", admin.from("ledger_parted").insert(ledger.parted.map((t) => ({ user_id: userId, template_id: t }))));
   }
@@ -248,7 +272,9 @@ export async function seedServerState(userId: string, state: SeedState): Promise
 export async function seedState(page: Page, state: SeedState, { once = false } = {}): Promise<string> {
   const userId = await createTestSession(page);
   await seedServerState(userId, state);
-  const local = { ...state, companions: [], ledger: { ...state.ledger, unlocks: [], parted: [], passes: [], pass: null, freeUsed: 0, slotsUnlocked: 1 } };
+  const { plan: _plan, ...rest } = state;
+  void _plan;
+  const local = { ...rest, companions: [], ledger: { ...state.ledger, parted: [], freeUsed: 0 } };
   await page.addInitScript(
     ({ key, json, once }) => {
       try {
@@ -550,21 +576,21 @@ export async function loginWithPassword(page: Page, email: string, password: str
 /** The server-side rows for one user, read with the service-role client. */
 export async function serverSnapshot(userId: string) {
   const admin = adminClient();
-  const [companions, messages, ledger, parted, passes, unlocks] = await Promise.all([
+  const [companions, messages, ledger, parted, subscription, profile] = await Promise.all([
     admin.from("companions").select("*").eq("user_id", userId).order("created_at"),
     admin.from("messages").select("*").eq("user_id", userId).order("id"),
     admin.from("ledgers").select("*").eq("user_id", userId).maybeSingle(),
     admin.from("ledger_parted").select("template_id").eq("user_id", userId),
-    admin.from("ledger_passes").select("*").eq("user_id", userId),
-    admin.from("ledger_unlocks").select("*").eq("user_id", userId),
+    admin.from("subscriptions").select("*").eq("user_id", userId).maybeSingle(),
+    admin.from("profiles").select("trial_started_at,plan_forced").eq("id", userId).maybeSingle(),
   ]);
   return {
     companions: (companions.data ?? []) as Record<string, unknown>[],
     messages: (messages.data ?? []) as { companion_id: string; who: string; text: string }[],
     ledger: ledger.data as Record<string, unknown> | null,
     parted: (parted.data ?? []).map((r) => r.template_id as string),
-    passes: passes.data ?? [],
-    unlocks: unlocks.data ?? [],
+    subscription: subscription.data as Record<string, unknown> | null,
+    profile: profile.data as { trial_started_at: string; plan_forced: boolean } | null,
   };
 }
 

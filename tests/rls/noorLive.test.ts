@@ -106,15 +106,13 @@ describe("qa_add_companion", () => {
     expect(c.core).toEqual({ primary: "ROMANTIC", secondary: "MONEY", weight: 70, ranked: [] });
   });
 
-  it("bypasses a full slot ledger and the companion cap", async () => {
+  it("bypasses the plan's slot limit and the companion cap", async () => {
     const u = await makeUser("qa-cap", "qa");
-    // One free slot, filled by a normal create; a normal second create is refused.
+    // The trial has one slot, filled by a normal create; a normal second create is refused.
     await createCompanion(u, "F01");
-    await expect(createCompanion(u, "F03")).rejects.toThrow(/slots_full/);
+    await expect(createCompanion(u, "F03")).rejects.toThrow(/SLOT_LIMIT/);
     const c = await addCompanion(u, "F02");
     expect(c.status).toBe("active");
-    const { data: ledger } = await service.from("ledgers").select("slots_unlocked").eq("user_id", u.id).single();
-    expect(ledger?.slots_unlocked).toBe(1);
     const { data: active } = await service.from("companions").select("id").eq("user_id", u.id).eq("status", "active");
     expect(active!.length).toBeGreaterThan(1);
   });

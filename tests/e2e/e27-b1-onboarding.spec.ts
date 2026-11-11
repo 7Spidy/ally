@@ -383,13 +383,13 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
     await expect(page.getByRole("status", { name: "Choosing someone for you" })).toBeVisible();
     await page.waitForTimeout(1200);
 
-    // The debug panel's "Start pass" goes through the server and dispatches
-    // BUY_PASS: a provider-wide state change while the Constellation plays.
+    // The debug panel's "Seed companion" goes through the server and dispatches
+    // DEBUG_SEED_COMPANION: a provider-wide state change while the Constellation plays.
     for (let i = 0; i < 3; i++) {
       await page.mouse.click(20, 20);
       await page.waitForTimeout(80);
     }
-    await page.getByRole("button", { name: "Start pass" }).click();
+    await page.getByRole("button", { name: "Seed companion" }).click();
     await page.waitForTimeout(600);
     await page.getByRole("button", { name: "Clock +1 day (display only)" }).click(); // and one that touches no state
     await page.getByRole("button", { name: "Close debug panel" }).click();

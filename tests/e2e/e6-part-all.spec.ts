@@ -14,7 +14,8 @@ test.describe("E6 part with everyone -> zero state", () => {
     });
     const state = makeState({
       companions: [parted(c1), parted(c2)],
-      ledger: { slotsUnlocked: 2, parted: ["F01", "M01"], unlocks: [{ slot: 2, at: FIXED_NOW - 850000, amount: 199 }] },
+      plan: "max",
+      ledger: { parted: ["F01", "M01"] },
     });
 
     await setClock(page, FIXED_NOW);

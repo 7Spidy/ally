@@ -7,8 +7,10 @@ import { paletteFor, type Persona } from "@/personas/persona";
 import { LIVE_TEMPLATES } from "@/personas/liveTemplates";
 import { useManifest } from "@/state/useManifest";
 import { EFFECT_MIN_LEVEL } from "@/lib/llm/contract";
-import { qaAddCompanion, qaRefillMessages, qaResetChat, qaSetFreeze, qaSetLevel, qaState, type QaState } from "@/lib/supabase/queries";
-import type { Companion, Ledger } from "@/state/schema";
+import { adminSetPlan, qaAddCompanion, qaRefillMessages, qaResetChat, qaSetFreeze, qaSetLevel, qaState, type ForcedPlan, type QaState } from "@/lib/supabase/queries";
+import type { Companion, Entitlement, Ledger } from "@/state/schema";
+import { useAlly } from "@/state/useAlly";
+import { useAuth } from "@/state/useAuth";
 import { BUBBLE_EFFECTS, SCREEN_EFFECTS, uniqueReactions, type BubbleEffect } from "./qaPreview";
 import sheet from "@/components/Sheet.module.css";
 import styles from "./QaSheet.module.css";
@@ -60,12 +62,14 @@ export function QaSheet({
   onForce: (f: QaForce | null) => void;
   onPreview: (p: QaPreviewRequest) => void;
   onLevel: (trustLevel: number, levelChangedAt: number) => void;
-  onLedger: (l: Ledger) => void;
+  onLedger: (l: Ledger, e: Entitlement) => void;
   onAdded: (c: Companion) => void;
   onClose: () => void;
   onToast: (m: string) => void;
 }) {
   const router = useRouter();
+  const auth = useAuth();
+  const { reloadServerState, state: allyState } = useAlly();
   const { templates } = useManifest();
   // Face names come from the manifest so this sheet does not pull every persona file into the client bundle.
   const firstNameOf = (id: string) => templates.find((x) => x.id === id)?.name.split(" ")[0] ?? id;
@@ -140,11 +144,33 @@ export function QaSheet({
   async function refill() {
     try {
       const r = await qaRefillMessages();
-      onLedger(r.ledger);
+      onLedger(r.ledger, r.entitlement);
       onToast("Messages refilled.");
     } catch {
       onToast("Couldn't refill.");
     }
+  }
+
+  // Admin only: force a plan or trial day on this account (server-checked), then re-read everything.
+  async function forcePlan(plan: ForcedPlan, trialDay?: number) {
+    const uid = auth.user?.id;
+    if (busy || !uid) return;
+    setBusy(true);
+    try {
+      await adminSetPlan(uid, plan, trialDay);
+      await reloadServerState();
+      onToast(plan === "trial" ? `Trial day ${trialDay}.` : `Plan: ${plan}.`);
+    } catch {
+      onToast("Couldn't set the plan.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Admin only: calls the same hook the Android shell will, so the whole success path can be tried without Billing.
+  function simulatePurchase() {
+    if (window.onAllyPurchaseResult) window.onAllyPurchaseResult({ status: "success" });
+    else onToast("No purchase hook registered.");
   }
 
   async function reset() {
@@ -306,6 +332,27 @@ export function QaSheet({
               })}
             </div>
           </section>
+
+          {admin && (
+            <section className={styles.section} data-testid="qa-plan">
+              <span className={styles.label}>Plan (now: {allyState.entitlement.plan}{allyState.entitlement.trialDay ? `, day ${allyState.entitlement.trialDay}` : ""})</span>
+              <div className={styles.chips}>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((d) => (
+                  <button key={d} type="button" className={styles.chip} disabled={busy} onClick={() => void forcePlan("trial", d)} data-testid={`qa-trial-${d}`}>
+                    Trial day {d}
+                  </button>
+                ))}
+                {(["expired", "pro", "max", "ultra", "admin"] as const).map((p) => (
+                  <button key={p} type="button" className={styles.chip} disabled={busy} onClick={() => void forcePlan(p)} data-testid={`qa-plan-${p}`}>
+                    {p === "admin" ? "Admin (no limits)" : p[0].toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className={styles.action} onClick={simulatePurchase} data-testid="qa-simulate-purchase">
+                Simulate purchase success
+              </button>
+            </section>
+          )}
 
           <section className={styles.actions}>
             <button type="button" className={styles.action} onClick={() => void refill()}>

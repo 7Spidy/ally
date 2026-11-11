@@ -116,6 +116,26 @@ export function wordCount(text: string): number {
   return t ? t.split(/\s+/).length : 0;
 }
 
+// ---- plans: the level ceiling ----------------------------------------------
+// Trust keeps climbing underneath a plan's ceiling (L5 unless Ultra): the stored
+// level and points are never capped, only what the engine, the client and the
+// level-up screen are shown. Upgrading lifts the clamp with nothing lost.
+
+/** The level the engine and the client use: the stored level held to the plan's ceiling. */
+export function effectiveLevel(stored: number, maxLevel: number): number {
+  return Math.min(stored, maxLevel);
+}
+
+/** True when the stored trust is past the plan's ceiling, i.e. there is a deeper level to unlock. */
+export function deeperLevelAvailable(stored: number, maxLevel: number): boolean {
+  return stored > maxLevel;
+}
+
+/** A level-up to a level the plan does not have is stored but not played. */
+export function shownLevelUp(leveledUp: number | null, maxLevel: number): number | null {
+  return leveledUp !== null && leveledUp > maxLevel ? null : leveledUp;
+}
+
 /** TP the current level must hold to avoid demotion pressure (level 1 has none). */
 export function thresholdFor(level: number): number {
   return LEVELS.find((l) => l.level === level)?.tp ?? 0;

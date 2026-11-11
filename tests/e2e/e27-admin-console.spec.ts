@@ -8,6 +8,7 @@ import {
   makeCompanion,
   makeState,
   screenshotScreen,
+  seedPlan,
   seedServerState,
   serverSnapshot,
   trackHealth,
@@ -63,7 +64,7 @@ test.describe("E27 admin console", () => {
   // Several independent sign-ins per test.
   test.describe.configure({ timeout: 120000 });
 
-  test("E27a: an admin finds a user, suspends them (their send fails), unsuspends, grants a pass and sets a limit; the user's app reflects each", async ({
+  test("E27a: an admin finds a user, suspends them (their send fails), unsuspends, sees their plan and sets a limit; the user's app reflects each", async ({
     browser,
   }) => {
     const admin = await makeAdmin();
@@ -96,22 +97,23 @@ test.describe("E27 admin console", () => {
     expect(snap.messages.some((m) => m.text === "am I still here?")).toBe(false);
     expect(snap.ledger).toMatchObject({ free_used: 0 });
 
-    // Unsuspend, then grant a pass: the user's home shows it.
+    // Unsuspend, then put the member on Pro through the purchase entry point: the console shows
+    // the plan, and the user's home drops the trial chips.
     await adminPage.getByRole("button", { name: "Unsuspend account" }).click();
     await expect(adminPage.getByRole("button", { name: "Suspend account" })).toBeVisible();
-    await adminPage.getByRole("button", { name: "Grant a 24-hour pass" }).click();
-    await expect(adminPage.getByRole("button", { name: "End pass now" })).toBeVisible();
+    await seedPlan(member.id, "pro");
+    await adminPage.reload();
+    await expect(adminPage.getByText("Pro", { exact: true }).first()).toBeVisible();
     snap = await serverSnapshot(member.id);
-    expect(snap.passes).toEqual([expect.objectContaining({ amount: 0 })]);
-    expect(Date.parse(snap.ledger!.pass_ends_at as string)).toBeGreaterThan(Date.now() + 23 * 3600000);
+    expect(snap.subscription).toMatchObject({ plan: "pro", status: "active" });
 
     await userPage.goto("/home");
-    await expect(userPage.getByText(/^Day pass until /)).toBeVisible();
+    await expect(userPage.getByTestId("trial-chip")).toHaveCount(0);
 
-    // End the pass and lower the free daily limit: the user's chip follows the override.
-    await adminPage.getByRole("button", { name: "End pass now" }).click();
-    await expect(adminPage.getByRole("button", { name: "End pass now" })).toHaveCount(0);
-    await adminPage.getByLabel("Free messages per day").fill("4");
+    // Back to the trial and lower the trial's daily chats: the user's chip follows the override.
+    await seedPlan(member.id, "trial");
+    await adminPage.reload();
+    await adminPage.getByLabel("Trial chats per day").fill("4");
     await adminPage.getByRole("button", { name: "Save" }).first().click();
     await expect(adminPage.getByText("Override (4)")).toBeVisible();
 
@@ -119,8 +121,8 @@ test.describe("E27 admin console", () => {
     await expect(userPage.getByText("4 left today")).toBeVisible();
 
     const history = adminPage.getByRole("list", { name: "Admin history" });
-    await expect(history.getByRole("listitem")).toHaveCount(5);
-    await expect(history.getByText("Changed free daily limit: default → 4")).toBeVisible();
+    await expect(history.getByRole("listitem")).toHaveCount(3);
+    await expect(history.getByText("Changed trial daily chats: default → 4")).toBeVisible();
     await screenshotScreen(adminPage, "e27-03-history");
 
     assertHealthy(health);

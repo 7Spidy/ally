@@ -2,17 +2,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { dayKey } from "@/lib/clock";
-import { FREE_DAILY, MAX_COMPANIONS, PASS_CAP, PART_PURGE_DAYS, PRICE_DAY_PASS } from "@/lib/config";
+import { HIDDEN_DAILY_CAPS, PART_PURGE_DAYS, PLAN_CONFIG } from "@/lib/config";
 
-// P2 server state (supabase/migrations/20260924000001_server_state.sql),
-// against the local Supabase stack (`npm run db:start`, `npm run e2e:env`).
+// P2 server state (supabase/migrations/20260924000001_server_state.sql) and the
+// plans/trial model on top of it (20261111000001_plans_and_trial.sql), against
+// the local Supabase stack (`npm run db:start`, `npm run e2e:env`).
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const PUBLISHABLE = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY as string;
 const SECRET = process.env.SUPABASE_SECRET_KEY as string;
 const CAPTCHA = "XXXX.DUMMY.TOKEN.XXXX";
 
-const TABLES = ["companions", "messages", "ledgers", "ledger_unlocks", "ledger_passes", "ledger_parted"] as const;
-type Table = (typeof TABLES)[number];
+// Tables a populated user has rows in. ledger_unlocks and ledger_passes are DEPRECATED (nothing writes them any more)
+// but keep their owner-only RLS and no-write grants, so they stay in the grant checks via ALL_TABLES.
+const TABLES = ["companions", "messages", "ledgers", "ledger_parted", "subscriptions"] as const;
+const ALL_TABLES = [...TABLES, "ledger_unlocks", "ledger_passes"] as const;
+type Table = (typeof ALL_TABLES)[number];
 
 const noPersist = { auth: { persistSession: false, autoRefreshToken: false } };
 const admin = createClient(URL, SECRET, noPersist);
@@ -43,6 +47,21 @@ async function makeAnonymous(): Promise<TestUser> {
   return { id: data.user.id, client };
 }
 
+type PaidPlan = "pro" | "max" | "ultra";
+
+/** The server-side entry point a verified Play purchase would use (service role only). */
+async function grantPlan(uid: string, plan: PaidPlan, status = "active", expiresInMs = 30 * 86400000): Promise<void> {
+  const { error } = await admin.rpc("set_subscription", {
+    p_user_id: uid,
+    p_plan: plan,
+    p_status: status,
+    p_expires_at: new Date(Date.now() + expiresInMs).toISOString(),
+    p_purchase_token: `tok-${uid}`,
+    p_product_id: `ally_${plan}`,
+  });
+  if (error) throw new Error(`set_subscription: ${error.code} ${error.message}`);
+}
+
 const ANSWERS = { q5: 0.4, q6: 0.5, q7: 0.5, q8: 0.38, q9: 0.5, q10: "head", q11: ["music"] };
 const CORE = { primary: "PSYCH", secondary: null, weight: 100, ranked: [{ id: "PSYCH", score: 0.9 }] };
 
@@ -71,15 +90,14 @@ async function countRows(table: Table, uid: string): Promise<number> {
 async function ledgerRow(uid: string) {
   const { data, error } = await admin.from("ledgers").select("*").eq("user_id", uid).single();
   if (error) throw error;
-  return data as { day: string; free_used: number; slots_unlocked: number; pass_used: number | null; pass_ends_at: string | null };
+  return data as { day: string; free_used: number };
 }
 
-/** Gives a user at least one row in each of the six tables, through the RPCs only. */
+/** Gives a user at least one row in each live table, through the RPCs (and the purchase entry point) only. */
 async function populate(u: TestUser): Promise<{ activeId: string }> {
-  await rpc(u, "unlock_slot", { amount: 199 }); // ledgers + ledger_unlocks
+  await grantPlan(u.id, "max"); // subscriptions, and room for a second companion
   const first = await createCompanion(u, "F01");
-  await rpc(u, "send_message", { companion_id: first.id, body: "hello" }); // messages
-  await rpc(u, "buy_pass"); // ledger_passes
+  await rpc(u, "send_message", { companion_id: first.id, body: "hello" }); // ledgers, messages
   const second = await createCompanion(u, "M01");
   await rpc(u, "part_companion", { companion_id: second.id }); // ledger_parted
   return { activeId: first.id };
@@ -126,6 +144,7 @@ describe("grants: no direct insert/update/delete for authenticated or anon", () 
     ledger_unlocks: (uid) => ({ user_id: uid, slot: 3, amount: 0 }),
     ledger_passes: (uid) => ({ user_id: uid, amount: 0 }),
     ledger_parted: (uid) => ({ user_id: uid, template_id: "F16" }),
+    subscriptions: (uid) => ({ user_id: uid, plan: "ultra", status: "active", expires_at: "2099-01-01T00:00:00Z" }),
   };
   const sampleUpdate: Record<Table, Record<string, unknown>> = {
     companions: { exchanges: 0 },
@@ -134,9 +153,10 @@ describe("grants: no direct insert/update/delete for authenticated or anon", () 
     ledger_unlocks: { amount: 0 },
     ledger_passes: { amount: 0 },
     ledger_parted: { template_id: "F15" },
+    subscriptions: { plan: "ultra", status: "active" },
   };
 
-  for (const table of TABLES) {
+  for (const table of ALL_TABLES) {
     it(`${table}: A's own insert, update and delete are refused with 42501`, async () => {
       const before = await countRows(table, a.id);
       const ins = await a.client.from(table).insert(sampleInsert[table](a.id));
@@ -157,12 +177,20 @@ describe("grants: no direct insert/update/delete for authenticated or anon", () 
     });
   }
 
-  it("the ledger cannot be raised by a direct write: A's slots and free count are unchanged", async () => {
+  it("the ledger cannot be reset by a direct write: A's free count is unchanged", async () => {
     const before = await ledgerRow(a.id);
-    await a.client.from("ledgers").update({ slots_unlocked: 3, free_used: 0 }).eq("user_id", a.id);
+    await a.client.from("ledgers").update({ free_used: 0 }).eq("user_id", a.id);
     const after = await ledgerRow(a.id);
-    expect(after.slots_unlocked).toBe(before.slots_unlocked);
     expect(after.free_used).toBe(before.free_used);
+  });
+
+  it("a plan cannot be self-granted: no direct write to subscriptions or trial_started_at", async () => {
+    const ins = await a.client.from("subscriptions").insert({ user_id: a.id, plan: "ultra", status: "active", expires_at: "2099-01-01T00:00:00Z" });
+    expect(ins.error?.code).toBe("42501");
+    const upd = await a.client.from("profiles").update({ trial_started_at: new Date().toISOString() }).eq("id", a.id);
+    expect(upd.error?.code).toBe("42501");
+    const forced = await a.client.from("profiles").update({ plan_forced: true }).eq("id", a.id);
+    expect(forced.error?.code).toBe("42501");
   });
 });
 
@@ -175,8 +203,8 @@ describe("RPC access", () => {
     ["seed_opener", { companion_id: "c_x", body: "hi" }],
     ["open_chat", { companion_id: "c_x" }],
     ["part_companion", { companion_id: "c_x" }],
-    ["unlock_slot", { amount: 1 }],
-    ["buy_pass", undefined],
+    ["get_entitlement", undefined],
+    ["mark_deeper_shown", { companion_id: "c_x" }],
     ["set_companion_prefs", { companion_id: "c_x", notify: false }],
     ["purge_parted_now", undefined],
   ];
@@ -207,86 +235,102 @@ describe("RPC access", () => {
     expect(data).toEqual({ status: "active", notify: true });
   });
 
+  it("the removed day-pass and slot-unlock RPCs no longer exist", async () => {
+    for (const fn of ["unlock_slot", "buy_pass"]) {
+      const { error } = await a.client.rpc(fn, fn === "unlock_slot" ? { amount: 1 } : undefined);
+      expect(error, fn).not.toBeNull();
+      expect(error?.code, fn).not.toBe("42501"); // gone, not merely forbidden
+    }
+  });
+
   it("the private helper schema is not reachable through the API", async () => {
     const { error } = await a.client.schema("ally_private" as "public").rpc("free_daily");
     expect(error).not.toBeNull();
   });
 });
 
-describe("ledger RPCs port src/lib/ledger.ts", () => {
-  let u: TestUser;
-  let cid: string;
+describe("send_message judges the plan's allowance", () => {
   const today = () => dayKey(Date.now());
+  const TRIAL_CHATS = PLAN_CONFIG.trial.dailyChats;
+  type Sent = { blocked: boolean; status: string; code: string | null; message: unknown; ledger: { day: string; freeUsed: number }; entitlement: Record<string, unknown> };
 
-  beforeAll(async () => {
-    u = await makeUser("ledger");
-    cid = (await createCompanion(u, "F02")).id;
-  });
-
-  it("send_message debits the free allowance, then blocks with 'empty' and inserts nothing", async () => {
-    await admin.from("ledgers").update({ day: today(), free_used: FREE_DAILY - 1 }).eq("user_id", u.id);
-    const ok = await rpc<{ blocked: boolean; status: string; exchanges: number; ledger: { freeUsed: number } }>(u, "send_message", { companion_id: cid, body: "last one" });
+  it("on the trial: 100 chats a day, then TRIAL_LIMIT, and nothing is inserted", async () => {
+    const u = await makeUser("trial");
+    const cid = (await createCompanion(u, "F02")).id;
+    await admin.from("ledgers").update({ day: today(), free_used: TRIAL_CHATS - 1 }).eq("user_id", u.id);
+    const ok = await rpc<Sent>(u, "send_message", { companion_id: cid, body: "last one" });
     expect(ok.blocked).toBe(false);
-    expect(ok.ledger.freeUsed).toBe(FREE_DAILY);
-    const messagesBefore = await countRows("messages", u.id);
-    const blocked = await rpc<{ blocked: boolean; status: string; message: unknown }>(u, "send_message", { companion_id: cid, body: "over" });
-    expect(blocked).toMatchObject({ blocked: true, status: "empty", message: null });
-    expect(await countRows("messages", u.id)).toBe(messagesBefore);
-    expect((await ledgerRow(u.id)).free_used).toBe(FREE_DAILY);
+    expect(ok.ledger.freeUsed).toBe(TRIAL_CHATS);
+    expect(ok.entitlement).toMatchObject({ plan: "trial", chats_left_today: 0, can_send: false, cap_reached: true });
+    const before = await countRows("messages", u.id);
+    const blocked = await rpc<Sent>(u, "send_message", { companion_id: cid, body: "over" });
+    expect(blocked).toMatchObject({ blocked: true, status: "TRIAL_LIMIT", code: "TRIAL_LIMIT", message: null });
+    expect(await countRows("messages", u.id)).toBe(before);
+    expect((await ledgerRow(u.id)).free_used).toBe(TRIAL_CHATS);
   });
 
-  it("a new Asia/Kolkata day zeroes free_used (rollDay)", async () => {
-    await admin.from("ledgers").update({ day: "2000-01-01", free_used: FREE_DAILY }).eq("user_id", u.id);
-    const res = await rpc<{ blocked: boolean; ledger: { day: string; freeUsed: number } }>(u, "send_message", { companion_id: cid, body: "new day" });
+  it("a new Asia/Kolkata day zeroes the count", async () => {
+    const u = await makeUser("rollday");
+    const cid = (await createCompanion(u, "F02")).id;
+    await admin.from("ledgers").update({ day: "2000-01-01", free_used: TRIAL_CHATS }).eq("user_id", u.id);
+    const res = await rpc<Sent>(u, "send_message", { companion_id: cid, body: "new day" });
     expect(res.blocked).toBe(false);
     expect(res.ledger.day).toBe(today());
     expect(res.ledger.freeUsed).toBe(1);
   });
 
-  it("a pass takes over from the free allowance and caps at PASS_CAP with 'capped'", async () => {
-    await admin.from("ledgers").update({ free_used: FREE_DAILY }).eq("user_id", u.id);
-    const bought = await rpc<{ ledger: { pass: { used: number; endsAt: number; startedAt: number } | null; passes: { amount: number }[] } }>(u, "buy_pass");
-    expect(bought.ledger.pass?.used).toBe(0);
-    expect(bought.ledger.pass!.endsAt - bought.ledger.pass!.startedAt).toBe(24 * 3600000);
-    expect(bought.ledger.passes.at(-1)?.amount).toBe(PRICE_DAY_PASS);
-
-    // buy_pass is a no-op while a pass is active
-    const again = await rpc<{ ledger: { passes: unknown[] } }>(u, "buy_pass");
-    expect(again.ledger.passes).toHaveLength(bought.ledger.passes.length);
-
-    const onPass = await rpc<{ blocked: boolean; ledger: { freeUsed: number; pass: { used: number } } }>(u, "send_message", { companion_id: cid, body: "on pass" });
-    expect(onPass.blocked).toBe(false);
-    expect(onPass.ledger.pass.used).toBe(1);
-    expect(onPass.ledger.freeUsed).toBe(FREE_DAILY); // the free count is untouched while on a pass
-
-    await admin.from("ledgers").update({ pass_used: PASS_CAP - 1 }).eq("user_id", u.id);
-    const last = await rpc<{ blocked: boolean }>(u, "send_message", { companion_id: cid, body: "last on pass" });
-    expect(last.blocked).toBe(false);
-    const capped = await rpc<{ blocked: boolean; status: string }>(u, "send_message", { companion_id: cid, body: "capped" });
-    expect(capped).toMatchObject({ blocked: true, status: "capped" });
+  it("on a paid plan the hidden cap stops sends with FAIR_USE_CAP, and the cap is never sent to the client", async () => {
+    for (const plan of ["pro", "max", "ultra"] as const) {
+      const u = await makeUser(`cap-${plan}`);
+      await grantPlan(u.id, plan);
+      const cid = (await createCompanion(u, "F02")).id;
+      const cap = HIDDEN_DAILY_CAPS[plan];
+      await admin.from("ledgers").update({ day: today(), free_used: cap - 1 }).eq("user_id", u.id);
+      const last = await rpc<Sent>(u, "send_message", { companion_id: cid, body: "last" });
+      expect(last.blocked, plan).toBe(false);
+      expect(last.entitlement).toMatchObject({ plan, chats_left_today: null, can_send: false, cap_reached: true });
+      expect(JSON.stringify(last.entitlement)).not.toContain(String(cap));
+      const capped = await rpc<Sent>(u, "send_message", { companion_id: cid, body: "capped" });
+      expect(capped, plan).toMatchObject({ blocked: true, status: "FAIR_USE_CAP", message: null });
+    }
   });
 
-  it("an expired pass falls back to the free allowance", async () => {
-    const past = new Date(Date.now() - 60000).toISOString();
-    await admin.from("ledgers").update({ pass_ends_at: past, free_used: 0 }).eq("user_id", u.id);
-    const res = await rpc<{ blocked: boolean; ledger: { freeUsed: number } }>(u, "send_message", { companion_id: cid, body: "after pass" });
-    expect(res.blocked).toBe(false);
-    expect(res.ledger.freeUsed).toBe(1);
+  it("once the trial is over with no plan: PLAN_EXPIRED, and a cancelled-but-unexpired plan still sends", async () => {
+    const u = await makeUser("expired");
+    const cid = (await createCompanion(u, "F02")).id;
+    await admin.from("profiles").update({ trial_started_at: new Date(Date.now() - 8 * 86400000).toISOString() }).eq("id", u.id);
+    const expired = await rpc<Sent>(u, "send_message", { companion_id: cid, body: "too late" });
+    expect(expired).toMatchObject({ blocked: true, status: "PLAN_EXPIRED", message: null });
+    expect(expired.entitlement).toMatchObject({ plan: "expired", can_send: false, slot_limit: 0 });
+
+    await grantPlan(u.id, "pro", "cancelled", 86400000); // cancelled, paid up for another day
+    const ok = await rpc<Sent>(u, "send_message", { companion_id: cid, body: "still paid" });
+    expect(ok.blocked).toBe(false);
+  });
+
+  it("a companion outside the plan's active slots takes no messages: COMPANION_LOCKED", async () => {
+    const u = await makeUser("locked");
+    await grantPlan(u.id, "max");
+    const first = await createCompanion(u, "F02");
+    const second = await createCompanion(u, "M02");
+    await grantPlan(u.id, "pro"); // downgrade: one slot, the first by creation stays active
+    const locked = await rpc<Sent>(u, "send_message", { companion_id: second.id, body: "hello?" });
+    expect(locked).toMatchObject({ blocked: true, status: "COMPANION_LOCKED", message: null });
+    const open = await rpc<Sent>(u, "send_message", { companion_id: first.id, body: "hello" });
+    expect(open.blocked).toBe(false);
+    // parting the first frees the slot, so the second is no longer locked
+    await rpc(u, "part_companion", { companion_id: first.id });
+    const nowOpen = await rpc<Sent>(u, "send_message", { companion_id: second.id, body: "hello again" });
+    expect(nowOpen.blocked).toBe(false);
   });
 
   it("send_message increments exchanges and returns the stored 'me' message", async () => {
+    const u = await makeUser("exchanges");
+    const cid = (await createCompanion(u, "F02")).id;
     const res = await rpc<{ exchanges: number; message: { who: string; text: string; at: number } }>(u, "send_message", { companion_id: cid, body: "count me" });
     expect(res.message).toMatchObject({ who: "me", text: "count me" });
     const { data } = await admin.from("companions").select("exchanges").eq("id", cid).single();
     expect(data?.exchanges).toBe(res.exchanges);
-  });
-
-  it("unlock_slot caps at MAX_COMPANIONS but records every unlock", async () => {
-    let last: { ledger: { slotsUnlocked: number; unlocks: { slot: number; amount: number }[] } } | null = null;
-    for (let i = 0; i < MAX_COMPANIONS + 1; i++) last = await rpc(u, "unlock_slot", { amount: 100 + i });
-    expect(last!.ledger.slotsUnlocked).toBe(MAX_COMPANIONS);
-    expect(last!.ledger.unlocks).toHaveLength(MAX_COMPANIONS + 1);
-    expect(last!.ledger.unlocks.at(-1)).toMatchObject({ slot: MAX_COMPANIONS, amount: 100 + MAX_COMPANIONS });
   });
 });
 
@@ -298,9 +342,9 @@ describe("create_companion", () => {
     const profile = await admin.from("profiles").select("display_name").eq("id", u.id).single();
     expect(profile.data?.display_name).toBe("Riya");
 
-    // one slot, one active companion
+    // the trial has one slot, one active companion
     const { error: full } = await u.client.rpc("create_companion", { template_id: "F04", deck_gender: "woman", answers: ANSWERS, core: CORE, display_name: "Other" });
-    expect(full?.message).toBe("slots_full");
+    expect(full?.message).toBe("SLOT_LIMIT");
 
     await rpc(u, "part_companion", { companion_id: first.id });
     const { error: reused } = await u.client.rpc("create_companion", { template_id: "F03", deck_gender: "woman", answers: ANSWERS, core: CORE, display_name: "" });
@@ -309,6 +353,37 @@ describe("create_companion", () => {
     await createCompanion(u, "F04", "Other");
     const after = await admin.from("profiles").select("display_name").eq("id", u.id).single();
     expect(after.data?.display_name).toBe("Riya"); // not overwritten
+  });
+
+  it("slots follow the plan: 1 on the trial, Pro 1, Max 2, Ultra 4, expired 0", async () => {
+    const tryCreate = (u: TestUser, t: string) => u.client.rpc("create_companion", { template_id: t, deck_gender: t.startsWith("F") ? "woman" : "man", answers: ANSWERS, core: CORE, display_name: "" });
+    const faces = ["F09", "F10", "F11", "F12", "F13"];
+    const expectedSlots: Record<string, number> = { pro: PLAN_CONFIG.tiers.pro.slots, max: PLAN_CONFIG.tiers.max.slots, ultra: PLAN_CONFIG.tiers.ultra.slots };
+    for (const plan of ["pro", "max", "ultra"] as const) {
+      const u = await makeUser(`slots-${plan}`);
+      await grantPlan(u.id, plan);
+      let made = 0;
+      for (const t of faces) {
+        const { error } = await tryCreate(u, t);
+        if (error) {
+          expect(error.message, plan).toBe("SLOT_LIMIT");
+          break;
+        }
+        made++;
+      }
+      expect(made, plan).toBe(expectedSlots[plan]);
+    }
+    const expired = await makeUser("slots-expired");
+    await admin.from("profiles").update({ trial_started_at: new Date(Date.now() - 9 * 86400000).toISOString() }).eq("id", expired.id);
+    expect((await tryCreate(expired, "F09")).error?.message).toBe("SLOT_LIMIT");
+  });
+
+  it("parted companions do not count against the slots", async () => {
+    const u = await makeUser("slots-parted");
+    await grantPlan(u.id, "pro");
+    const first = await createCompanion(u, "F09");
+    await rpc(u, "part_companion", { companion_id: first.id });
+    await createCompanion(u, "F10"); // a parted one does not hold the slot
   });
 
   it("part_companion sets purge_at PART_PURGE_DAYS out and adds the face to ledger_parted", async () => {
@@ -373,16 +448,15 @@ describe("purge and get_my_state", () => {
     expect(state.consent).toMatchObject({ marketing: true });
     const companions = state.companions as Record<string, unknown>[];
     expect(Object.keys(companions[0]).sort()).toEqual(
-      // B2 adds trustLevel, levelChangedAt, pausedReason and lastCtxDay; B4 adds live; never trust points.
-      ["answers", "core", "createdAt", "deckGender", "exchanges", "id", "lastCtxDay", "lastOpenedAt", "levelChangedAt", "live", "messages", "notify", "partedAt", "pausedReason", "purgeAt", "sound", "status", "templateId", "trustLevel", "unread"].sort()
+      // B2 adds trustLevel, levelChangedAt, pausedReason and lastCtxDay; B4 adds live; plans add deeperLevelAvailable and deeperShown; never trust points.
+      ["answers", "core", "createdAt", "deckGender", "deeperLevelAvailable", "deeperShown", "exchanges", "id", "lastCtxDay", "lastOpenedAt", "levelChangedAt", "live", "messages", "notify", "partedAt", "pausedReason", "purgeAt", "sound", "status", "templateId", "trustLevel", "unread"].sort()
     );
     expect(companions[0]).toMatchObject({ id: c.id, templateId: "M03", deckGender: "man", status: "active", answers: ANSWERS, core: CORE });
-    // freeDaily/passCap: P3's effective limits (admin override or default).
-    expect(Object.keys(state.ledger as object).sort()).toEqual(["day", "freeDaily", "freeUsed", "parted", "pass", "passCap", "passes", "slotsUnlocked", "unlocks"]);
-    expect(state.ledger).toMatchObject({ freeDaily: FREE_DAILY, passCap: PASS_CAP });
-    expect(state).toHaveProperty("unlocks");
-    expect(state).toHaveProperty("passes");
-    expect(state).toHaveProperty("parted");
+    // The ledger is just the day's counter and the parted faces; the plan lives in `entitlement`.
+    expect(Object.keys(state.ledger as object).sort()).toEqual(["day", "freeUsed", "parted"]);
+    expect(state.entitlement).toMatchObject({ plan: "trial", slot_limit: 1, max_level: 5, can_send: true, chats_left_today: PLAN_CONFIG.trial.dailyChats, cap_reached: false });
+    expect(state).not.toHaveProperty("unlocks");
+    expect(state).not.toHaveProperty("passes");
   });
 
   it("set_companion_prefs persists notify and sound", async () => {
@@ -413,7 +487,7 @@ describe("ist_day_key matches dayKey() at the midnight IST boundary", () => {
 });
 
 describe("account deletion leaves nothing behind", () => {
-  it("admin deleteUser (the /api/account/delete path) removes every row in the six tables", async () => {
+  it("admin deleteUser (the /api/account/delete path) removes every row in the live tables", async () => {
     const u = await makeUser("delete");
     await populate(u);
     for (const t of TABLES) expect(await countRows(t, u.id), t).toBeGreaterThan(0);
@@ -422,7 +496,7 @@ describe("account deletion leaves nothing behind", () => {
     for (const t of TABLES) expect(await countRows(t, u.id), t).toBe(0);
   });
 
-  it("purge_self for an anonymous user removes every row in the six tables", async () => {
+  it("purge_self for an anonymous user removes every row in the live tables", async () => {
     const u = await makeAnonymous();
     await populate(u);
     for (const t of TABLES) expect(await countRows(t, u.id), t).toBeGreaterThan(0);

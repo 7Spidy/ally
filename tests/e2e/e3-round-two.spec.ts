@@ -15,7 +15,7 @@ import {
 } from "./helpers";
 
 test.describe("E3 round two end to end", () => {
-  test("E3: slot-2 unlock -> gender -> 7 questions -> 8-card deck -> lock -> new chat; home shows 2 cards", async ({
+  test("E3: Max plan, a free slot -> gender -> 7 questions -> 8-card deck -> lock -> new chat; home shows 2 cards", async ({
     page,
   }) => {
     // Seed ONE active companion of a KNOWN templateId/gender (F01, woman), and
@@ -26,7 +26,8 @@ test.describe("E3 round two end to end", () => {
       deckGender: "woman",
       createdAt: FIXED_NOW - 500000,
     });
-    const state = makeState({ companions: [companion] });
+    // A Max user (2 Ally slots) with one active companion: the second slot is free, so round two starts without the plans screen.
+    const state = makeState({ companions: [companion], plan: "max" });
 
     await setClock(page, FIXED_NOW);
     await seedState(page, state);
@@ -44,12 +45,7 @@ test.describe("E3 round two end to end", () => {
     await screenshotScreen(page, "e3-02-intro-sheet");
     await introDialog.getByRole("button", { name: "Start" }).click();
 
-    // slot-2 unlock sheet
-    await expect(page.getByText("Make room for someone new")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("₹199")).toBeVisible();
-    await screenshotScreen(page, "e3-03-unlock-sheet");
-    await page.getByRole("button", { name: "Unlock with UPI" }).click();
-
+    // a free slot: straight on to the gender step (no plans screen, no unlock)
     await page.waitForURL("**/onboarding/gender");
     // choose the opposite gender to get a fresh, unconstrained 15/16-card pool if desired;
     // pick "man" so the deck is a different-gender pool (still fine), but spec wants a

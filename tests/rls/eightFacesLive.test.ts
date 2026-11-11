@@ -14,6 +14,22 @@ const CAPTCHA = "XXXX.DUMMY.TOKEN.XXXX";
 
 const noPersist = { auth: { persistSession: false, autoRefreshToken: false } };
 const service = createClient(URL, SECRET, noPersist);
+
+type PaidPlan = "pro" | "max" | "ultra";
+
+/** The server-side entry point a verified Play purchase would use (service role only). */
+async function grantPlan(uid: string, plan: PaidPlan): Promise<void> {
+  const { error } = await service.rpc("set_subscription", {
+    p_user_id: uid,
+    p_plan: plan,
+    p_status: "active",
+    p_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+    p_purchase_token: `tok-${uid}`,
+    p_product_id: `ally_${plan}`,
+  });
+  if (error) throw new Error(`set_subscription: ${error.code} ${error.message}`);
+}
+
 const createdIds: string[] = [];
 
 interface TestUser {
@@ -227,7 +243,7 @@ describe("is_live by owner and core", () => {
   it("a normal user's new face is live when its primary matches, not otherwise", async () => {
     const u = await makeUser("normal-f06");
     expect((await createCompanion(u, "F06", "ROMANTIC")).live).toBe(true);
-    await rpc(u, "unlock_slot", { amount: 199 });
+    await grantPlan(u.id, "max");
     expect((await createCompanion(u, "F12", "ROMANTIC")).live).toBe(false);
   });
 });
@@ -243,7 +259,7 @@ const BACKFILL = (() => {
 describe("backfill of mismatched companions", () => {
   it("aligns an active mismatched companion to its face, keeps ranked, and leaves parted ones alone", async () => {
     const u = await makeUser("backfill");
-    await rpc(u, "unlock_slot", { amount: 199 });
+    await grantPlan(u.id, "max");
     const c = await createCompanion(u, "F11", "ROMANTIC"); // Money face, Romantic core: mismatched
     expect(c.live).toBe(false);
     const parted = await createCompanion(u, "M06", "ROMANTIC");
