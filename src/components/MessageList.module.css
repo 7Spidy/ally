@@ -1,12 +1,62 @@
+/* The list scrolls inside a wrapper so the jump-to-latest button can sit just above the composer. */
+.wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 .list {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* The page holds the reading position itself when older messages are added. */
+  overflow-anchor: none;
   padding: 8px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* The sentinel that asks for the previous page when it scrolls into view. */
+.top {
+  flex: none;
+  height: 1px;
+  margin-bottom: -10px;
+}
+
+.older {
+  align-self: center;
+  color: var(--mut);
+  font-size: 15.5px;
+  padding: 4px 0;
+}
+
+.dateSep {
+  align-self: center;
+  color: var(--mut);
+  font-size: 15.5px;
+  margin: 6px 0 2px;
+}
+
+.stampMe,
+.stampThem {
+  margin: 3px 8px 0;
+  font-size: 15.5px;
+  color: var(--dim);
+}
+.stampMe {
+  align-self: flex-end;
+}
+.stampThem {
+  align-self: flex-start;
+}
+
+/* A message the server has not confirmed yet. */
+.pendingBubble {
+  opacity: 0.6;
 }
 
 .divider {
@@ -31,6 +81,9 @@
   border-radius: 20px;
   font-size: 15.5px;
   line-height: 1.45;
+  /* Messages keep the line breaks they were written with. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .them {

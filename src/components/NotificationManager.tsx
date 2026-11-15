@@ -6,6 +6,7 @@ import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
 import { active, lastOpened } from "@/lib/selectors";
 import { firstNameFromFull } from "@/lib/engine";
+import { COPY } from "@/lib/copy";
 import {
   initNotificationService,
   dispatchNotification,
@@ -109,7 +110,7 @@ export function NotificationManager() {
 
             // Find template details for avatar and name
             const template = templates.find((t) => t.id === companion.templateId);
-            const companionName = template ? firstNameFromFull(template.name) : (data.companionName || "Companion");
+            const companionName = template ? firstNameFromFull(template.name) : (data.companionName || COPY.notifications.fallbackName);
             const avatarUrl = template?.avatar ? `/${template.avatar}` : undefined;
 
             // Trigger native Android / web notification

@@ -21,7 +21,7 @@ export function QuoteBlock({
 }) {
   const body = (
     <>
-      <span className={styles.who}>{label}</span>
+      {label && <span className={styles.who}>{label}</span>}
       <span className={deleted ? styles.gone : styles.text}>{deleted ? COPY.chat.quoteDeleted : text}</span>
     </>
   );

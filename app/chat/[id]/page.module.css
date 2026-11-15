@@ -4,6 +4,13 @@
   height: 100%;
 }
 
+/* Catches a tap anywhere outside the menu so it closes. */
+.overflowBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 19;
+}
+
 .overflowMenu {
   position: absolute;
   top: calc(64px + var(--safe-t));

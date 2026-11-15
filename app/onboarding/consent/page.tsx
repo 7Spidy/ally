@@ -33,6 +33,8 @@ export default function ConsentPage() {
   useEffect(() => {
     if (goForUid && ownerId === goForUid) {
       dispatch({ type: "CONSENT", marketing, now: now() });
+      // The consent just inserted already covers live replies, so the first chat never shows the update sheet.
+      dispatch({ type: "SET_CONSENT_VERSION", version: CONSENT_VERSION });
       router.push("/onboarding/location");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,6 +68,7 @@ export default function ConsentPage() {
       <div className="stack">
         <h1>{COPY.consent.heading}</h1>
         <p>{COPY.consent.body}</p>
+        <p>{COPY.consent.live}</p>
         <label className={styles.check}>
           <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
           <span>{COPY.consent.required}</span>

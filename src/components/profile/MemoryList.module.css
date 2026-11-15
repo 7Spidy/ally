@@ -1,0 +1,67 @@
+.section {
+  padding: 8px 0 4px;
+}
+
+.heading {
+  font: 400 22px/1.2 var(--serif);
+  margin: 12px 4px 8px;
+}
+
+.empty {
+  margin: 0 4px 12px;
+  color: var(--mut);
+  font-size: 15.5px;
+}
+
+.group {
+  margin-bottom: 8px;
+}
+
+.label {
+  margin: 12px 4px 2px;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--mut);
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 4px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fact {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.forget {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 22px;
+  background: none;
+  color: var(--mut);
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Armed: the second tap deletes. Same red as the danger button, readable on the page. */
+.forget[data-armed="true"] {
+  border: 1px solid #ff7b7b;
+  color: #ff7b7b;
+  font-size: 15.5px;
+}

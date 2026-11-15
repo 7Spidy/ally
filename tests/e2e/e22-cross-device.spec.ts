@@ -82,12 +82,9 @@ test.describe("E22 companion survives a new device", () => {
     await page2.waitForURL(`**/chat/${companionId}`, { timeout: 10000 });
     await expect(page2.getByText("Hello from device one")).toBeVisible();
     expect((await page2.locator('[class*="identity"]').innerText()).trim().split(/\s+/)[0]).toBe(personaName);
-    // exchanges (1) came from the server, so the first-exchange account nudge
-    // opens here too; it's dismissible.
-    await expect(page2.getByRole("dialog")).toBeVisible();
-    await screenshotScreen(page2, "e22-01-second-device-chat");
-    await page2.keyboard.press("Escape");
+    // The account nudge waits for exchange 3, so nothing opens over the chat here.
     await expect(page2.getByRole("dialog")).toHaveCount(0);
+    await screenshotScreen(page2, "e22-01-second-device-chat");
 
     await page2.getByRole("button", { name: "Back" }).click();
     await page2.waitForURL("**/home");

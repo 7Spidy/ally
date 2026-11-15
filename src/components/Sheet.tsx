@@ -11,22 +11,26 @@ const REGISTRY = { ...onboardingSheets, ...hubSheets, ...ledgerSheets };
 
 /**
  * Reusable scrim + panel wrapper. Traps focus while open (spec §9.2).
+ * `onScrimTap` makes a tap outside the panel close it; sheets that must be
+ * answered (the blocking account sheet, consent, the age checks) leave it off.
  * Individual sheets (ConfirmSheet, AccountSheet, IntroSheet, LeaveSheet, SwitcherSheet, PartSheet, DeleteSheet) render
  * their own content inside this and are wired into `SheetHost` below.
  */
-export function Sheet({ children, labelledBy }: { children: React.ReactNode; labelledBy?: string }) {
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+export function Sheet({ children, labelledBy, onScrimTap }: { children: React.ReactNode; labelledBy?: string; onScrimTap?: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
-    const focusable = panel.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
-    focusable[0]?.focus();
+    panel.querySelector<HTMLElement>(FOCUSABLE)?.focus();
 
+    // Looked up when Tab is pressed, not once on mount: a sheet's controls change as it moves between steps.
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Tab" || !focusable.length) return;
+      if (e.key !== "Tab" || !panel) return;
+      const focusable = panel.querySelectorAll<HTMLElement>(FOCUSABLE);
+      if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (e.shiftKey && document.activeElement === first) {
@@ -43,7 +47,7 @@ export function Sheet({ children, labelledBy }: { children: React.ReactNode; lab
 
   return (
     <>
-      <div className={styles.scrim} />
+      <div className={styles.scrim} data-testid="sheet-scrim" onClick={onScrimTap} />
       <div className={styles.panel} ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={labelledBy}>
         {children}
       </div>

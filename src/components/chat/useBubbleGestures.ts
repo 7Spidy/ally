@@ -15,7 +15,9 @@ type Mode = "idle" | "swipe" | "scroll";
 
 /**
  * One bubble's gestures: long-press (or right-click, or Enter) opens the
- * actions; dragging right past SWIPE_TRIGGER_PX and letting go replies.
+ * actions; dragging right past SWIPE_TRIGGER_PX and letting go replies; a
+ * tap (a release under SLOP_PX from where it landed, with no long-press and no
+ * swipe) reports onTap, so it never competes with the other two.
  * The row's `--swipe` custom property follows the finger, set directly on the
  * element so a drag never re-renders the list. Vertical scrolling is left to
  * the browser: once the first movement is mostly vertical this stands down.
@@ -25,12 +27,15 @@ export function useBubbleGestures({
   direction,
   onOpenActions,
   onSwipeReply,
+  onTap,
 }: {
   enabled: boolean;
   /** Which way a reply swipe goes: 1 for her bubbles (right), -1 for yours (left), toward the middle of the screen. */
   direction: 1 | -1;
   onOpenActions: () => void;
   onSwipeReply: () => void;
+  /** A plain tap on the bubble (not on a button or link inside it). */
+  onTap?: () => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -38,8 +43,8 @@ export function useBubbleGestures({
   const mode = useRef<Mode>("idle");
   const fired = useRef(false);
   const armed = useRef(false);
-  const cb = useRef({ onOpenActions, onSwipeReply });
-  cb.current = { onOpenActions, onSwipeReply };
+  const cb = useRef({ onOpenActions, onSwipeReply, onTap });
+  cb.current = { onOpenActions, onSwipeReply, onTap };
 
   const clearTimer = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -110,11 +115,15 @@ export function useBubbleGestures({
         else delete rowRef.current.dataset.armed;
       }
     },
-    onPointerUp() {
+    onPointerUp(e: PointerEvent<HTMLElement>) {
       const wasSwipe = mode.current === "swipe";
       const doReply = wasSwipe && armed.current;
+      const moved = Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y);
+      const target = e.target as HTMLElement | null;
+      const isTap = mode.current === "idle" && !fired.current && moved < SLOP_PX && !target?.closest?.("button, a");
       reset();
       if (doReply) cb.current.onSwipeReply();
+      else if (isTap) cb.current.onTap?.();
     },
     onPointerCancel() {
       reset();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { EDIT_WINDOW_MS, canCopy, canDelete, canEdit, canReply, isFresh, receiptFor } from "@/lib/chatActions";
+import { EDIT_WINDOW_MS, canCopy, canDelete, canEdit, canRegenerate, canReply, isFresh, isSaved, nextTempId, receiptFor } from "@/lib/chatActions";
 import type { Message } from "@/state/schema";
 
 const NOW = 1_800_000_000_000;
@@ -36,22 +36,77 @@ describe("delete, reply, copy", () => {
   });
 });
 
+describe("pending bubbles", () => {
+  const pending = me(-1, { pending: true });
+  it("are not saved, so they have no actions", () => {
+    expect(isSaved(pending)).toBe(false);
+    expect(canEdit(pending, NOW)).toBe(false);
+    expect(canDelete(pending)).toBe(false);
+    expect(canReply(pending)).toBe(false);
+    expect(canCopy(pending)).toBe(false);
+  });
+  it("temp ids are negative and never repeat", () => {
+    const a = nextTempId();
+    const b = nextTempId();
+    expect(a).toBeLessThan(0);
+    expect(b).toBeLessThan(0);
+    expect(a).not.toBe(b);
+  });
+});
+
 describe("receipt", () => {
   it("none for an empty chat or one with only her messages", () => {
-    expect(receiptFor([], false)).toBeNull();
-    expect(receiptFor([them(1)], false)).toBeNull();
+    expect(receiptFor([], null)).toBeNull();
+    expect(receiptFor([them(1)], null)).toBeNull();
   });
-  it("delivered until she types or answers, then read", () => {
+  it("delivered until she has read it (readUpTo reaches it) or answered, then read", () => {
     const list = [them(1), me(2)];
-    expect(receiptFor(list, false)).toEqual({ index: 1, status: "delivered" });
-    expect(receiptFor(list, true)).toEqual({ index: 1, status: "read" });
-    expect(receiptFor([...list, them(3)], false)).toEqual({ index: 1, status: "read" });
+    expect(receiptFor(list, null)).toEqual({ index: 1, status: "delivered" });
+    expect(receiptFor(list, 1)).toEqual({ index: 1, status: "delivered" });
+    expect(receiptFor(list, 2)).toEqual({ index: 1, status: "read" });
+    expect(receiptFor(list, 9)).toEqual({ index: 1, status: "read" });
+    expect(receiptFor([...list, them(3)], null)).toEqual({ index: 1, status: "read" });
+  });
+  it("typing alone no longer means read: the dots wait for readUpTo", () => {
+    expect(receiptFor([them(1), me(2)], null)?.status).toBe("delivered");
   });
   it("sits on the newest user message only", () => {
-    expect(receiptFor([me(1), them(2), me(3)], false)?.index).toBe(2);
+    expect(receiptFor([me(1), them(2), me(3)], null)?.index).toBe(2);
   });
-  it("none when the newest user message was deleted", () => {
-    expect(receiptFor([me(1), me(2, { deleted: true })], false)).toBeNull();
+  it("none when the newest user message was deleted or is still pending", () => {
+    expect(receiptFor([me(1), me(2, { deleted: true })], null)).toBeNull();
+    expect(receiptFor([me(1), me(-1, { pending: true })], 1)).toBeNull();
+  });
+});
+
+describe("canRegenerate", () => {
+  const ok = { live: true, locked: false, expired: false, playing: false };
+  it("yes for the newest user message with her reply to it after", () => {
+    expect(canRegenerate([me(1), them(2, { inReplyTo: 1 }), them(3, { inReplyTo: 1 })], 1, ok)).toBe(true);
+  });
+  it("yes when she has not replied yet", () => {
+    expect(canRegenerate([them(1), me(2)], 2, ok)).toBe(true);
+  });
+  it("no when a newer user message follows", () => {
+    expect(canRegenerate([me(1), them(2, { inReplyTo: 1 }), me(3)], 1, ok)).toBe(false);
+  });
+  it("no when a later bubble of hers answers something else", () => {
+    expect(canRegenerate([me(1), them(2, { inReplyTo: 1 }), them(3, { inReplyTo: 9 })], 1, ok)).toBe(false);
+    expect(canRegenerate([me(1), them(2)], 1, ok)).toBe(false);
+  });
+  it("no for an older message, her message, a missing id or a pending one", () => {
+    const list = [me(1), them(2, { inReplyTo: 1 }), me(3), them(4, { inReplyTo: 3 })];
+    expect(canRegenerate(list, 1, ok)).toBe(false);
+    expect(canRegenerate(list, 4, ok)).toBe(false);
+    expect(canRegenerate(list, 77, ok)).toBe(false);
+    expect(canRegenerate([me(-1, { pending: true })], -1, ok)).toBe(false);
+  });
+  it("no for a mock companion, a locked one, an expired plan, or while a reply plays", () => {
+    const list = [me(1), them(2, { inReplyTo: 1 })];
+    expect(canRegenerate(list, 1, { ...ok, live: false })).toBe(false);
+    expect(canRegenerate(list, 1, { ...ok, locked: true })).toBe(false);
+    expect(canRegenerate(list, 1, { ...ok, expired: true })).toBe(false);
+    expect(canRegenerate(list, 1, { ...ok, playing: true })).toBe(false);
   });
 });
 

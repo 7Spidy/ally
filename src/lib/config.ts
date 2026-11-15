@@ -7,9 +7,12 @@ export const LONG_PRESS_MS = 500;
 export const BLOCK_DAYS = 180; // under-18 gate: ally_blocked_until = now + BLOCK_DAYS
 
 // P1 accounts and auth
-export const CONSENT_VERSION = "2026-09-v1";
-/** B2: the consent a user gives once Ira replies live (replies are written by an AI model; the version string is historical and stays). */
+/** The consent every new user gives at onboarding. It already covers live (AI-written) replies, so a fresh user never sees the chat consent sheet. */
+export const CONSENT_VERSION = "2026-11-v2";
+/** B2: the consent an existing user gave on their first live chat (replies are written by an AI model; the version string is historical and stays). Still accepted. */
 export const LIVE_CONSENT_VERSION = "v2-live-groq";
+/** Consent versions that allow live chat. A newest consent outside this list (the September one) sees the update sheet once. */
+export const LIVE_OK_VERSIONS: readonly string[] = [CONSENT_VERSION, LIVE_CONSENT_VERSION];
 export const OTP_LENGTH = 6;
 export const OTP_RESEND_SECONDS = 60;
 export const PASSWORD_MIN = 8;

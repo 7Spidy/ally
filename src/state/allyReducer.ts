@@ -7,7 +7,8 @@ import { computeCore } from "@/lib/engine";
  * actions that change them (CONFIRM_LOCK, SEND_MESSAGE, RECEIVE_REPLY,
  * SEED_OPENER, OPEN_CHAT, PART_COMPANION, LEDGER_SYNC, SET_NOTIFY, SET_SOUND) are dispatched only after the matching
  * RPC in src/lib/supabase/queries.ts succeeds, and carry the server's
- * confirmed values. Nothing here computes a new ledger or companion on its
+ * confirmed values (ADD_PENDING is the one exception: a local bubble for a
+ * send still in flight, replaced by CONFIRM_SENT or removed by DROP_PENDING). Nothing here computes a new ledger or companion on its
  * own. Onboarding flow and user preference actions stay purely local.
  */
 
@@ -40,6 +41,16 @@ export type AllyAction =
   | { type: "ADD_COMPANION"; companion: Companion }
   | { type: "ROUTER_LOCK_CLEAR" }
   | { type: "SEND_MESSAGE"; companionId: string; message: Message; exchanges: number; ledger: Ledger; entitlement: Entitlement }
+  /** A sent message shown at once, before the server confirms it (negative temp id, pending). */
+  | { type: "ADD_PENDING"; companionId: string; message: Message }
+  /** The server confirmed a pending message: swap it for the stored one. */
+  | { type: "CONFIRM_SENT"; companionId: string; tempId: number; message: Message; exchanges: number; ledger: Ledger; entitlement: Entitlement }
+  /** The send failed or was refused: remove the pending bubble. */
+  | { type: "DROP_PENDING"; companionId: string; tempId: number }
+  /** An older page of history, oldest to newest, de-duplicated by id. */
+  | { type: "PREPEND_MESSAGES"; companionId: string; messages: Message[]; hasMore: boolean }
+  /** Rows the server removed (her reply, retracted for an edit). */
+  | { type: "REMOVE_MESSAGES"; companionId: string; ids: number[] }
   | { type: "RECEIVE_REPLY"; companionId: string; message: Message }
   | { type: "SEED_OPENER"; companionId: string; message: Message }
   /** B3: an edited or deleted message, exactly as the server returned it. */
@@ -219,6 +230,34 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
         entitlement: action.entitlement,
       };
 
+    case "ADD_PENDING":
+      return updateCompanion(state, action.companionId, (c) => ({ ...c, messages: [...c.messages, action.message] }));
+
+    case "CONFIRM_SENT": {
+      const updated = updateCompanion(state, action.companionId, (c) => {
+        const at = c.messages.findIndex((m) => m.id === action.tempId);
+        const confirmed: Message = { ...action.message, clientKey: action.tempId };
+        const messages = at >= 0 ? c.messages.map((m, i) => (i === at ? confirmed : m)) : [...c.messages, confirmed];
+        return { ...c, messages, exchanges: action.exchanges };
+      });
+      return { ...updated, ledger: action.ledger, entitlement: action.entitlement };
+    }
+
+    case "DROP_PENDING":
+      return updateCompanion(state, action.companionId, (c) => ({ ...c, messages: c.messages.filter((m) => m.id !== action.tempId) }));
+
+    case "PREPEND_MESSAGES":
+      return updateCompanion(state, action.companionId, (c) => {
+        const have = new Set(c.messages.flatMap((m) => (typeof m.id === "number" ? [m.id] : [])));
+        const older = action.messages.filter((m) => typeof m.id !== "number" || !have.has(m.id));
+        return { ...c, messages: [...older, ...c.messages], hasMore: action.hasMore };
+      });
+
+    case "REMOVE_MESSAGES": {
+      const gone = new Set(action.ids);
+      return updateCompanion(state, action.companionId, (c) => ({ ...c, messages: c.messages.filter((m) => m.id === undefined || !gone.has(m.id)) }));
+    }
+
     case "RECEIVE_REPLY":
       return updateCompanion(state, action.companionId, (c) => {
         // A live bubble carries its server id; never add the same one twice.
@@ -246,7 +285,7 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
 
     case "SEED_OPENER": {
       const companion = state.companions.find((c) => c.id === action.companionId);
-      if (!companion || companion.messages.length > 0) return state;
+      if (!companion || companion.messages.length > 0 || companion.hasMore) return state;
       return updateCompanion(state, action.companionId, (c) => ({
         ...c,
         messages: [...c.messages, action.message],

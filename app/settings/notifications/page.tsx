@@ -6,9 +6,11 @@ import { useAlly } from "@/state/useAlly";
 import { useManifest } from "@/state/useManifest";
 import { useCompanionPrefs } from "@/state/useCompanionPrefs";
 import { useToast } from "@/state/useToast";
+import { useAuth } from "@/state/useAuth";
+import { useQaAccess } from "@/components/qa/useQaAccess";
 import { ManifestGate } from "@/components/ManifestGate";
 import { active, lastOpened } from "@/lib/selectors";
-import { COPY } from "@/lib/copy";
+import { COPY, fill } from "@/lib/copy";
 import { firstNameFromFull } from "@/lib/engine";
 import {
   getNotificationPermissionStatus,
@@ -32,6 +34,9 @@ function NotificationsContent() {
   const { setNotify } = useCompanionPrefs();
   const { templates } = useManifest();
   const showToast = useToast();
+  const auth = useAuth();
+  // The test buttons are developer tools: they are not in the page at all for anyone but QA and admin profiles.
+  const { qa } = useQaAccess(auth.user?.id);
   const activeList = active(state);
 
   const [permStatus, setPermStatus] = useState<"granted" | "denied" | "prompt">("prompt");
@@ -45,9 +50,9 @@ function NotificationsContent() {
     const granted = await requestNotificationPermission();
     setPermStatus(granted ? "granted" : "denied");
     if (granted) {
-      showToast("Notifications enabled!");
+      showToast(COPY.notifications.enabled);
     } else {
-      showToast("Notification permission was denied in system settings.");
+      showToast(COPY.notifications.denied);
     }
   }
 
@@ -72,7 +77,7 @@ function NotificationsContent() {
 
         const companion = activeList.find((c) => c.id === companionId);
         const template = companion ? templates.find((t) => t.id === companion.templateId) : undefined;
-        const name = template ? firstNameFromFull(template.name) : data.companionName || "Companion";
+        const name = template ? firstNameFromFull(template.name) : data.companionName || COPY.notifications.fallbackName;
         const avatarUrl = template?.avatar ? `/${template.avatar}` : undefined;
 
         // Fire push notification
@@ -83,13 +88,13 @@ function NotificationsContent() {
           icon: avatarUrl,
         });
 
-        showToast(`Sent test ping from ${name}!`);
+        showToast(fill(COPY.notifications.testPingSent, { name }));
       } else {
-        showToast(data.message || "Could not generate ping.");
+        showToast(data.message || COPY.notifications.testPingNone);
       }
     } catch (err) {
       console.error("Test ping failed:", err);
-      showToast("Failed to send test ping.");
+      showToast(COPY.notifications.testPingFailed);
     } finally {
       setTesting(false);
     }
@@ -107,22 +112,18 @@ function NotificationsContent() {
       </div>
 
       <div className={styles.body}>
-        <p className={styles.intro}>
-          Your companions will occasionally text you when you are away—either to follow up on an ongoing topic or share spontaneous thoughts in character.
-        </p>
+        <p className={styles.intro}>{COPY.notifications.intro}</p>
 
         {permStatus !== "granted" && (
           <div className={styles.permissionBanner}>
-            <span className={styles.permissionText}>
-              Device push notifications are not yet enabled. Allow notifications so your companions can reach you when the app is closed.
-            </span>
+            <span className={styles.permissionText}>{COPY.notifications.permissionBanner}</span>
             <button type="button" className={styles.permissionBtn} onClick={handleRequestPermission}>
-              Enable Device Notifications
+              {COPY.notifications.enable}
             </button>
           </div>
         )}
 
-        <div className={styles.sectionHeader}>Companions</div>
+        <div className={styles.sectionHeader}>{COPY.notifications.companions}</div>
 
         {activeList.map((c) => {
           const template = templates.find((t) => t.id === c.templateId);
@@ -149,7 +150,7 @@ function NotificationsContent() {
           );
         })}
 
-        {activeList.length > 0 && (
+        {qa && activeList.length > 0 && (
           <div className={styles.testContainer}>
             <button
               type="button"
@@ -157,16 +158,19 @@ function NotificationsContent() {
               disabled={testing}
               onClick={() => handleSendTestPing(activeList[0].id)}
             >
-              {testing ? "Generating ping..." : `Test Ping from ${templates.find((t) => t.id === activeList[0].templateId)?.name.split(" ")[0] || "Companion"}`}
+              {testing
+                ? COPY.notifications.testPingBusy
+                : fill(COPY.notifications.testPing, { name: templates.find((t) => t.id === activeList[0].templateId)?.name.split(" ")[0] || COPY.notifications.fallbackName })}
             </button>
           </div>
         )}
 
-        <div className={styles.sectionHeader}>Daily Check-Ins</div>
+        <div className={styles.sectionHeader}>{COPY.notifications.dailyHeading}</div>
         <p className={styles.intro} style={{ marginTop: 0 }}>
-          Ally automatically notifies you twice a day (at 1:00 PM and 8:00 PM) to check in and chat with your waiting characters.
+          {COPY.notifications.dailyBody}
         </p>
 
+        {qa && (
         <div className={styles.testContainer} style={{ marginTop: 12 }}>
           <button
             type="button"
@@ -186,10 +190,10 @@ function NotificationsContent() {
                 },
                 "midday"
               );
-              showToast("Midday reminder sent!");
+              showToast(COPY.notifications.middaySent);
             }}
           >
-            Test Midday Reminder (1:00 PM)
+            {COPY.notifications.testMidday}
           </button>
           <button
             type="button"
@@ -210,12 +214,13 @@ function NotificationsContent() {
                 },
                 "evening"
               );
-              showToast("Evening reminder sent!");
+              showToast(COPY.notifications.eveningSent);
             }}
           >
-            Test Evening Reminder (8:00 PM)
+            {COPY.notifications.testEvening}
           </button>
         </div>
+        )}
       </div>
     </div>
   );

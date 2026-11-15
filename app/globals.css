@@ -249,6 +249,12 @@ p {
   color: var(--mut);
   min-height: 48px;
 }
+/* A destructive choice: outlined, not filled. #ff7b7b reaches 6.8:1 on --raised. */
+.btn.danger {
+  background: transparent;
+  border: 1px solid #ff7b7b;
+  color: #ff7b7b;
+}
 .btn:disabled {
   opacity: 0.38;
   cursor: default;

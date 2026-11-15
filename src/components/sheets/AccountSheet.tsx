@@ -149,7 +149,7 @@ export function AccountSheet(props: Record<string, unknown>) {
   const showNotNow = dismissible && !busy && (flow.step === "email" || flow.step === "code" || flow.step === "collision" || flow.step === "error");
 
   return (
-    <Sheet labelledBy="a-heading">
+    <Sheet labelledBy="a-heading" onScrimTap={dismissible ? onDismiss : undefined}>
       <div className="stack">
         <h1 className="q" id="a-heading">
           {flow.step === "password" ? COPY.account.passwordHeading : fill(COPY.account.heading, { persona: personaName })}

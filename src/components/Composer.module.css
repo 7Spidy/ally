@@ -25,12 +25,13 @@
 
 .row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
 }
 
 .input {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 48px;
   border-radius: 24px;
   border: 1px solid var(--line);
@@ -39,12 +40,16 @@
   padding: 12px 18px;
   font: inherit;
   font-size: 15.5px;
+  line-height: 22px;
   resize: none;
+  overflow-y: hidden;
+  display: block;
 }
 
 .send {
   width: 44px;
   height: 44px;
+  margin-bottom: 2px;
   border-radius: 22px;
   border: 0;
   padding: 0;

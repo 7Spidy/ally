@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { COPY, fill } from "@/lib/copy";
 
 export interface PushNotificationPayload {
   title: string;
@@ -10,6 +11,15 @@ export interface PushNotificationPayload {
 
 export const DAILY_REMINDER_MIDDAY_ID = 8801;
 export const DAILY_REMINDER_EVENING_ID = 8802;
+
+/** The title and body of a daily reminder, from COPY.notifications. */
+export function reminderText(options: DailyReminderOptions, period: "midday" | "evening"): { title: string; body: string } {
+  const { companionName, companionCount = 1 } = options;
+  const c = COPY.notifications[period];
+  const title = companionName ? fill(c.titleNamed, { name: companionName }) : companionCount > 1 ? c.titleMany : c.titleOne;
+  const body = companionName ? fill(c.bodyNamed, { name: companionName }) : c.bodyNone;
+  return { title, body };
+}
 
 export interface DailyReminderOptions {
   companionName?: string;
@@ -32,8 +42,8 @@ export async function initNotificationService(onOpenTarget?: (target: string) =>
       // Set up Android default channel
       await LocalNotifications.createChannel({
         id: "ally_messages",
-        name: "Companion Messages",
-        description: "Messages, pings, and daily reminders from your Ally companions",
+        name: COPY.notifications.channelName,
+        description: COPY.notifications.channelDescription,
         importance: 4, // High importance
         visibility: 1,
         vibration: true,
@@ -149,34 +159,17 @@ export async function scheduleDailyReminders(options: DailyReminderOptions = {})
         /* noop if not scheduled */
       }
 
-      const { companionName, companionId, companionCount = 1 } = options;
+      const { companionId } = options;
 
-      const middayTitle = companionName
-        ? `${companionName} is waiting for you`
-        : companionCount > 1
-        ? "Your companions are waiting"
-        : "Ally is waiting to chat";
-
-      const middayBody = companionName
-        ? `Take a quick break — ${companionName} is waiting to chat and catch up.`
-        : "Take a pause from your busy day — open Ally to catch up with your characters.";
-
-      const eveningTitle = companionName
-        ? `${companionName} wants to catch up`
-        : companionCount > 1
-        ? "Your companions are thinking of you"
-        : "Time to unwind with Ally";
-
-      const eveningBody = companionName
-        ? `How was your day? ${companionName} is here to talk and unwind with you tonight.`
-        : "End your day with a thoughtful conversation. Your companions are waiting for you.";
+      const midday = reminderText(options, "midday");
+      const evening = reminderText(options, "evening");
 
       await LocalNotifications.schedule({
         notifications: [
           {
             id: DAILY_REMINDER_MIDDAY_ID,
-            title: middayTitle,
-            body: middayBody,
+            title: midday.title,
+            body: midday.body,
             channelId: "ally_messages",
             smallIcon: "ic_launcher_round",
             schedule: {
@@ -192,8 +185,8 @@ export async function scheduleDailyReminders(options: DailyReminderOptions = {})
           },
           {
             id: DAILY_REMINDER_EVENING_ID,
-            title: eveningTitle,
-            body: eveningBody,
+            title: evening.title,
+            body: evening.body,
             channelId: "ally_messages",
             smallIcon: "ic_launcher_round",
             schedule: {
@@ -223,29 +216,8 @@ export async function triggerTestDailyReminder(
   options: DailyReminderOptions = {},
   period: "midday" | "evening" = "midday"
 ) {
-  const { companionName, companionId, companionCount = 1 } = options;
-
-  const title =
-    period === "midday"
-      ? companionName
-        ? `${companionName} is waiting for you`
-        : companionCount > 1
-        ? "Your companions are waiting"
-        : "Ally is waiting to chat"
-      : companionName
-      ? `${companionName} wants to catch up`
-      : companionCount > 1
-      ? "Your companions are thinking of you"
-      : "Time to unwind with Ally";
-
-  const body =
-    period === "midday"
-      ? companionName
-        ? `Take a quick break — ${companionName} is waiting to chat and catch up.`
-        : "Take a pause from your busy day — open Ally to catch up with your characters."
-      : companionName
-      ? `How was your day? ${companionName} is here to talk and unwind with you tonight.`
-      : "End your day with a thoughtful conversation. Your companions are waiting for you.";
+  const { companionId } = options;
+  const { title, body } = reminderText(options, period);
 
   await dispatchNotification({
     title,

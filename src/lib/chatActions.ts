@@ -27,17 +27,19 @@ export function canReply(m: Message): boolean {
 }
 
 export function canCopy(m: Message): boolean {
-  return !m.deleted && m.text.length > 0;
+  return !m.deleted && !m.pending && m.text.length > 0;
 }
 
 export type ReceiptStatus = "delivered" | "read";
 
 /**
  * iMessage-style receipt under the user's newest message: "Delivered" until
- * the companion starts typing or answers, then "Read". Only the newest user
- * message carries one, and none when that message was deleted.
+ * she has read it (`readUpTo`, the id of the newest message she has read, set
+ * once the read delay has passed), or has answered, then "Read". Only the
+ * newest user message carries one, and none while it is pending or after it
+ * was deleted.
  */
-export function receiptFor(messages: Message[], typing: boolean): { index: number; status: ReceiptStatus } | null {
+export function receiptFor(messages: Message[], readUpTo: number | null): { index: number; status: ReceiptStatus } | null {
   let last = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].who === "me") {
@@ -45,12 +47,44 @@ export function receiptFor(messages: Message[], typing: boolean): { index: numbe
       break;
     }
   }
-  if (last < 0 || messages[last].deleted) return null;
+  if (last < 0 || messages[last].deleted || messages[last].pending) return null;
   const answered = messages.slice(last + 1).some((m) => m.who === "them");
-  return { index: last, status: answered || typing ? "read" : "delivered" };
+  const id = messages[last].id;
+  const read = typeof id === "number" && readUpTo !== null && id <= readUpTo;
+  return { index: last, status: answered || read ? "read" : "delivered" };
+}
+
+/** A temp id for a pending bubble: negative, so it never collides with a server id or counts as saved. */
+let tempSeq = 0;
+export function nextTempId(): number {
+  tempSeq += 1;
+  return -tempSeq;
 }
 
 /** True when a message arrived after the list first rendered, so it should play its entrance. */
 export function isFresh(m: Message, initialIds: ReadonlySet<number>): boolean {
   return typeof m.id === "number" && !initialIds.has(m.id);
+}
+
+/**
+ * After an edit, whether her reply is regenerated: only for a live companion
+ * the plan lets the user talk to, when the edited message is the newest one of
+ * the user's own and everything after it is her reply to it (or nothing yet),
+ * and no reply is playing. The server re-checks all of it in retract_reply.
+ */
+export function canRegenerate(
+  messages: Message[],
+  editedId: number,
+  ctx: { live: boolean; locked: boolean; expired: boolean; playing: boolean }
+): boolean {
+  if (!ctx.live || ctx.locked || ctx.expired || ctx.playing) return false;
+  const at = messages.findIndex((m) => m.id === editedId);
+  if (at < 0) return false;
+  const edited = messages[at];
+  if (edited.who !== "me" || edited.deleted || edited.pending) return false;
+  for (let i = at + 1; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.who !== "them" || m.inReplyTo !== editedId) return false;
+  }
+  return true;
 }

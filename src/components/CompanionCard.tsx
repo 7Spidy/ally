@@ -7,6 +7,7 @@ import type { Template } from "@/lib/engine";
 import { PRESENCE, COPY, fill } from "@/lib/copy";
 import { isDaytimeIn, now } from "@/lib/clock";
 import { PERSONA_TZ } from "@/lib/presenceTz";
+import { onColor } from "@/lib/onColor";
 import { firstNameFromFull } from "@/lib/engine";
 import styles from "./CompanionCard.module.css";
 
@@ -28,7 +29,7 @@ export function CompanionCard({ companion, template }: { companion: Companion; t
     <button
       type="button"
       className={styles.card}
-      style={{ ["--k" as string]: template.palette }}
+      style={{ ["--k" as string]: template.palette, ["--on-k" as string]: onColor(template.palette) }}
       onClick={() => router.push(`/chat/${companion.id}`)}
     >
       <Image src={"/" + template.reveal} alt="" fill className={styles.image} sizes="300px" />

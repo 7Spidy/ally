@@ -40,7 +40,7 @@ export function ConfirmSheet() {
   }
 
   return (
-    <Sheet labelledBy="confirm-body">
+    <Sheet labelledBy="confirm-body" onScrimTap={closeSheet}>
       <div className="stack">
         <p className="q" id="confirm-body" style={{ fontSize: 26 }}>
           {fill(COPY.confirm.body, { persona })}

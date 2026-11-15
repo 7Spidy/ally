@@ -2,6 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import type { Persona } from "@/personas/persona";
+import { loadPersona } from "@/personas/lazy";
+import { useToast } from "@/state/useToast";
+import { MemoryList } from "@/components/profile/MemoryList";
 import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
 import { useManifest } from "@/state/useManifest";
@@ -44,15 +48,30 @@ function ProfileContent() {
   const reduced = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const showToast = useToast();
 
   const companion = byId(state, id);
   const template = companion ? templates.find((t) => t.id === companion.templateId) : undefined;
+  // The stage names live in the persona file; a live companion's is loaded on demand.
+  const live = companion?.live === true;
+  const templateIdForPersona = live && companion ? companion.templateId : null;
+  const [persona, setPersona] = useState<Persona | null>(null);
+  useEffect(() => {
+    if (!templateIdForPersona) return;
+    let alive = true;
+    loadPersona(templateIdForPersona).then((p) => alive && setPersona(p)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [templateIdForPersona]);
 
   if (!companion || !template) {
     return <div style={{ padding: 24, color: "var(--mut)" }}>Not found.</div>;
   }
 
   const firstName = firstNameFromFull(template.name);
+  // The stage is shown by name only, never a number. The level is already held to what the plan allows.
+  const stageName = persona ? persona.levels[Math.min(persona.levels.length, Math.max(1, companion.trustLevel ?? 1)) - 1]?.name : undefined;
 
   function togglePlay() {
     const v = videoRef.current;
@@ -104,6 +123,22 @@ function ProfileContent() {
       </div>
 
       <div className={styles.body}>
+        <div className={styles.bio} data-testid="profile-bio">
+          <p className={styles.bioMeta}>
+            {template.city} · {template.occupation}
+          </p>
+          <p className={styles.bioRead}>{template.read}</p>
+        </div>
+
+        {live && stageName && (
+          <div className={styles.row} data-testid="profile-stage">
+            <span className={styles.rowLabel}>{COPY.profile.stage}</span>
+            <span className={styles.rowValue}>{stageName}</span>
+          </div>
+        )}
+
+        {live && <MemoryList companionId={companion.id} personaName={firstName} onError={showToast} />}
+
         <div className={styles.row}>
           <span className={styles.rowLabel}>{COPY.profile.togetherSince}</span>
           <span className={styles.rowValue}>{formatTogetherSince(companion.createdAt, now())}</span>

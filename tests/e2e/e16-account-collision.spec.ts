@@ -16,7 +16,8 @@ test.describe("E16 email collision while linking", () => {
     const takenEmail = uniqueEmail();
     await createUser(takenEmail);
 
-    const companion = makeCompanion({ id: "c_e16", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000 });
+    // Two exchanges done already: the third reply to land opens the account sheet.
+    const companion = makeCompanion({ id: "c_e16", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000, exchanges: 2 });
     const state = makeState({
       companions: [companion],
       user: { accountAt: null, accountContact: null, accountKind: null },
@@ -31,6 +32,7 @@ test.describe("E16 email collision while linking", () => {
     await page.getByRole("button", { name: "Send" }).click();
 
     const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Email")).toBeVisible({ timeout: 20000 });
     await dialog.getByLabel("Email").fill(takenEmail);
     await dialog.getByRole("button", { name: "Send code" }).click();
 

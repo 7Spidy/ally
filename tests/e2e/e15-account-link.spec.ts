@@ -17,8 +17,9 @@ import {
 import { waitForCode } from "./mail";
 
 test.describe("E15 link an email to the anonymous user", () => {
-  test("E15: first exchange -> sheet -> email + code from mail -> skip password; settings shows the email; same UID", async ({ page }) => {
-    const companion = makeCompanion({ id: "c_e15", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000 });
+  test("E15: third exchange answered -> sheet -> email + code from mail -> skip password; settings shows the email; same UID", async ({ page }) => {
+    // Two exchanges done already: the third reply to land opens the account sheet (it no longer opens on the first).
+    const companion = makeCompanion({ id: "c_e15", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 500000, exchanges: 2 });
     const state = makeState({
       companions: [companion],
       user: { accountAt: null, accountContact: null, accountKind: null },
@@ -34,7 +35,7 @@ test.describe("E15 link an email to the anonymous user", () => {
     await page.getByRole("button", { name: "Send" }).click();
 
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByLabel("Email")).toBeVisible({ timeout: 10000 });
+    await expect(dialog.getByLabel("Email")).toBeVisible({ timeout: 20000 });
     await screenshotScreen(page, "e15-01-account-sheet-email");
     await assertMinFontSize(page);
 

@@ -32,6 +32,8 @@ export interface MessageMeta {
   quoteId?: number;
   screen?: "confetti" | "lanterns" | "rain" | "petals" | "balloons" | "fireworks" | "shootingstar" | "sparkles";
   safety?: boolean;
+  /** Set by retract_reply on an edited message: her regenerated reply skips trust scoring. Cleared by the reply route. */
+  regen?: boolean;
 }
 
 export interface Message {
@@ -46,6 +48,10 @@ export interface Message {
   editedAt?: number | null;
   /** B3: a tombstone. The text is erased server-side; only the slot remains. */
   deleted?: boolean;
+  /** Client only: a sent message the server has not confirmed yet (it has a negative temp id). Never stored or sent. */
+  pending?: boolean;
+  /** Client only: the temp id this message was sent with, kept after the server confirms it so its row does not remount. */
+  clientKey?: number;
 }
 
 export interface Companion {
@@ -75,6 +81,8 @@ export interface Companion {
   deeperLevelAvailable?: boolean;
   /** Plans: the "deeper level" chat banner has been shown for this companion. */
   deeperShown?: boolean;
+  /** Older messages exist on the server than the ones loaded (get_my_state returns the newest 50). */
+  hasMore?: boolean;
 }
 
 /**

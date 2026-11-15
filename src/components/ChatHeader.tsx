@@ -19,6 +19,7 @@ export function ChatHeader({
   onOverflow,
   presenceOverride,
   onQa,
+  overflowOpen = false,
 }: {
   template: Template;
   onBack: () => void;
@@ -29,6 +30,8 @@ export function ChatHeader({
   presenceOverride?: string;
   /** B3: set only for a QA or admin user. One tap opens the QA drawer over the chat. */
   onQa?: () => void;
+  /** The overflow menu is open (for assistive tech). */
+  overflowOpen?: boolean;
 }) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fired = useRef(false);
@@ -77,7 +80,7 @@ export function ChatHeader({
           QA
         </button>
       )}
-      <button type="button" className="icon-btn" aria-label="More" onClick={onOverflow}>
+      <button type="button" className="icon-btn" aria-label="More" aria-haspopup="menu" aria-expanded={overflowOpen} onClick={onOverflow}>
         <svg viewBox="0 0 24 24">
           <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
           <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />

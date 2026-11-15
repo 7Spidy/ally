@@ -32,10 +32,7 @@ test.describe("E8 paid plan hits the hidden fair-use cap", () => {
     await page.getByLabel("Message").fill("One more before the cap");
     await page.getByRole("button", { name: "Send" }).click();
 
-    // the next send is refused server-side; the composer becomes the notice
-    await expect(page.getByLabel("Message")).toBeEditable();
-    await page.getByLabel("Message").fill("And one more");
-    await page.getByRole("button", { name: "Send" }).click();
+    // that send used the last chat, so the composer becomes the notice
     await expect(page.getByText("You have reached today's fair-use limit. It resets at midnight.")).toBeVisible();
     await expect(page.getByLabel("Message")).toHaveCount(0);
     // neutral: no plans link, no counter

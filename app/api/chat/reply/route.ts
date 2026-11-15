@@ -5,11 +5,12 @@ import { isLive } from "@/lib/live";
 import { personaFor } from "@/personas/registry";
 import { dayKey } from "@/lib/clock";
 import * as heart from "@/lib/heart";
-import { compile, effectCadence, type CompileCtx, type CompileTurn } from "@/lib/llm/compile";
+import { compile, effectCadence } from "@/lib/llm/compile";
+import { buildTurnCtx } from "@/lib/llm/turnCtx";
 import { planReply } from "@/lib/llm/replyPlan";
 import { applyQaForce, bubbleMeta, EFFECTS, grantCelebration, sanitize, SCREENS, type Effect, type MsgMeta, type QaForce } from "@/lib/llm/contract";
 import { runReply } from "@/lib/llm/reply";
-import { applySafety, backstopHit } from "@/lib/safety";
+import { applySafety } from "@/lib/safety";
 import { applyReply, deeperLevelAvailable, effectiveLevel, freshDay, relationshipDay, shownLevelUp, wordCount, type TrustDay, type TrustState } from "@/lib/trust";
 import type { CoreId } from "@/state/schema";
 
@@ -163,10 +164,6 @@ export async function POST(request: Request) {
       const { data: extra } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).is("deleted_at", null).in("id", missingQuoteIds);
       for (const m of (extra ?? []) as MsgRow[]) inWindow.set(m.id, m);
     }
-    const quoteFor = (m: MsgRow) => {
-      const q = m.who === "me" && typeof m.meta?.quoteId === "number" ? inWindow.get(m.meta.quoteId) : undefined;
-      return q ? { who: q.who, text: q.text } : null;
-    };
     const messageAt = userMsg ? Date.parse(userMsg.created_at) : now;
     const today = dayKey(messageAt);
     const todayStart = new Date(`${today}T00:00:00+05:30`).toISOString();
@@ -195,7 +192,9 @@ export async function POST(request: Request) {
     // The user may have sent several messages while the last reply was in flight, so ask whether 100 was crossed, not hit.
     const batch = Math.max(1, history.filter((m) => m.who === "me" && m.id > prevReplied).length);
     const total = meCount ?? 0;
-    const countHit = mode === "reply" && total >= 100 && total - batch < 100 ? 100 : undefined;
+    // An edited message answered again (retract_reply set meta.regen) is not a new exchange: no trust, no 100-message milestone.
+    const regen = mode === "reply" && (userMsg?.meta as { regen?: boolean } | null | undefined)?.regen === true;
+    const countHit = mode === "reply" && !regen && total >= 100 && total - batch < 100 ? 100 : undefined;
     // QA: a jump up to this exact level plays its level-up screen, through the real path below.
     const qaCelebrate = qa?.celebrate != null && qa.celebrate === c.trust_level && mode === "reply" ? qa.celebrate : null;
     if (qaCelebrate !== null) console.info(JSON.stringify({ evt: "qa.celebrate", level: qaCelebrate }));
@@ -210,19 +209,8 @@ export async function POST(request: Request) {
     });
     const coolOff = (ms(c.cool_off_until) ?? 0) > now;
     const safetyMode = (ms(c.safety_until) ?? 0) > now;
-    const lowEffort = lastMe.length >= 5 && lastMe.slice(-5).every((m) => wordCount(m.text) <= 1);
 
-    // History that ends in her bubbles: a message the user sent while the last reply was in flight.
-    const unansweredTurns: CompileTurn[] = plan?.followUp
-      ? plan.followUp.unansweredIds.flatMap((id) => {
-          const m = history.find((x) => x.id === id);
-          return m ? [{ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m) }] : [];
-        })
-      : [];
-    const followUpText = [userMsg?.text ?? "", ...unansweredTurns.map((t) => t.text)];
-    const allowEmpty = !!plan?.followUp && !coolOff && !safetyMode && milestone === null && !followUpText.some(backstopHit);
-    const followUp = plan?.followUp ? { unanswered: unansweredTurns, allowEmpty } : null;
-    const baseCtx: Omit<CompileCtx, "followUp"> = {
+    const { ctx: turnCtx, allowEmpty, unansweredTurns } = buildTurnCtx({
       level,
       mode,
       userName: profile?.display_name ?? "",
@@ -231,16 +219,18 @@ export async function POST(request: Request) {
       facts: (factRows ?? []) as { id: number; category: string; fact: string }[],
       weekSummaries: ((weekRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
       daySummaries: ((dayRows ?? []) as { period_key: string; summary: string }[]).map((r) => ({ key: r.period_key, summary: r.summary })),
-      history: history.map((m) => ({ id: m.id, who: m.who, text: m.text, edited: !!m.edited_at, quote: quoteFor(m), reacted: m.who === "me" && typeof m.meta?.reaction === "string" && m.meta.reaction !== "", safety: !!m.meta?.safety, effect: m.who === "them" && (typeof m.meta?.effect === "string" || typeof m.meta?.screen === "string") })),
+      rows: history,
+      quotable: inWindow,
+      plan,
+      userText: userMsg?.text ?? "",
       historyOffset,
       coolOff,
       safetyMode,
-      lowEffort,
       pressure: c.answers?.q10 ?? null,
       persona,
-    };
-    const compiled = compile({ ...baseCtx, followUp });
-    const cadence = effectCadence(baseCtx.history);
+    });
+    const compiled = compile(turnCtx);
+    const cadence = effectCadence(turnCtx.history);
     const cadenceCtx = { blocked: qa?.ignoreCaps ? false : cadence.blocked };
 
     // Gates
@@ -262,7 +252,7 @@ export async function POST(request: Request) {
     const prevTexts: string[] = [];
     for (let i = at - 1; i >= 0 && history[i].who === "them"; i--) prevTexts.unshift(history[i].text);
     // A follow-up's job is to close, not to lead, so lint rule e is skipped.
-    const prevReply = prevTexts.length && !followUp ? prevTexts.join("\n") : undefined;
+    const prevReply = prevTexts.length && !turnCtx.followUp ? prevTexts.join("\n") : undefined;
 
     // Model call, sanitize, voice lint and at most one regeneration.
     const reply = await runReply({
@@ -320,7 +310,7 @@ export async function POST(request: Request) {
       : freshDay();
     let day: TrustDay | null = null;
     let leveledUp: number | null = null;
-    if (mode === "reply" && userMsg) {
+    if (mode === "reply" && userMsg && !regen) {
       const newUserMsgs = Math.max(1, history.filter((m) => m.who === "me" && m.id > prevReplied).length);
       const r = applyReply(trust, dayBefore, {
         messageAt,
@@ -345,7 +335,7 @@ export async function POST(request: Request) {
     // A celebration needs a bubble to persist on (screensToday counts stored meta), so an empty follow-up that earned one gets a single bubble.
     if (finalOut.bubbles.length === 0 && (effectiveLeveledUp !== null || finalOut.screen !== null)) {
       try {
-        const rescueCompiled = compile({ ...baseCtx, followUp: plan?.followUp ? { unanswered: unansweredTurns, allowEmpty: false } : null });
+        const rescueCompiled = compile({ ...turnCtx, followUp: plan?.followUp ? { unanswered: unansweredTurns, allowEmpty: false } : null });
         rescueCompiled.messages[rescueCompiled.messages.length - 1].content += "\n\nSend exactly one short bubble.";
         const rescue = await runReply({ compiled: rescueCompiled, companionId: c.id, userText, prevReply: undefined, quiet: coolOff || safetyMode, seed: userMsg?.id, allowEmpty: false, sanitizeCtx: { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode, cadence: cadenceCtx } });
         const rescued = sanitize({ ...finalOut, bubbles: rescue.out.bubbles }, { level, persona, latestMeId: userMsg?.id ?? -1, quotableIds: userMsgIds, effectsToday, screensToday, pinInLast30d: qa?.ignoreCaps ? false : (pins ?? []).length > 0, milestone, quiet: coolOff || safetyMode, cadence: cadenceCtx });
@@ -366,7 +356,8 @@ export async function POST(request: Request) {
         reaction: finalOut.reaction,
         userSafety: safe.safetyMeta,
         bubbles,
-        trust: mode === "reply" ? trust : null,
+        // write_live_reply also clears meta.regen from the answered message in the same write.
+        trust: mode === "reply" && !regen ? trust : null,
         day: day ? { key: today, ...day } : null,
         safetyUntilMs: safe.safetyUntil,
         pausedReason: safe.paused ? "age_check" : null,

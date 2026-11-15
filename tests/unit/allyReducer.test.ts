@@ -173,6 +173,85 @@ describe("localOnly", () => {
   });
 });
 
+describe("U1 pending sends", () => {
+  const tempId = -1;
+  const pendingMsg = { id: tempId, clientKey: tempId, who: "me" as const, text: "hi", at: NOW, pending: true };
+  const stored = { id: 41, who: "me" as const, text: "hi", at: NOW + 3 };
+
+  it("ADD_PENDING appends the bubble and touches nothing else", () => {
+    const st = stateWith(companion({ exchanges: 2, messages: [{ id: 1, who: "them", text: "yo", at: NOW }] }));
+    const next = allyReducer(st, { type: "ADD_PENDING", companionId: "c_test", message: pendingMsg });
+    expect(next.companions[0].messages).toHaveLength(2);
+    expect(next.companions[0].messages[1]).toEqual(pendingMsg);
+    expect(next.companions[0].exchanges).toBe(2);
+    expect(next.ledger).toBe(st.ledger);
+  });
+
+  it("CONFIRM_SENT swaps the pending bubble for the stored message in place and takes the server's exchanges, ledger and entitlement", () => {
+    const st = stateWith(companion({ exchanges: 2, messages: [pendingMsg, { id: 2, who: "them", text: "later", at: NOW }] }));
+    const next = allyReducer(st, { type: "CONFIRM_SENT", companionId: "c_test", tempId, message: stored, exchanges: 3, ledger: serverLedger, entitlement: serverEntitlement });
+    const msgs = next.companions[0].messages;
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0]).toMatchObject({ id: 41, text: "hi", clientKey: tempId });
+    expect(msgs[0].pending).toBeUndefined();
+    expect(msgs[1].id).toBe(2);
+    expect(next.companions[0].exchanges).toBe(3);
+    expect(next.ledger).toBe(serverLedger);
+    expect(next.entitlement).toBe(serverEntitlement);
+  });
+
+  it("CONFIRM_SENT appends when the pending bubble is already gone", () => {
+    const st = stateWith(companion());
+    const next = allyReducer(st, { type: "CONFIRM_SENT", companionId: "c_test", tempId, message: stored, exchanges: 1, ledger: serverLedger, entitlement: serverEntitlement });
+    expect(next.companions[0].messages.map((m) => m.id)).toEqual([41]);
+  });
+
+  it("DROP_PENDING removes only that bubble", () => {
+    const other = { ...pendingMsg, id: -2, clientKey: -2, text: "second" };
+    const st = stateWith(companion({ messages: [pendingMsg, other] }));
+    const next = allyReducer(st, { type: "DROP_PENDING", companionId: "c_test", tempId });
+    expect(next.companions[0].messages).toEqual([other]);
+  });
+});
+
+describe("U1 PREPEND_MESSAGES and REMOVE_MESSAGES", () => {
+  const m = (id: number, who: "me" | "them" = "them") => ({ id, who, text: `m${id}`, at: NOW + id });
+
+  it("PREPEND_MESSAGES puts the older page first and takes hasMore from the server", () => {
+    const st = stateWith(companion({ messages: [m(51), m(52)], hasMore: true }));
+    const next = allyReducer(st, { type: "PREPEND_MESSAGES", companionId: "c_test", messages: [m(49), m(50)], hasMore: false });
+    expect(next.companions[0].messages.map((x) => x.id)).toEqual([49, 50, 51, 52]);
+    expect(next.companions[0].hasMore).toBe(false);
+  });
+
+  it("PREPEND_MESSAGES drops ids it already holds", () => {
+    const st = stateWith(companion({ messages: [m(51), m(52)], hasMore: true }));
+    const next = allyReducer(st, { type: "PREPEND_MESSAGES", companionId: "c_test", messages: [m(50), m(51)], hasMore: true });
+    expect(next.companions[0].messages.map((x) => x.id)).toEqual([50, 51, 52]);
+    expect(next.companions[0].hasMore).toBe(true);
+  });
+
+  it("PREPEND_MESSAGES leaves other companions alone", () => {
+    const a = companion({ id: "c_a", messages: [m(5)] });
+    const b = companion({ id: "c_b", messages: [m(9)] });
+    const st: AllyState = { ...freshState(NOW, DAY), companions: [a, b], flow: null };
+    const next = allyReducer(st, { type: "PREPEND_MESSAGES", companionId: "c_a", messages: [m(4)], hasMore: false });
+    expect(next.companions[1]).toBe(b);
+  });
+
+  it("REMOVE_MESSAGES removes exactly the listed ids", () => {
+    const st = stateWith(companion({ messages: [m(1, "me"), m(2), m(3), m(4, "me")] }));
+    const next = allyReducer(st, { type: "REMOVE_MESSAGES", companionId: "c_test", ids: [2, 3, 99] });
+    expect(next.companions[0].messages.map((x) => x.id)).toEqual([1, 4]);
+  });
+
+  it("SEED_OPENER does nothing while older messages exist on the server", () => {
+    const st = stateWith(companion({ messages: [], hasMore: true }));
+    const next = allyReducer(st, { type: "SEED_OPENER", companionId: "c_test", message: m(1) });
+    expect(next.companions[0].messages).toHaveLength(0);
+  });
+});
+
 describe("B3 REPLACE_MESSAGE", () => {
   const msgs = [
     { id: 1, who: "them" as const, text: "hi", at: NOW },

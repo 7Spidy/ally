@@ -187,7 +187,7 @@ test.describe("E27 B1: five cores and onboarding motion", () => {
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page.waitForURL("**/onboarding/questions/tiebreak");
-    await expect(page.getByText("It's 11pm and it's been a rough day. Which message would you rather get?")).toBeVisible();
+    await expect(page.getByText("It's eleven at night and it's been a rough day. Which message would you rather get?")).toBeVisible();
     await expect(page.getByRole("radio")).toHaveCount(2);
     await expect(page.getByRole("radio", { name: TIEBREAK_MONEY })).toBeVisible();
     await expect(page.getByRole("radio", { name: TIEBREAK_PSYCH })).toBeVisible();

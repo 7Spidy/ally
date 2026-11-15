@@ -79,7 +79,7 @@ export function IntroSheet() {
   if (!hasAccount) return null;
 
   return (
-    <Sheet labelledBy="introSheetHeading">
+    <Sheet labelledBy="introSheetHeading" onScrimTap={closeSheet}>
       <h2 id="introSheetHeading" className={styles.heading}>
         {COPY.introSheet.heading}
       </h2>

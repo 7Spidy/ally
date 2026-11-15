@@ -30,7 +30,7 @@ export function LeaveSheet() {
   }
 
   return (
-    <Sheet labelledBy="leaveSheetHeading">
+    <Sheet labelledBy="leaveSheetHeading" onScrimTap={closeSheet}>
       <h2 id="leaveSheetHeading" className={styles.heading}>
         {COPY.leaveSheet.heading}
       </h2>

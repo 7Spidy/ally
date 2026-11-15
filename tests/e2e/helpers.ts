@@ -56,7 +56,7 @@ export interface MakeCompanionOpts {
   status?: "active" | "parted";
   partedAt?: number | null;
   purgeAt?: number | null;
-  messages?: { who: "them" | "me"; text: string; at: number }[];
+  messages?: { who: "them" | "me"; text: string; at: number; meta?: Record<string, unknown> }[];
   exchanges?: number;
   unread?: number;
   notify?: boolean;
@@ -243,7 +243,7 @@ export async function seedServerState(userId: string, state: SeedState): Promise
     if (c.messages.length) {
       await must(
         "messages",
-        admin.from("messages").insert(c.messages.map((m) => ({ companion_id: c.id, user_id: userId, who: m.who, text: m.text, created_at: ts(m.at) })))
+        admin.from("messages").insert(c.messages.map((m) => ({ companion_id: c.id, user_id: userId, who: m.who, text: m.text, created_at: ts(m.at), meta: m.meta ?? {} })))
       );
     }
   }
@@ -514,11 +514,12 @@ export async function driveMatchingThroughChat(page: Page, { reducedMotion = fal
 }
 
 /**
- * Every face is live now, so a fresh chat opens with the live-consent sheet over it. Accept it
- * (the real Continue path) so the header is clickable; a no-op if the sheet never shows.
+ * A user whose newest consent is the September one sees the live-consent update sheet over a live chat.
+ * Accept it (the real Continue path) so the header is clickable; a no-op if the sheet never shows.
+ * A fresh onboarding consents to the November version, which already covers live replies, so it never shows there.
  */
 export async function acceptLiveConsent(page: Page) {
-  const sheet = page.getByRole("dialog").filter({ hasText: "now replies live" });
+  const sheet = page.getByRole("dialog").filter({ hasText: "One update before you chat" });
   try {
     await sheet.waitFor({ state: "visible", timeout: 5000 });
   } catch {
@@ -539,6 +540,12 @@ export function adminClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL as string, process.env.SUPABASE_SECRET_KEY as string, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+/** The September consent, recorded after the session's own, so it is the newest, so a live chat shows the update sheet once. */
+export async function grantSeptemberConsent(userId: string) {
+  const { error } = await adminClient().from("consents").insert({ user_id: userId, version: "2026-09-v1", marketing: false, granted_at: new Date().toISOString() });
+  if (error) throw new Error(`consent: ${error.message}`);
 }
 
 /** B2: records the v2-live-groq consent, so a live chat opens without the update sheet. */

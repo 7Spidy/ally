@@ -26,7 +26,7 @@ import styles from "./hubSheets.module.css";
 
 function SwitcherSheet({ currentId }: { currentId?: string }) {
   const router = useRouter();
-  const { dismissForNavigation } = useSheet();
+  const { dismissForNavigation, closeSheet } = useSheet();
   const { state } = useAlly();
   const { templates } = useManifest();
   const activeList = active(state);
@@ -46,7 +46,7 @@ function SwitcherSheet({ currentId }: { currentId?: string }) {
   }
 
   return (
-    <Sheet labelledBy="switcher-heading">
+    <Sheet labelledBy="switcher-heading" onScrimTap={closeSheet}>
       <h2 id="switcher-heading" className={styles.heading}>
         {COPY.switcher.heading}
       </h2>
@@ -108,7 +108,7 @@ function PartSheet({ companionId }: { companionId: string }) {
   }
 
   return (
-    <Sheet labelledBy="part-heading">
+    <Sheet labelledBy="part-heading" onScrimTap={busy ? undefined : closeSheet}>
       <h2 id="part-heading" className={styles.heading}>
         {fill(COPY.partSheet.heading, { persona: firstName })}
       </h2>
@@ -124,10 +124,10 @@ function PartSheet({ companionId }: { companionId: string }) {
         autoComplete="off"
       />
       <div className="actions">
-        <button type="button" className="btn secondary" onClick={closeSheet}>
+        <button type="button" className="btn primary" onClick={closeSheet}>
           {fill(COPY.partSheet.keep, { persona: firstName })}
         </button>
-        <button type="button" className="btn primary" disabled={!matches || busy} onClick={() => void confirm()}>
+        <button type="button" className="btn danger" disabled={!matches || busy} onClick={() => void confirm()}>
           {COPY.partSheet.part}
         </button>
       </div>
@@ -176,16 +176,16 @@ function DeleteSheet() {
   }
 
   return (
-    <Sheet labelledBy="delete-heading">
+    <Sheet labelledBy="delete-heading" onScrimTap={busy ? undefined : closeSheet}>
       <h2 id="delete-heading" className={styles.heading}>
         {COPY.deleteSheet.heading}
       </h2>
       <p className={styles.body}>{COPY.deleteSheet.body}</p>
       <div className="actions">
-        <button type="button" className="btn secondary" onClick={closeSheet}>
+        <button type="button" className="btn primary" onClick={closeSheet}>
           {COPY.deleteSheet.keep}
         </button>
-        <button type="button" className="btn primary" disabled={busy} onClick={() => void confirm()}>
+        <button type="button" className="btn danger" disabled={busy} onClick={() => void confirm()}>
           {COPY.deleteSheet.deleteAll}
         </button>
       </div>

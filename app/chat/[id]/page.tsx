@@ -10,10 +10,13 @@ import { useToast } from "@/state/useToast";
 import { ManifestGate } from "@/components/ManifestGate";
 import { byId } from "@/lib/selectors";
 import { composerGate, isSendCode, lockedCompanionIds } from "@/lib/entitlement";
+import { canRegenerate, isSaved, nextTempId } from "@/lib/chatActions";
+import { readDelayMs, tierFor } from "@/lib/readDelay";
+import { pronounsFor } from "@/personas/pronouns";
 import { openerFor, replyFor, COPY, fill } from "@/lib/copy";
 import { firstNameFromFull } from "@/lib/engine";
 import { dayKey, now } from "@/lib/clock";
-import { BLOCK_DAYS, LIVE_CONSENT_VERSION } from "@/lib/config";
+import { BLOCK_DAYS, CONSENT_VERSION, LIVE_OK_VERSIONS } from "@/lib/config";
 import * as heart from "@/lib/heart";
 import { loadPersona } from "@/personas/lazy";
 import type { Persona } from "@/personas/persona";
@@ -25,9 +28,11 @@ import {
   markDeeperShown,
   deleteMessage,
   editMessage,
+  getMessagesBefore,
   openChat,
   receiveReply,
   requestLiveReply,
+  retractReply,
   rpcErrorMessage,
   seedOpener,
   sendMessage,
@@ -37,7 +42,8 @@ import {
 import type { Message, Pressure } from "@/state/schema";
 import { ChatHeader } from "@/components/ChatHeader";
 import { MessageList } from "@/components/MessageList";
-import { Composer, type PlansFrom } from "@/components/Composer";
+import { Composer, draftKeyFor, type PlansFrom } from "@/components/Composer";
+import { PinnedSheet } from "@/components/chat/PinnedSheet";
 import { ContextCard } from "@/components/chat/ContextCard";
 import { LevelBadge } from "@/components/chat/LevelBadge";
 import { useLevelBadge } from "@/components/chat/useLevelBadge";
@@ -52,6 +58,12 @@ import { PREVIEW_TEXT, previewId } from "@/components/qa/qaPreview";
 import styles from "./page.module.css";
 
 const REACTION_DELAY_MS = 700;
+/** A first bubble's typing never shrinks below this, however long the model took. */
+const MIN_TYPING_MS = 600;
+/** How long to leave paging alone after a failed page load. */
+const PAGING_BACKOFF_MS = 5000;
+/** Most pages a quote jump walks back through. */
+const MAX_JUMP_PAGES = 10;
 const typingMs = (len: number) => Math.min(4500, Math.max(1100, len * 35));
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -100,7 +112,19 @@ function ChatContent() {
   // The newest user message the server had seen when it wrote the last reply.
   const lastSeenUpToRef = useRef(0);
   const [typing, setTyping] = useState(false);
+  /** A reply is being fetched or played (the ref's twin, so effects can wait for it to end). */
+  const [playing, setPlaying] = useState(false);
+  /** The id of the newest of the user's messages she has read; the receipt says Read from here on. */
+  const [readUpTo, setReadUpTo] = useState<number | null>(null);
   const [showOverflow, setShowOverflow] = useState(false);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const loadingOlderRef = useRef(false);
+  const pagingBlockedUntilRef = useRef(0);
+  const [jumpTarget, setJumpTarget] = useState<{ id: number; nonce: number } | null>(null);
+  const jumpSeqRef = useRef(0);
+  /** Strictly ordered sends: each waits for the one before it. */
+  const sendChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const [ctxCard, setCtxCard] = useState<{ title?: string; line: string } | null>(null);
   const [resourceOpen, setResourceOpen] = useState(false);
   const [failedMode, setFailedMode] = useState<"reply" | "opener" | null>(null);
@@ -125,6 +149,12 @@ function ChatContent() {
   // The message being replied to, as it stands now (a deleted one is no longer a target).
   const replyTarget = replyTo && companion ? (companion.messages.find((m) => m.id === replyTo.id && !m.deleted) ?? null) : null;
   const accountNudgeRef = useRef<number>(0); // last exchange threshold nudged at
+  const mountExchangesRef = useRef<number | null>(null);
+  // The latest companion and persona for callbacks that outlive a render (paging, sends in the queue).
+  const companionRef = useRef(companion);
+  companionRef.current = companion;
+  const personaRef = useRef(persona);
+  personaRef.current = persona;
   // The level badge: one second on every open of a live chat (and on return after 60 s away).
   const levelBadge = useLevelBadge(live && companion ? companion.id : null);
 
@@ -135,9 +165,9 @@ function ChatContent() {
     };
   }, []);
 
-  // A live chat needs the v2-live consent (LIVE_CONSENT_VERSION) before anything is sent to the model.
-  // A user who has not been hydrated from the server (a fresh onboarding) has no known version, so they consent here too.
-  const needsConsent = live && state.user.consentVersion !== LIVE_CONSENT_VERSION;
+  // A live chat needs a consent that covers AI-written replies (LIVE_OK_VERSIONS) before anything is sent to the model.
+  // The onboarding consent covers it; only a user whose newest consent is the September one sees the update sheet.
+  const needsConsent = live && !LIVE_OK_VERSIONS.includes(state.user.consentVersion ?? "");
 
   // Capture the pre-open lastOpenedAt for the "Since you left" divider
   // BEFORE dispatching OPEN_CHAT, which overwrites it. The same value drives
@@ -148,7 +178,7 @@ function ChatContent() {
     // Never on the very-first-ever open (fresh lock, no messages yet) —
     // otherwise the opener we're about to seed reads as "since you left"
     // before the user has seen a single message.
-    const isFirstOpenEver = companion.messages.length === 0 && companion.lastOpenedAt === companion.createdAt;
+    const isFirstOpenEver = companion.messages.length === 0 && !companion.hasMore && companion.lastOpenedAt === companion.createdAt;
     dividerBeforeAtRef.current = isFirstOpenEver ? null : companion.lastOpenedAt;
     const companionId = companion.id;
 
@@ -190,13 +220,15 @@ function ChatContent() {
   // bubble, then any screen effect. The bubbles already exist server-side, so
   // a refresh mid-play just shows them.
   const play = useCallback(
-    async (companionId: string, userMessageId: number | undefined, r: LiveReply) => {
+    async (companionId: string, userMessageId: number | undefined, r: LiveReply, timing: { readAt: number; typingCredit: number }) => {
       if (r.reaction && userMessageId !== undefined) {
         const reaction = r.reaction;
+        // The tapback lands 700 ms after the message was marked read, never before.
         setTimeout(() => {
           if (aliveRef.current) dispatch({ type: "SET_REACTION", companionId, messageId: userMessageId, reaction });
-        }, REACTION_DELAY_MS);
+        }, Math.max(0, timing.readAt + REACTION_DELAY_MS - Date.now()));
       }
+      let first = true;
       for (const b of r.bubbles) {
         if (!aliveRef.current) return;
         setTyping(true);
@@ -207,11 +239,14 @@ function ChatContent() {
           setTyping(true);
           await sleep(900);
         } else {
-          await sleep(typingMs(b.text.length));
+          // The dots have already been showing since she read it: take that time off the first bubble.
+          const wait = first ? Math.max(MIN_TYPING_MS, typingMs(b.text.length) - timing.typingCredit) : typingMs(b.text.length);
+          await sleep(wait);
         }
+        first = false;
         if (!aliveRef.current) return;
         setTyping(false);
-        dispatch({ type: "RECEIVE_REPLY", companionId, message: { id: b.id, who: "them", text: b.text, at: b.at, meta: b.meta } });
+        dispatch({ type: "RECEIVE_REPLY", companionId, message: { id: b.id, who: "them", text: b.text, at: b.at, meta: b.meta, inReplyTo: userMessageId ?? null } });
       }
       dispatch({
         type: "LIVE_SYNC",
@@ -230,8 +265,11 @@ function ChatContent() {
 
   // Asks the server for the companion's reply (or opener), then plays it. 202 means one
   // is already in flight (a second tab): try again shortly.
+  // `readDelay` is how long she takes to read the user's message first (null for an opener). The request goes
+  // out at once, in parallel: the receipt turns to Read and the dots start when the delay is up, and the first
+  // bubble's typing time is cut by however long the dots have already been showing.
   const fetchAndPlay = useCallback(
-    async (companionId: string, mode: "reply" | "opener", userMessageId?: number, followUp = false) => {
+    async (companionId: string, mode: "reply" | "opener", userMessageId?: number, followUp = false, readDelay: number | null = null) => {
       if (playingRef.current) {
         // The user sent again while the companion was mid-reply: answer that message next
         // (the server prompt covers both), rather than dropping it.
@@ -239,23 +277,44 @@ function ChatContent() {
         return;
       }
       playingRef.current = true;
+      setPlaying(true);
       setFailedMode(null);
+      const startedAt = Date.now();
+      const withRead = mode === "reply" && userMessageId !== undefined;
+      // A queued follow-up is read on the free tier.
+      const delay = withRead ? (followUp ? readDelayMs("free", Math.random()) : (readDelay ?? 0)) : 0;
+      let readAt = startedAt;
+      let settled = false;
       // A dequeued follow-up may end up a tapback alone: play() shows the dots per bubble, so none while waiting.
-      if (!followUp) setTyping(true);
+      if (!withRead && !followUp) setTyping(true);
+      const readDone: Promise<void> = withRead
+        ? sleep(delay).then(() => {
+            if (!aliveRef.current) return;
+            readAt = Date.now();
+            setReadUpTo((prev) => Math.max(prev ?? 0, userMessageId as number));
+            if (!settled && !followUp) setTyping(true);
+          })
+        : Promise.resolve();
       try {
-        let r: LiveReply | null = null;
         const opts = qaRef.current;
         const qaBody = opts.ignoreCaps || opts.force || opts.celebrate ? { ignoreCaps: opts.ignoreCaps, force: opts.force, celebrate: opts.celebrate } : null;
-        for (let i = 0; i < 6 && !r && aliveRef.current; i++) {
-          r = await requestLiveReply(companionId, mode, qaBody);
-          if (!r) await sleep(2000);
-        }
+        const fetchReply = async (): Promise<LiveReply | null> => {
+          let got: LiveReply | null = null;
+          for (let i = 0; i < 6 && !got && aliveRef.current; i++) {
+            got = await requestLiveReply(companionId, mode, qaBody);
+            if (!got) await sleep(2000);
+          }
+          return got;
+        };
+        const arrival = { at: startedAt };
+        const [r] = await Promise.all([fetchReply().then((got) => ((arrival.at = Date.now()), got)), readDone]);
         // "Next reply" means one reply: the forced effects are spent once it has come back.
         if (r && opts.force) setQaForce(null);
         if (r && opts.celebrate) setQaCelebrate(null);
         setTyping(false);
         if (r?.seenUpTo != null) lastSeenUpToRef.current = r.seenUpTo;
-        if (r) await play(companionId, userMessageId, r);
+        const typingCredit = withRead ? Math.max(0, arrival.at - startedAt - delay) : 0;
+        if (r) await play(companionId, userMessageId, r, { readAt, typingCredit });
       } catch (e) {
         setTyping(false);
         if (e instanceof LiveReplyError && e.status === 423) {
@@ -264,7 +323,9 @@ function ChatContent() {
           setFailedMode(mode);
         }
       } finally {
+        settled = true;
         playingRef.current = false;
+        setPlaying(false);
         const next = queuedRef.current;
         queuedRef.current = null;
         // The reply just played already saw the queued message: nothing left to ask for.
@@ -275,13 +336,79 @@ function ChatContent() {
     [dispatch, play]
   );
 
+  // How long she takes to read a message sent right now: from the block she is in (free, busy, or asleep).
+  const readDelayNow = useCallback((): number => {
+    const c = companionRef.current;
+    const p = personaRef.current;
+    if (!c || !c.live || !p) return readDelayMs("free", Math.random());
+    return readDelayMs(tierFor(heart.now(c, now(), p), p), Math.random());
+  }, []);
+
+  // ---- history paging ------------------------------------------------------
+  const loadOlder = useCallback(async () => {
+    const c = companionRef.current;
+    if (!c || !c.hasMore || loadingOlderRef.current || Date.now() < pagingBlockedUntilRef.current) return;
+    const oldest = c.messages.find(isSaved)?.id;
+    if (oldest === undefined) return;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const page = await getMessagesBefore(c.id, oldest);
+      if (aliveRef.current) dispatch({ type: "PREPEND_MESSAGES", companionId: c.id, messages: page.messages, hasMore: page.hasMore });
+    } catch (e) {
+      pagingBlockedUntilRef.current = Date.now() + PAGING_BACKOFF_MS;
+      showToast(rpcErrorMessage(e));
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, [dispatch, showToast]);
+
+  // Scrolls to a message and flashes it, paging backwards (up to ten pages) if it is not loaded yet.
+  const jumpToMessage = useCallback(
+    async (id: number) => {
+      const c = companionRef.current;
+      if (!c) return;
+      const target = () => setJumpTarget({ id, nonce: ++jumpSeqRef.current });
+      if (c.messages.some((m) => m.id === id)) {
+        target();
+        return;
+      }
+      if (loadingOlderRef.current) return;
+      let oldest = c.messages.find(isSaved)?.id;
+      let more = c.hasMore === true;
+      loadingOlderRef.current = true;
+      setLoadingOlder(true);
+      try {
+        for (let page = 0; page < MAX_JUMP_PAGES && more && oldest !== undefined; page++) {
+          const r = await getMessagesBefore(c.id, oldest);
+          if (!aliveRef.current) return;
+          dispatch({ type: "PREPEND_MESSAGES", companionId: c.id, messages: r.messages, hasMore: r.hasMore });
+          more = r.hasMore;
+          if (r.messages.some((m) => m.id === id)) {
+            target();
+            return;
+          }
+          oldest = r.messages[0]?.id;
+        }
+        showToast(COPY.chat.messageGone);
+      } catch (e) {
+        showToast(rpcErrorMessage(e));
+      } finally {
+        loadingOlderRef.current = false;
+        setLoadingOlder(false);
+      }
+    },
+    [dispatch, showToast]
+  );
+
   // CONFIRM_LOCK creates a companion with messages: []. Seed the opener
   // the first time this chat is ever opened. seed_opener only writes into
   // an empty conversation, so a second tab can't post a second opener.
   // A live companion's opener is written by the server instead.
   useEffect(() => {
     if (!companion || seededRef.current) return;
-    if (companion.messages.length > 0) return;
+    if (companion.messages.length > 0 || companion.hasMore) return;
     if (!companion.core.primary) return;
     if (live) {
       // A paused companion (expired plan, or outside the plan's slots) takes no new messages, so no opener either.
@@ -308,80 +435,121 @@ function ChatContent() {
   }, [companion?.id, companion?.messages.length, live, needsConsent, locked, state.entitlement.plan, state.user.consentVersion, state.user.displayName]);
 
   // Account sheet nudge, spec §8.1's exchange-count rule applied to THIS
-  // chat's companion (see report — the spec literally says
-  // `companions[0].exchanges`, almost certainly a slip for "the current
-  // companion", since a round-two companion would otherwise never trigger
-  // its own nudge).
+  // chat's companion (the spec says `companions[0].exchanges`, a slip for "the
+  // current companion"). The first chat is left alone: the sheet opens at
+  // exchange 3 (dismissible) and 7 (blocking), and only once her reply to that
+  // exchange has landed and nothing is typing or playing. Each threshold fires
+  // once per mount; the third only for an exchange made during this visit.
+  const lastMsg = companion?.messages[companion.messages.length - 1];
+  const replyLanded = lastMsg?.who === "them" && !lastMsg.pending && !typing && !playing;
   useEffect(() => {
     if (!companion || !template || state.user.accountAt) return;
     const n = companion.exchanges;
+    if (mountExchangesRef.current === null) mountExchangesRef.current = n;
+    if (!replyLanded) return;
     const personaName = firstNameFromFull(template.name);
     if (n >= 7 && accountNudgeRef.current < 7) {
       accountNudgeRef.current = 7;
       openSheet("account", { personaName, exchanges: n, blocking: true });
-    } else if (n === 3 && accountNudgeRef.current < 3) {
+    } else if (n >= 3 && n < 7 && n > mountExchangesRef.current && accountNudgeRef.current < 3) {
       accountNudgeRef.current = 3;
-      openSheet("account", { personaName, exchanges: n });
-    } else if (n === 1 && accountNudgeRef.current < 1) {
-      accountNudgeRef.current = 1;
       openSheet("account", { personaName, exchanges: n });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companion?.exchanges, state.user.accountAt, template]);
+  }, [companion?.exchanges, replyLanded, state.user.accountAt, template]);
+
+  // The overflow menu closes on Escape.
+  useEffect(() => {
+    if (!showOverflow) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowOverflow(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showOverflow]);
 
   if (!companion || !template) {
     return <div className={styles.notFound}>Not found.</div>;
   }
 
-  // send_message checks and debits the ledger server-side in one
-  // transaction; the message and ledger shown are the ones it returns.
+  // The bubble appears at once, as a pending message. send_message checks and
+  // debits the ledger server-side in one transaction, and the message and ledger
+  // shown are the ones it returns; a refusal or failure takes the bubble away and
+  // resolves false so the composer gives the text back. Sends go out in order.
   // Non-live companions still get their reply text from replyFor() here,
   // stored server-side; a live companion's reply is written by the server.
-  async function handleSend(text: string) {
+  function handleSend(text: string): Promise<boolean> {
     const companionId = companion!.id;
     const primary = companion!.core.primary;
-    let res;
+    const isLive = live;
     const quoteId = replyTarget?.id;
-    try {
-      res = await sendMessage(companionId, text, quoteId);
-    } catch (e) {
-      if ((e as { message?: string })?.message === "quote_not_found") setReplyTo(null);
-      showToast(rpcErrorMessage(e));
-      return;
-    }
+    const tempId = nextTempId();
+    dispatch({
+      type: "ADD_PENDING",
+      companionId,
+      message: { id: tempId, clientKey: tempId, who: "me", text, at: now(), pending: true, ...(quoteId !== undefined ? { meta: { quoteId } } : {}) },
+    });
     setReplyTo(null);
-    if (res.blocked || !res.message) {
-      // Refused server-side (TRIAL_LIMIT, PLAN_EXPIRED, FAIR_USE_CAP or COMPANION_LOCKED): the fresh
-      // entitlement makes the composer show the matching bar.
-      dispatch({ type: "LEDGER_SYNC", ledger: res.ledger, entitlement: res.entitlement });
-      if (!isSendCode(res.status)) showToast(COPY.auth.network);
-      return;
+
+    async function deliver(): Promise<boolean> {
+      let res;
+      try {
+        res = await sendMessage(companionId, text, quoteId);
+      } catch (e) {
+        dispatch({ type: "DROP_PENDING", companionId, tempId });
+        if ((e as { message?: string })?.message !== "quote_not_found" && quoteId !== undefined) setReplyTo((cur) => cur ?? { id: quoteId });
+        showToast(rpcErrorMessage(e));
+        return false;
+      }
+      if (res.blocked || !res.message) {
+        // Refused server-side (TRIAL_LIMIT, PLAN_EXPIRED, FAIR_USE_CAP or COMPANION_LOCKED): the fresh
+        // entitlement makes the composer show the matching bar.
+        dispatch({ type: "DROP_PENDING", companionId, tempId });
+        dispatch({ type: "LEDGER_SYNC", ledger: res.ledger, entitlement: res.entitlement });
+        if (!isSendCode(res.status)) showToast(COPY.auth.network);
+        return false;
+      }
+      const sent = res.message;
+      dispatch({ type: "CONFIRM_SENT", companionId, tempId, message: sent, exchanges: res.exchanges, ledger: res.ledger, entitlement: res.entitlement });
+      if (isLive) {
+        void fetchAndPlay(companionId, "reply", sent.id, false, readDelayNow());
+        return true;
+      }
+      if (!primary) return true;
+      const reply = replyFor(primary, res.exchanges);
+      // A mock companion reads on the free tier, then types for a moment.
+      const readDelay = readDelayMs("free", Math.random());
+      const typeFor = 1200 + Math.random() * 600;
+      setTimeout(() => {
+        if (!aliveRef.current) return;
+        if (typeof sent.id === "number") setReadUpTo((prev) => Math.max(prev ?? 0, sent.id as number));
+        setTyping(true);
+      }, readDelay);
+      setTimeout(() => {
+        receiveReply(companionId, reply)
+          .then(({ message }) => dispatch({ type: "RECEIVE_REPLY", companionId, message }))
+          .catch((e) => showToast(rpcErrorMessage(e)))
+          .finally(() => setTyping(false));
+      }, readDelay + typeFor);
+      return true;
     }
-    dispatch({ type: "SEND_MESSAGE", companionId, message: res.message, exchanges: res.exchanges, ledger: res.ledger, entitlement: res.entitlement });
-    if (live) {
-      void fetchAndPlay(companionId, "reply", res.message.id);
-      return;
-    }
-    if (!primary) return;
-    const reply = replyFor(primary, res.exchanges);
-    setTyping(true);
-    const delay = 1200 + Math.random() * 600;
-    setTimeout(() => {
-      receiveReply(companionId, reply)
-        .then(({ message }) => dispatch({ type: "RECEIVE_REPLY", companionId, message }))
-        .catch((e) => showToast(rpcErrorMessage(e)))
-        .finally(() => setTyping(false));
-    }, delay);
+
+    const run = sendChainRef.current.then(deliver);
+    sendChainRef.current = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
   }
 
   function retry() {
     const c = companion!;
-    if (c.messages.length === 0) {
+    if (c.messages.length === 0 && !c.hasMore) {
       void fetchAndPlay(c.id, "opener");
       return;
     }
     const lastMe = [...c.messages].reverse().find((m) => m.who === "me");
-    void fetchAndPlay(c.id, "reply", lastMe?.id);
+    void fetchAndPlay(c.id, "reply", lastMe?.id, false, 0);
   }
 
   // ---- B3: message actions -------------------------------------------------
@@ -407,11 +575,26 @@ function ChatContent() {
     const target = editing;
     setEditing(null);
     if (!target || text === target.text) return;
+    const companionId = companion!.id;
     try {
-      const r = await editMessage(companion!.id, target.id, text);
-      dispatch({ type: "REPLACE_MESSAGE", companionId: companion!.id, message: r.message });
+      const r = await editMessage(companionId, target.id, text);
+      dispatch({ type: "REPLACE_MESSAGE", companionId, message: r.message });
     } catch (e) {
       showToast(rpcErrorMessage(e));
+      return;
+    }
+    // Editing the newest answered message has her answer it again. The server decides (retract_reply);
+    // when it declines (not_latest, not_allowed) the edit simply stands.
+    const c = companionRef.current;
+    if (!c || !canRegenerate(c.messages, target.id, { live: c.live === true, locked, expired: state.entitlement.plan === "expired", playing: playingRef.current })) return;
+    try {
+      const r = await retractReply(companionId, target.id);
+      dispatch({ type: "REMOVE_MESSAGES", companionId, ids: r.removedIds });
+      dispatch({ type: "REPLACE_MESSAGE", companionId, message: r.message });
+      setReadUpTo((prev) => (prev !== null && prev >= target.id ? target.id - 1 : prev));
+      void fetchAndPlay(companionId, "reply", target.id, false, readDelayNow());
+    } catch {
+      /* the edit stands */
     }
   }
 
@@ -474,8 +657,8 @@ function ChatContent() {
     const uid = auth.user?.id;
     if (!uid) return;
     try {
-      await insertConsent(uid, LIVE_CONSENT_VERSION);
-      dispatch({ type: "SET_CONSENT_VERSION", version: LIVE_CONSENT_VERSION });
+      await insertConsent(uid, CONSENT_VERSION);
+      dispatch({ type: "SET_CONSENT_VERSION", version: CONSENT_VERSION });
     } catch (e) {
       showToast(rpcErrorMessage(e));
     }
@@ -516,6 +699,7 @@ function ChatContent() {
         onOpenProfile={() => router.push(`/profile/${companion.id}`)}
         onLongPressAvatar={() => openSheet("switcher", { currentId: companion.id })}
         onOverflow={() => setShowOverflow((v) => !v)}
+        overflowOpen={showOverflow}
         presenceOverride={presenceOverride}
         onQa={qaAccess.qa && live ? () => setQaOpen(true) : undefined}
       />
@@ -533,30 +717,46 @@ function ChatContent() {
         </div>
       )}
       {showOverflow && (
-        <div className={styles.overflowMenu} role="menu">
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.overflowRow}
-            onClick={() => {
-              setShowOverflow(false);
-              router.push(`/profile/${companion.id}`);
-            }}
-          >
-            {COPY.chat.overflowProfile}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.overflowRow}
-            onClick={() => {
-              setShowOverflow(false);
-              router.push("/home");
-            }}
-          >
-            {COPY.chat.overflowHome}
-          </button>
-        </div>
+        <>
+          <div className={styles.overflowBackdrop} data-testid="overflow-backdrop" onClick={() => setShowOverflow(false)} />
+          <div className={styles.overflowMenu} role="menu">
+            {state.companions.filter((c) => c.status === "active").length > 1 && (
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.overflowRow}
+                onClick={() => {
+                  setShowOverflow(false);
+                  openSheet("switcher", { currentId: companion.id });
+                }}
+              >
+                {COPY.chat.overflowSwitch}
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.overflowRow}
+              onClick={() => {
+                setShowOverflow(false);
+                setPinsOpen(true);
+              }}
+            >
+              {COPY.chat.overflowPins}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.overflowRow}
+              onClick={() => {
+                setShowOverflow(false);
+                router.push(`/profile/${companion.id}`);
+              }}
+            >
+              {COPY.chat.overflowProfile}
+            </button>
+          </div>
+        </>
       )}
       <MessageList
         messages={previews.length ? [...companion.messages, ...previews] : companion.messages}
@@ -565,6 +765,12 @@ function ChatContent() {
         onReply={startReply}
         dividerBeforeAt={dividerBeforeAtRef.current}
         typing={typing}
+        readUpTo={readUpTo}
+        hasMore={companion.hasMore === true}
+        loadingOlder={loadingOlder}
+        onLoadOlder={() => void loadOlder()}
+        jumpTarget={jumpTarget}
+        onQuoteJump={(qid) => void jumpToMessage(qid)}
         companionColor={template.palette}
         footer={live && resourceOpen ? <ResourceCard onDismiss={() => setResourceOpen(false)} /> : undefined}
         onRetry={failedMode ? retry : null}
@@ -572,7 +778,8 @@ function ChatContent() {
       {!paused && (
         <Composer
           variant={variant}
-          onSend={(text) => void handleSend(text)}
+          onSend={handleSend}
+          draftKey={auth.user?.id ? draftKeyFor(auth.user.id, companion.id) : null}
           onOpenPlans={(from: PlansFrom) => router.push(`/plans?from=${from}`)}
           replyingTo={replyTarget ? { label: replyTarget.who === "me" ? COPY.chat.quoteYou : firstName, text: replyTarget.text } : null}
           onCancelReply={() => setReplyTo(null)}
@@ -615,7 +822,8 @@ function ChatContent() {
         />
       )}
       {paused && <AgeCheckSheet error={ageError} onAdult={(dob) => void onAgeAdult(dob)} onUnder18={() => void onAgeUnder18()} />}
-      {needsConsent && <ConsentUpdateSheet persona={firstName} onContinue={() => void onConsentContinue()} onNotNow={() => router.push("/home")} />}
+      {needsConsent && <ConsentUpdateSheet persona={firstName} obj={pronounsFor(template).obj} onContinue={() => void onConsentContinue()} onNotNow={() => router.push("/home")} />}
+      {pinsOpen && <PinnedSheet companionId={companion.id} onClose={() => setPinsOpen(false)} onJump={(pid) => void jumpToMessage(pid)} onError={showToast} />}
       {screenFx && <ScreenFx kind={screenFx} onDone={() => setScreenFx(null)} />}
     </div>
   );

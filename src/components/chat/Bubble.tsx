@@ -19,6 +19,7 @@ export interface BubbleQuote {
   id: number;
 }
 
+
 const EFFECT_CLASS: Record<string, string> = {
   soft: styles.soft,
   loud: styles.loud,
@@ -44,6 +45,7 @@ export function Bubble({
   onOpenActions,
   onReply,
   onJump,
+  onTap,
 }: {
   m: Message;
   quote: BubbleQuote | null;
@@ -54,6 +56,8 @@ export function Bubble({
   onOpenActions: (m: Message) => void;
   onReply: (m: Message) => void;
   onJump: (id: number) => void;
+  /** A plain tap: the page toggles this bubble's time. */
+  onTap?: (m: Message) => void;
 }) {
   const mine = m.who === "me";
   const effect = !mine ? m.meta?.effect : undefined;
@@ -65,6 +69,7 @@ export function Bubble({
     direction: mine ? -1 : 1,
     onOpenActions: () => onOpenActions(m),
     onSwipeReply: () => onReply(m),
+    onTap: () => onTap?.(m),
   });
 
   // A heartbeat that arrives live also taps the phone, twice.
@@ -76,13 +81,14 @@ export function Bubble({
   const cls = [
     styles.bubble,
     mine ? styles.me : styles.them,
+    m.pending ? styles.pendingBubble : "",
     tomb ? styles.tomb : "",
     jumbo ? styles.jumbo : "",
     effect ? EFFECT_CLASS[effect] ?? "" : "",
   ].join(" ");
 
   return (
-    <div ref={rowRef} className={styles.swipeRow} id={m.id !== undefined ? `m-${m.id}` : undefined} data-mine={mine ? "true" : "false"}>
+    <div ref={rowRef} className={styles.swipeRow} id={m.id !== undefined && m.id > 0 ? `m-${m.id}` : undefined} data-mine={mine ? "true" : "false"}>
       {actionable && (
         <span className={styles.replyHint} aria-hidden>
           <svg viewBox="0 0 24 24">
@@ -96,7 +102,7 @@ export function Bubble({
         data-effect={effect ?? undefined}
         data-fresh={fresh ? "true" : undefined}
         data-flash={flash ? "true" : undefined}
-        data-testid={tomb ? "bubble-deleted" : undefined}
+        data-testid={tomb ? "bubble-deleted" : m.pending ? "bubble-pending" : undefined}
         tabIndex={actionable ? 0 : undefined}
         aria-haspopup={actionable ? "menu" : undefined}
         {...bind}

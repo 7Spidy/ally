@@ -86,7 +86,8 @@ test.describe("E28 live chat with Ira", () => {
       }).observe(document.body, { childList: true, subtree: true, characterData: true });
     });
     await send(page, "my manager moved the deadline again");
-    await expect(page.getByTestId("reaction")).toHaveText("👀");
+    // She reads it first (up to 5 s in a busy block), and the tapback lands 700 ms after that.
+    await expect(page.getByTestId("reaction")).toHaveText("👀", { timeout: 15000 });
     await screenshotScreen(page, "e28-02-reaction");
     await expect(page.getByText("that's the third time")).toBeVisible({ timeout: 15000 });
     const t = await page.evaluate(() => (window as unknown as { __t: Record<string, number> }).__t);
@@ -221,7 +222,8 @@ test.describe("E28 live chat with Ira", () => {
       await expect.poll(async () => (await serverSnapshot(userId)).messages.filter((m) => m.who === "them").length, { timeout: 25000, message: trigger }).toBe(before + 1);
       await expect(page.getByText(/couldn't reach ira/i)).toHaveCount(0);
     }
-    await expect(page.getByText("got there in the end")).toHaveCount(1);
+    // The row is stored before she has "read" it and typed it out on screen.
+    await expect(page.getByText("got there in the end")).toHaveCount(1, { timeout: 15000 });
     assertHealthy(health);
   });
 

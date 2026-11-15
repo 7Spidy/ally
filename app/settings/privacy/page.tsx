@@ -1,18 +1,27 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useAlly } from "@/state/useAlly";
 import { useSheet } from "@/state/useSheet";
+import { useToast } from "@/state/useToast";
 import { COPY } from "@/lib/copy";
+import { exportMyData } from "@/lib/supabase/queries";
 import styles from "./page.module.css";
 
 export default function PrivacySettingsPage() {
   const router = useRouter();
-  const { state } = useAlly();
   const { openSheet } = useSheet();
+  const showToast = useToast();
 
-  function downloadData() {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  // The file is what the server holds for this account (export_my_data), not the device's cache.
+  async function downloadData() {
+    let data: Record<string, unknown>;
+    try {
+      data = await exportMyData();
+    } catch {
+      showToast(COPY.auth.network);
+      return;
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -40,7 +49,7 @@ export default function PrivacySettingsPage() {
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
           </svg>
         </a>
-        <button type="button" className={styles.row} onClick={downloadData}>
+        <button type="button" className={styles.row} onClick={() => void downloadData()}>
           <span className={styles.rowLabel}>{COPY.privacy.download}</span>
           <svg className={styles.icon} viewBox="0 0 24 24" aria-hidden="true">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />

@@ -11,8 +11,8 @@ import {
   assertMinFontSize,
 } from "./helpers";
 
-test.describe("E9 switcher via long-press + overflow Home", () => {
-  test("E9: long-press avatar opens switcher; picking a companion opens its chat; overflow Home -> /home", async ({
+test.describe("E9 switcher via long-press + overflow Switch companion", () => {
+  test("E9: long-press avatar opens switcher; picking a companion opens its chat; overflow Switch companion -> Home -> /home", async ({
     page,
   }) => {
     const c1 = makeCompanion({ id: "c_e9a", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 900000 });
@@ -46,9 +46,11 @@ test.describe("E9 switcher via long-press + overflow Home", () => {
     await expect(page.getByText("Arjun")).toBeVisible();
     await screenshotScreen(page, "e9-02-switched-chat");
 
-    // overflow -> Home
+    // overflow -> Switch companion -> Home (the overflow menu no longer has a Home row)
     await page.getByRole("button", { name: "More" }).click();
-    await page.getByRole("menuitem", { name: "Home" }).click();
+    await expect(page.getByRole("menuitem", { name: "Home" })).toHaveCount(0);
+    await page.getByRole("menuitem", { name: "Switch companion" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Home" }).click();
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e9-03-home-via-overflow");
     await assertMinFontSize(page);

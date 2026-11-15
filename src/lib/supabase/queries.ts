@@ -38,6 +38,8 @@ export interface ServerState {
   server_now: number;
   companions: Omit<Companion, "messages">[];
   messages_by_companion: Record<string, Message[]>;
+  /** Companion id to whether older messages exist than the newest 50 in messages_by_companion. */
+  has_more_by_companion?: Record<string, boolean>;
   ledger: Ledger;
   entitlement: RawEntitlement;
   profile: { display_name: string | null } | null;
@@ -47,7 +49,7 @@ export interface ServerState {
 /** Companions with their messages attached, plus the ledger and entitlement, as the client cache holds them. */
 export function assembleServerState(s: ServerState): { companions: Companion[]; ledger: Ledger; entitlement: Entitlement } {
   return {
-    companions: s.companions.map((c) => ({ ...c, messages: s.messages_by_companion[c.id] ?? [] })),
+    companions: s.companions.map((c) => ({ ...c, messages: s.messages_by_companion[c.id] ?? [], hasMore: s.has_more_by_companion?.[c.id] === true })),
     ledger: s.ledger,
     entitlement: parseEntitlement(s.entitlement),
   };
@@ -106,6 +108,51 @@ export function editMessage(companionId: string, messageId: number, body: string
 /** B3: delete either side's message. The server erases the text and keeps a tombstone. */
 export function deleteMessage(companionId: string, messageId: number): Promise<{ message: Message }> {
   return call("delete_message", { companion_id: companionId, message_id: messageId });
+}
+
+/** One older page of a chat, oldest to newest, and whether more remain. */
+export function getMessagesBefore(companionId: string, beforeId: number, limit = 50): Promise<{ messages: Message[]; hasMore: boolean }> {
+  return call("get_messages_before", { companion_id: companionId, before_id: beforeId, limit_n: limit });
+}
+
+/** Her pinned messages, newest first. */
+export function getPinnedMessages(companionId: string): Promise<Message[]> {
+  return call("get_pinned_messages", { companion_id: companionId });
+}
+
+/** Removes her reply to an edited newest message so it can be answered again. Raises not_latest or not_allowed. */
+export function retractReply(companionId: string, messageId: number): Promise<{ removedIds: number[]; message: Message }> {
+  return call("retract_reply", { companion_id: companionId, message_id: messageId });
+}
+
+/** Everything the caller owns, for the "Download my data" file. */
+export function exportMyData(): Promise<Record<string, unknown>> {
+  return call("export_my_data");
+}
+
+export interface MemoryFact {
+  id: number;
+  category: string;
+  fact: string;
+  created_at: string;
+}
+
+/** The caller's active memory facts for one companion, newest first (the own-row select policy). */
+export async function getMemoryFacts(companionId: string): Promise<MemoryFact[]> {
+  const { data, error } = await getBrowserClient()
+    .from("memory_facts")
+    .select("id,category,fact,created_at")
+    .eq("companion_id", companionId)
+    .eq("active", true)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as MemoryFact[];
+}
+
+/** Deletes one remembered fact for good. Idempotent. */
+export function deleteMemoryFact(factId: number): Promise<{ deleted: boolean }> {
+  return call("delete_memory_fact", { fact_id: factId });
 }
 
 export function receiveReply(companionId: string, body: string): Promise<{ message: Message; unread: number }> {

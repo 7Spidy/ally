@@ -94,6 +94,19 @@ describe("copy", () => {
       "Here now",
       "Home",
       "Profile",
+      "Switch companion",
+      "Pinned messages",
+      "Nothing pinned yet.",
+      "Jump to latest",
+      "Today",
+      "Yesterday",
+      "Loading earlier messages",
+      "Where you are",
+      "What {persona} remembers",
+      "Nothing yet. This fills in as you talk.",
+      "One update before you chat",
+      "Your companion's replies are written by an AI model. They remember key things you tell them, so conversations carry over.",
+      "{persona}'s replies are written by an AI model. {persona} remembers key things you tell {obj}, so conversations carry over. You can see and delete what {persona} remembers on the profile, or delete everything in Settings.",
       "Together since",
       "Notifications",
       "Message sound",
@@ -116,10 +129,10 @@ describe("copy", () => {
       "Download my data",
       "Delete everything",
       "Delete everything?",
-      "Your companions, chats and answers are removed from this device. This can't be undone.",
+      "Your companions, chats and answers are deleted for good. This can't be undone.",
       "Keep my data",
       "You picked their face. The way they talk came from your answers.",
-      "The questions at the start shaped how quickly they open up, how hard they push and how they handle a bad day. The first few weeks of talking can shift that a little.",
+      "The questions at the start shaped how quickly they open up, how hard they push and how they handle a bad day. That doesn't change later.",
       "Each companion is separate. Nothing you tell one reaches another.",
       "None of them are real people. Ally is an AI and every character is fictional.",
       "You can download or delete your answers any time in Privacy and data.",
@@ -173,6 +186,41 @@ describe("copy", () => {
       expect(s.includes("—"), `"${s}" must not contain an em dash`).toBe(false);
       expect(/phone/i.test(s), `"${s}" must not mention a phone`).toBe(false);
     }
+  });
+
+  it("47b. no COPY string contains an exclamation mark, and Home left the chat overflow", () => {
+    for (const s of collectStrings(COPY)) {
+      expect(s.includes("!"), `"${s}" must not contain an exclamation mark`).toBe(false);
+    }
+    expect("overflowHome" in COPY.chat).toBe(false);
+  });
+
+  it("47c. U1: the new keys are present with the exact copy", () => {
+    expect(COPY.chat.overflowSwitch).toBe("Switch companion");
+    expect(COPY.chat.overflowPins).toBe("Pinned messages");
+    expect(COPY.chat.pinsEmpty).toBe("Nothing pinned yet.");
+    expect(COPY.chat.jumpLatest).toBe("Jump to latest");
+    expect(COPY.chat.today).toBe("Today");
+    expect(COPY.chat.yesterday).toBe("Yesterday");
+    expect(COPY.chat.loadingOlder).toBe("Loading earlier messages");
+    expect(COPY.profile.stage).toBe("Where you are");
+    expect(COPY.profile.remembers).toBe("What {persona} remembers");
+    expect(COPY.profile.remembersEmpty).toBe("Nothing yet. This fills in as you talk.");
+    expect(COPY.profile.forget).toBe("Delete");
+    expect(Object.values(COPY.profile.categories)).toEqual(["People", "Work", "Routine", "Dates", "Tastes", "Jokes", "Promises", "Other"]);
+    expect(COPY.consent.live).toContain("written by an AI model");
+    expect(COPY.live.consentHeading).toBe("One update before you chat");
+    expect(COPY.live.consentBody).toContain("{persona}'s replies are written by an AI model.");
+    expect(COPY.live.consentBody).toContain("{obj}");
+    expect(COPY.deleteSheet.body).toBe("Your companions, chats and answers are deleted for good. This can't be undone.");
+    expect(COPY.how.body[1]).toBe("The questions at the start shaped how quickly they open up, how hard they push and how they handle a bad day. That doesn't change later.");
+  });
+
+  it("47d. U1: the notification copy is in COPY, with the reminder variants", () => {
+    expect(COPY.notifications.midday.titleNamed).toContain("{name}");
+    expect(COPY.notifications.evening.bodyNone.length).toBeGreaterThan(0);
+    expect(COPY.notifications.testMidday).toContain("Midday");
+    expect(COPY.notifications.testEvening).toContain("Evening");
   });
 
   it("48. every P1 auth string appears verbatim in COPY", () => {
@@ -276,10 +324,10 @@ describe("copy", () => {
     });
     expect(COPY.q9).toEqual({
       question: "I'd like my companion's messages to be",
-      options: ["Warm, with a little teasing", "Chaotic, with memes and voice notes", "Thoughtful, with good questions", "Short and to the point"],
+      options: ["Warm, with a little teasing", "Chaotic, with memes and bad jokes", "Thoughtful, with good questions", "Short and to the point"],
     });
     for (const q of [COPY.q5, COPY.q6, COPY.q7, COPY.q8, COPY.q9]) expect(q.options.length).toBe(4);
-    expect(COPY.tiebreak.question).toBe("It's 11pm and it's been a rough day. Which message would you rather get?");
+    expect(COPY.tiebreak.question).toBe("It's eleven at night and it's been a rough day. Which message would you rather get?");
     expect(COPY.tiebreak.lines).toEqual({
       ROMANTIC: "you went quiet today. i noticed. tell me the part you didn't say.",
       PSYCH: "Let's slow it down. What's the thought that keeps coming back?",

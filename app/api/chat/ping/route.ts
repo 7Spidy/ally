@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   } | null;
 
   const companionId = typeof body?.companionId === "string" ? body.companionId : "";
-  const force = body?.force === true;
+  const forceRequested = body?.force === true;
   const minInactivityMs = (typeof body?.inactivityMinutes === "number" ? body.inactivityMinutes : 30) * 60 * 1000;
 
   if (!companionId) {
@@ -37,6 +37,8 @@ export async function POST(request: Request) {
   // 1. Authorize: either logged-in user who owns the companion or Cron
   const isCron = isCronAuthorised(request);
   let userId: string | null = null;
+  // `force` skips the idle and notify checks. Only cron and QA or admin profiles may use it; for anyone else it is ignored and the normal checks apply.
+  let force = isCron && forceRequested;
   const adminDb = getAdminClient();
 
   if (!isCron) {
@@ -48,6 +50,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
     userId = user.id;
+    if (forceRequested) {
+      const { data: qa } = await supabase.rpc("is_qa");
+      force = qa === true;
+    }
   }
 
   // 2. Fetch companion
