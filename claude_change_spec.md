@@ -65,7 +65,7 @@ No data changes are needed:
 - A user on Max or Ultra simply gains slots.
 - Nobody loses slots, so no companion becomes newly locked.
 
-You apply this migration (and any other pending one) to staging and prod yourself in step 4.7. I will not run anything manually.
+**This migration is already applied to both staging and prod** (15 Nov 2026, via the Supabase SQL editor). Both runs were verified to return `3, 5, 400, 99, 149, 249`, and `20261115000002 / new_tiers` is recorded in `supabase_migrations.schema_migrations` on both. Your file must therefore use exactly this version and name, and exactly the six statements above, so the repo matches what is live.
 
 ### 4.2 SQL-editor copy
 
@@ -109,56 +109,11 @@ Leave every other plans string unchanged.
 
 Already done. The U1 spec was moved to `docs/specs/u1-ux-fixes.md` in the same commit that added this file. Nothing to do here.
 
-### 4.7 Apply every pending migration to staging, then prod (you run this, not me)
+### 4.7 Remote databases: already done, do not run
 
-Do this only after every local check in section 5 has passed. Run it before any commit, because the database change is safe ahead of the code: production code ignores the extra slots and higher prices until it is deployed.
+Staging and prod are already up to date with every migration, including `20261115000002_new_tiers`. Do not run `db-push.ps1`, `supabase db push` or any SQL against a remote database in this build, and do not ask me for connection strings.
 
-1. **The script is already in the repo root** as `db-push.ps1` (committed with this spec). Do not change its logic.
-2. **Find the connection strings without asking me first.** Check, in order:
-   - existing env vars `ALLY_STAGING_DB_URL` and `ALLY_PROD_DB_URL`,
-   - `.env.local`, `.env` and `supabase/.env`,
-   - any credentials previous builds used to run `supabase db push` on this machine.
-
-   Never print a connection string or password in your output, and never write one into a tracked file.
-
-   If you cannot find both, stop and ask me once for the two Session-pooler connection strings. Then continue with no further questions.
-3. **Dry run both targets** and show me which migrations are pending on each:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File db-push.ps1 -Target staging -DryRun -Yes
-   powershell -ExecutionPolicy Bypass -File db-push.ps1 -Target prod -DryRun -Yes
-   ```
-
-   The pending list may include `20261111000001_plans_and_trial.sql` and `20261115000001_ux_fixes.sql` if they have not reached a target yet. Apply all of them, in order.
-4. **Apply to staging:**
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File db-push.ps1 -Target staging -Yes
-   ```
-
-5. **Verify staging.** Run `npx supabase migration list --db-url <staging>`. Every local migration must show as applied on remote.
-
-   Then run a read-only check against staging:
-
-   ```sql
-   select ally_private.slots_max(), ally_private.slots_ultra(), ally_private.cap_pro(),
-          ally_private.price_pro(), ally_private.price_max(), ally_private.price_ultra();
-   ```
-
-   Use `psql` if it is installed. Otherwise use a throwaway Node script with the `pg` package, run outside the repo. Do not add `pg` to `package.json`.
-
-   It must return `3, 5, 400, 99, 149, 249`. If anything fails, stop and do not touch prod.
-6. **Apply to prod** the same way with `-Target prod -Yes`, then run the same two checks against prod.
-7. **Report back** with:
-   - the migrations applied to each target,
-   - the verification results.
-
-**Hard rules for this step:**
-- Never use `--include-all`.
-- Never run `supabase db reset` against a remote database.
-- Never edit an already-applied migration.
-
-If `db push` reports migrations out of order, or a conflict with remote history, stop and show me the output.
+One optional read-only check, only if credentials are already available on this machine: run `npx supabase migration list --db-url <target>` and confirm local and remote match. If no credentials are available, skip it and say so in your summary.
 
 ## 5. Tests and verification
 
