@@ -14,12 +14,13 @@ import {
   acceptLiveConsent,
 } from "./helpers";
 
-test.describe("E4 fourth companion fills Ultra, then home shows the cap card", () => {
-  test("E4: Ultra user adds the fourth Ally -> cap card says part ways to make room", async ({ page }) => {
+test.describe("E4 fifth companion fills Ultra, then home shows the cap card", () => {
+  test("E4: Ultra user adds the fifth Ally -> cap card says part ways to make room", async ({ page }) => {
     const c1 = makeCompanion({ id: "c_e4a", templateId: "F01", deckGender: "woman", createdAt: FIXED_NOW - 900000 });
     const c2 = makeCompanion({ id: "c_e4b", templateId: "M01", deckGender: "man", createdAt: FIXED_NOW - 800000 });
     const c3 = makeCompanion({ id: "c_e4c", templateId: "M02", deckGender: "man", createdAt: FIXED_NOW - 700000 });
-    const state = makeState({ companions: [c1, c2, c3], plan: "ultra" });
+    const c4 = makeCompanion({ id: "c_e4d", templateId: "M03", deckGender: "man", createdAt: FIXED_NOW - 600000 });
+    const state = makeState({ companions: [c1, c2, c3, c4], plan: "ultra" });
 
     await setClock(page, FIXED_NOW);
     const userId = await seedState(page, state);
@@ -32,7 +33,7 @@ test.describe("E4 fourth companion fills Ultra, then home shows the cap card", (
     const introDialog = page.getByRole("dialog");
     await introDialog.getByRole("button", { name: "Start" }).click();
 
-    // Ultra has a fourth slot free: straight on, no plans screen
+    // Ultra has a fifth slot free: straight on, no plans screen
     await page.waitForURL("**/onboarding/gender");
     await page.getByRole("button", { name: "A woman" }).click();
     await answerSevenQuestions(page);
@@ -60,14 +61,14 @@ test.describe("E4 fourth companion fills Ultra, then home shows the cap card", (
     await page.waitForURL("**/home");
     await screenshotScreen(page, "e4-02-home-cap-card");
 
-    await expect(page.getByText("That's four")).toBeVisible();
-    await expect(page.getByText("Four Allys is the most Ally keeps at once. Part ways with one to make room for someone new.")).toBeVisible();
+    await expect(page.getByText("That's five")).toBeVisible();
+    await expect(page.getByText("Five Allys is the most Ally keeps at once. Part ways with one to make room for someone new.")).toBeVisible();
     await assertMinFontSize(page);
 
-    // The plan came from a subscription row; the fourth companion is a server row.
+    // The plan came from a subscription row; the fifth companion is a server row.
     const snap = await serverSnapshot(userId);
     expect(snap.subscription).toMatchObject({ plan: "ultra", status: "active" });
-    expect(snap.companions.filter((c) => c.status === "active")).toHaveLength(4);
+    expect(snap.companions.filter((c) => c.status === "active")).toHaveLength(5);
 
     assertHealthy(health);
   });

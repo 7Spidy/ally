@@ -355,7 +355,7 @@ describe("create_companion", () => {
     expect(after.data?.display_name).toBe("Riya"); // not overwritten
   });
 
-  it("slots follow the plan: 1 on the trial, Pro 1, Max 2, Ultra 4, expired 0", async () => {
+  it("slots follow the plan: 1 on the trial, Pro 1, Max 3, Ultra 5, expired 0", async () => {
     const tryCreate = (u: TestUser, t: string) => u.client.rpc("create_companion", { template_id: t, deck_gender: t.startsWith("F") ? "woman" : "man", answers: ANSWERS, core: CORE, display_name: "" });
     const faces = ["F09", "F10", "F11", "F12", "F13"];
     const expectedSlots: Record<string, number> = { pro: PLAN_CONFIG.tiers.pro.slots, max: PLAN_CONFIG.tiers.max.slots, ultra: PLAN_CONFIG.tiers.ultra.slots };

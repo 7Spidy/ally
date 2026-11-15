@@ -107,8 +107,8 @@ test.describe("E31 slots and the new-Ally route", () => {
     await expect(page.getByTestId("tier-max")).toHaveAttribute("aria-checked", "true");
     await screenshotScreen(page, "e31-02-plans-newally");
 
-    // Max with both slots full: Ultra is the next step
-    await serverSeedSecond(userId);
+    // Max with all three slots full: Ultra is the next step
+    await serverSeedMore(userId, ["c_e31e2", "F09"], ["c_e31e3", "F10"]);
     await seedPlan(userId, "max");
     await page.goto("/home");
     await page.getByRole("button", { name: "Start" }).click();
@@ -124,16 +124,16 @@ test.describe("E31 slots and the new-Ally route", () => {
     await expect(page.getByTestId("tier-max")).toHaveAttribute("aria-checked", "true");
   });
 
-  test("E31.7: Ultra with all four slots full never sees the plans screen from +: the cap card asks them to part ways", async ({ page }) => {
-    const cs = [comp("c_e31g1", "F01", "woman", 900000), comp("c_e31g2", "F02", "woman", 800000), comp("c_e31g3", "M01", "man", 700000), comp("c_e31g4", "M02", "man", 600000)];
+  test("E31.7: Ultra with all five slots full never sees the plans screen from +: the cap card asks them to part ways", async ({ page }) => {
+    const cs = [comp("c_e31g1", "F01", "woman", 900000), comp("c_e31g2", "F02", "woman", 800000), comp("c_e31g3", "M01", "man", 700000), comp("c_e31g4", "M02", "man", 600000), comp("c_e31g5", "M03", "man", 500000)];
     await open(page, makeState({ companions: cs, plan: "ultra" }));
     await page.goto("/home");
-    await expect(page.getByText("That's four")).toBeVisible();
-    await expect(page.getByText("Four Allys is the most Ally keeps at once. Part ways with one to make room for someone new.")).toBeVisible();
+    await expect(page.getByText("That's five")).toBeVisible();
+    await expect(page.getByText("Five Allys is the most Ally keeps at once. Part ways with one to make room for someone new.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Start" })).toHaveCount(0);
     // opened directly, the screen shows the same message instead of the tiers
     await page.goto("/plans?from=newally");
-    await expect(page.getByText("That's four")).toBeVisible();
+    await expect(page.getByText("That's five")).toBeVisible();
     await expect(page.getByTestId("tier-pro")).toHaveCount(0);
   });
 
@@ -203,7 +203,7 @@ test.describe("E31 subscribed users and the purchase hand-off", () => {
     w.__launched = [];
     w.AllyBilling = {
       launch: (productId: string, basePlanId: string) => w.__launched.push([productId, basePlanId]),
-      getPrices: () => ({ ally_pro: "₹299.00", ally_max: "₹499.00", ally_ultra: "₹799.00" }),
+      getPrices: () => ({ ally_pro: "₹99.00", ally_max: "₹149.00", ally_ultra: "₹249.00" }),
     };
   };
 
@@ -254,10 +254,10 @@ test.describe("E31 subscribed users and the purchase hand-off", () => {
     await page.getByTestId("trial-chip").click();
     await page.waitForURL(url("trial"));
     const cta = page.getByTestId("plans-cta");
-    await expect(cta).toHaveText("Continue with Pro, ₹299.00 a month"); // Play's localized price
+    await expect(cta).toHaveText("Continue with Pro, ₹99.00 a month"); // Play's localized price
 
     await page.getByTestId("tier-ultra").click();
-    await expect(cta).toHaveText("Continue with Ultra, ₹799.00 a month");
+    await expect(cta).toHaveText("Continue with Ultra, ₹249.00 a month");
     await cta.click();
     expect(await page.evaluate(() => (window as unknown as { __launched: string[][] }).__launched)).toEqual([["ally_ultra", "monthly"]]);
 
@@ -288,6 +288,25 @@ test.describe("E31 subscribed users and the purchase hand-off", () => {
     expect(snap.subscription).toBeNull();
     await page.goto("/home");
     await expect(page.getByTestId("trial-chip")).toBeVisible(); // still on the trial
+  });
+});
+
+test.describe("E31 the new tier numbers", () => {
+  test("E31.17: the plans screen shows 99, 149 and 249 rupees and the new Max and Ultra feature lines", async ({ page }) => {
+    await open(page, makeState({ companions: [comp("c_e31p", "F08", "woman", 500000)], plan: { trialDay: 3 } }));
+    await page.goto("/plans?from=trial");
+    const pro = page.getByTestId("tier-pro");
+    const max = page.getByTestId("tier-max");
+    const ultra = page.getByTestId("tier-ultra");
+    await expect(pro).toContainText("₹99");
+    await expect(max).toContainText("₹149");
+    await expect(ultra).toContainText("₹249");
+    await expect(pro).toContainText("Every level except the deepest");
+    await expect(max).toContainText("Room for 3 Allys");
+    await expect(max).toContainText("2 more Allys, each with their own memory");
+    await expect(ultra).toContainText("2 more Allys, 5 in all");
+    await expect(ultra).toContainText("The deepest level with every Ally");
+    for (const old of ["₹299", "₹499", "₹799"]) await expect(page.locator("body")).not.toContainText(old);
   });
 });
 
@@ -329,17 +348,19 @@ test.describe("E31 the deeper level", () => {
   });
 });
 
-/** Gives the e2e user a second active companion through the service role (the UI path to one is covered by E3). */
-async function serverSeedSecond(userId: string) {
+/** Gives the e2e user more active companions through the service role (the UI path to one is covered by E3). */
+async function serverSeedMore(userId: string, ...rows: [id: string, templateId: string][]) {
   const admin = adminClient();
-  const { error } = await admin.from("companions").insert({
-    id: "c_e31e2",
-    user_id: userId,
-    template_id: "F09",
-    deck_gender: "woman",
-    answers: {},
-    core: { primary: "PSYCH", secondary: null, weight: 100, ranked: [] },
-    created_at: new Date(Date.now() - 100000).toISOString(),
-  });
-  if (error) throw new Error(`seed second companion: ${error.message}`);
+  for (const [i, [id, templateId]] of rows.entries()) {
+    const { error } = await admin.from("companions").insert({
+      id,
+      user_id: userId,
+      template_id: templateId,
+      deck_gender: "woman",
+      answers: {},
+      core: { primary: "PSYCH", secondary: null, weight: 100, ranked: [] },
+      created_at: new Date(Date.now() - 100000 + i).toISOString(),
+    });
+    if (error) throw new Error(`seed companion ${id}: ${error.message}`);
+  }
 }

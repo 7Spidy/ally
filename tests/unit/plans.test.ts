@@ -6,7 +6,7 @@ import { freshEntitlement, type Entitlement } from "@/state/schema";
 const ent = (over: Partial<Entitlement> = {}): Entitlement => ({ ...freshEntitlement(), ...over });
 const trial = (day: number, left = 100) => ent({ plan: "trial", trialDay: day, chatsLeftToday: left });
 const paid = (plan: PlanId) => ent({ plan, trialDay: null, chatsLeftToday: null, slotLimit: PLAN_CONFIG.tiers[plan].slots });
-const PRICES: Record<PlanId, string> = { pro: "₹299", max: "₹499", ultra: "₹799" };
+const PRICES: Record<PlanId, string> = { pro: "₹99", max: "₹149", ultra: "₹249" };
 
 describe("which tier each entry point pre-selects", () => {
   it("trial, chats, locked and settings open on Pro; newally on Max; deep on Ultra", () => {
@@ -84,12 +84,12 @@ describe("parseFrom", () => {
 
 describe("the CTA", () => {
   it("a new subscriber sees Continue with {Tier}, price a month", () => {
-    expect(ctaState("pro", trial(3), PRICES, false)).toEqual({ label: "Continue with Pro, ₹299 a month", disabled: false });
-    expect(ctaState("ultra", ent({ plan: "expired" }), PRICES, false)).toEqual({ label: "Continue with Ultra, ₹799 a month", disabled: false });
+    expect(ctaState("pro", trial(3), PRICES, false)).toEqual({ label: "Continue with Pro, ₹99 a month", disabled: false });
+    expect(ctaState("ultra", ent({ plan: "expired" }), PRICES, false)).toEqual({ label: "Continue with Ultra, ₹249 a month", disabled: false });
   });
 
   it("uses the localized price when Play gave one", () => {
-    expect(ctaState("max", trial(3), { ...PRICES, max: "₹499.00" }, false).label).toBe("Continue with Max, ₹499.00 a month");
+    expect(ctaState("max", trial(3), { ...PRICES, max: "₹149.00" }, false).label).toBe("Continue with Max, ₹149.00 a month");
   });
 
   it("a subscriber sees Current plan (disabled) on their tier and Switch to {Tier} on the others", () => {
@@ -107,10 +107,10 @@ describe("the CTA", () => {
 
 describe("Ultra with every slot full", () => {
   it("skips the plans screen only for newally", () => {
-    expect(ultraFull("newally", paid("ultra"), 4)).toBe(true);
-    expect(ultraFull("newally", paid("ultra"), 3)).toBe(false);
-    expect(ultraFull("settings", paid("ultra"), 4)).toBe(false);
-    expect(ultraFull("newally", paid("max"), 2)).toBe(false);
+    expect(ultraFull("newally", paid("ultra"), 5)).toBe(true);
+    expect(ultraFull("newally", paid("ultra"), 4)).toBe(false);
+    expect(ultraFull("settings", paid("ultra"), 5)).toBe(false);
+    expect(ultraFull("newally", paid("max"), 3)).toBe(false);
   });
 });
 
@@ -128,8 +128,8 @@ describe("Settings plan row", () => {
 describe("plan config", () => {
   it("prices, slots and levels follow the plan table", () => {
     const t = PLAN_CONFIG.tiers;
-    expect([t.pro.price, t.max.price, t.ultra.price]).toEqual([299, 499, 799]);
-    expect([t.pro.slots, t.max.slots, t.ultra.slots]).toEqual([1, 2, 4]);
+    expect([t.pro.price, t.max.price, t.ultra.price]).toEqual([99, 149, 249]);
+    expect([t.pro.slots, t.max.slots, t.ultra.slots]).toEqual([1, 3, 5]);
     expect([t.pro.maxLevel, t.max.maxLevel, t.ultra.maxLevel]).toEqual([5, 5, 6]);
     expect(PLAN_CONFIG.trial).toEqual({ dailyChats: 100, slots: 1, maxLevel: 5 });
     expect(PLAN_CONFIG.trialDays).toBe(7);

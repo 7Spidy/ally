@@ -282,7 +282,7 @@ describe("admin writes are applied and audited", () => {
     const day8 = await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: "trial", p_trial_day: 8 });
     expect(day8.entitlement.plan).toBe("expired"); // day 8 is the first day after the free week
     expect((await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: "expired" })).entitlement).toMatchObject({ plan: "expired", slot_limit: 0 });
-    for (const [plan, slots] of [["pro", 1], ["max", 2], ["ultra", 4]] as const) {
+    for (const [plan, slots] of [["pro", 1], ["max", 3], ["ultra", 5]] as const) {
       const r = await rpc<Forced>(admin, "admin_set_plan", { p_user_id: u.id, p_plan_or_state: plan });
       expect(r.entitlement, plan).toMatchObject({ plan, slot_limit: slots });
     }

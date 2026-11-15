@@ -292,7 +292,7 @@ describe("downgrade lock", () => {
       for (const id of ids) out.push(((await service.rpc("reply_gate", { p_companion_id: id })).data as { locked: boolean }).locked);
       return out;
     };
-    expect(await locked()).toEqual([false, false, true, true]);
+    expect(await locked()).toEqual([false, false, false, true]);
     await setSub(u.id, "pro", "active", DAY);
     expect(await locked()).toEqual([false, true, true, true]);
     await setTrialStart(u.id, 30 * DAY);
@@ -300,5 +300,33 @@ describe("downgrade lock", () => {
     expect(await locked()).toEqual([true, true, true, true]); // expired: all read-only
     await setSub(u.id, "ultra", "active", DAY);
     expect(await locked()).toEqual([false, false, false, false]);
+  });
+});
+
+describe("new tier slot limits", () => {
+  const faces = ["F01", "F02", "F03", "F04", "F05", "F06"];
+  const fill = async (u: TestUser, n: number) => {
+    for (const t of faces.slice(0, n)) await create(u, t);
+  };
+  const expectFull = async (u: TestUser, t: string) => {
+    await expect(create(u, t)).rejects.toThrow(/SLOT_LIMIT/);
+  };
+
+  it("a Max user can create a 3rd active companion but not a 4th", async () => {
+    const u = await makeUser("max-slots");
+    await setSub(u.id, "max", "active", DAY);
+    await fill(u, 3);
+    await expectFull(u, faces[3]);
+    const { count } = await service.from("companions").select("id", { count: "exact", head: true }).eq("user_id", u.id).eq("status", "active");
+    expect(count).toBe(3);
+  });
+
+  it("an Ultra user can create a 5th active companion but not a 6th", async () => {
+    const u = await makeUser("ultra-slots");
+    await setSub(u.id, "ultra", "active", DAY);
+    await fill(u, 5);
+    await expectFull(u, faces[5]);
+    const { count } = await service.from("companions").select("id", { count: "exact", head: true }).eq("user_id", u.id).eq("status", "active");
+    expect(count).toBe(5);
   });
 });

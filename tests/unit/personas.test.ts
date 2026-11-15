@@ -205,12 +205,12 @@ describe("lint on F02's golden set", () => {
 
 describe("addCard", () => {
   it("returns cap only for Ultra with every slot full", () => {
-    const ultra = { ...freshEntitlement(), plan: "ultra" as const, slotLimit: 4 };
-    expect(addCardState(4, false, ultra)).toBe("cap");
-    expect(addCardState(3, false, ultra)).toBe("add");
+    const ultra = { ...freshEntitlement(), plan: "ultra" as const, slotLimit: 5 };
+    expect(addCardState(5, false, ultra)).toBe("cap");
+    expect(addCardState(4, false, ultra)).toBe("add");
     expect(addCardState(2, true, ultra)).toBe("exhausted");
     // a full Pro or Max set is an "add" card whose button leads to the plans screen
     expect(addCardState(1, false, { ...freshEntitlement(), plan: "pro", slotLimit: 1 })).toBe("add");
-    expect(addCardState(2, false, { ...freshEntitlement(), plan: "max", slotLimit: 2 })).toBe("add");
+    expect(addCardState(3, false, { ...freshEntitlement(), plan: "max", slotLimit: 3 })).toBe("add");
   });
 });

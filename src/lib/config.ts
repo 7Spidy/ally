@@ -49,9 +49,9 @@ export const PLAN_CONFIG = {
   /** The level every plan but Ultra is held to. */
   defaultMaxLevel: 5,
   tiers: {
-    pro: { id: "pro", name: "Pro", price: 299, slots: 1, maxLevel: 5, productId: "ally_pro", basePlanId: "monthly" },
-    max: { id: "max", name: "Max", price: 499, slots: 2, maxLevel: 5, productId: "ally_max", basePlanId: "monthly" },
-    ultra: { id: "ultra", name: "Ultra", price: 799, slots: 4, maxLevel: 6, productId: "ally_ultra", basePlanId: "monthly" },
+    pro: { id: "pro", name: "Pro", price: 99, slots: 1, maxLevel: 5, productId: "ally_pro", basePlanId: "monthly" },
+    max: { id: "max", name: "Max", price: 149, slots: 3, maxLevel: 5, productId: "ally_max", basePlanId: "monthly" },
+    ultra: { id: "ultra", name: "Ultra", price: 249, slots: 5, maxLevel: 6, productId: "ally_ultra", basePlanId: "monthly" },
   } satisfies Record<PlanId, TierConfig>,
 } as const;
 
@@ -63,7 +63,7 @@ export const TIER_ORDER: PlanId[] = ["pro", "max", "ultra"];
  * sends them to the client; no component imports this, so it stays out of the
  * client bundle. Only the drift test (and the server) read it.
  */
-export const HIDDEN_DAILY_CAPS: Record<PlanId, number> = { pro: 300, max: 400, ultra: 400 };
+export const HIDDEN_DAILY_CAPS: Record<PlanId, number> = { pro: 400, max: 400, ultra: 400 };
 
 /** The most Allys anyone can have active at once (Ultra). */
 export const MAX_COMPANIONS = PLAN_CONFIG.tiers.ultra.slots;

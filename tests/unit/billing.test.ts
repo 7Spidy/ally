@@ -93,19 +93,19 @@ describe("restorePurchases", () => {
 describe("loadPrices", () => {
   it("falls back to the configured INR prices", async () => {
     useWindow({});
-    expect(await loadPrices()).toEqual({ pro: "₹299", max: "₹499", ultra: "₹799" });
+    expect(await loadPrices()).toEqual({ pro: "₹99", max: "₹149", ultra: "₹249" });
   });
 
   it("uses the localized strings the shell returns, tier by tier", async () => {
-    useWindow({ AllyBilling: { getPrices: () => Promise.resolve({ ally_pro: "₹299.00", ally_ultra: "₹799.00" }) } });
-    expect(await loadPrices()).toEqual({ pro: "₹299.00", max: "₹499", ultra: "₹799.00" });
+    useWindow({ AllyBilling: { getPrices: () => Promise.resolve({ ally_pro: "₹99.00", ally_ultra: "₹249.00" }) } });
+    expect(await loadPrices()).toEqual({ pro: "₹99.00", max: "₹149", ultra: "₹249.00" });
   });
 
   it("accepts a synchronous getPrices and ignores blank or broken answers", async () => {
     useWindow({ AllyBilling: { getPrices: () => ({ ally_max: "  " }) } });
-    expect((await loadPrices()).max).toBe("₹499");
+    expect((await loadPrices()).max).toBe("₹149");
     useWindow({ AllyBilling: { getPrices: () => Promise.reject(new Error("boom")) } });
-    expect(await loadPrices()).toEqual({ pro: "₹299", max: "₹499", ultra: "₹799" });
+    expect(await loadPrices()).toEqual({ pro: "₹99", max: "₹149", ultra: "₹249" });
   });
 });
 

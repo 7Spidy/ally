@@ -26,8 +26,8 @@ describe("copy", () => {
       "Free trial, {n} days left",
       "Free trial, 1 day left",
       "Free trial, last day",
-      "That's four",
-      "Four Allys is the most Ally keeps at once. Part ways with one to make room for someone new.",
+      "That's five",
+      "Five Allys is the most Ally keeps at once. Part ways with one to make room for someone new.",
       "Choose a plan",
       "Out of chats for today. Choose a plan to keep going.",
       "Your free week is over. Choose a plan.",
@@ -52,12 +52,13 @@ describe("copy", () => {
       "For daily talkers",
       "Unlimited chats",
       "1 Ally",
-      "Room for a second Ally",
+      "Room for 3 Allys",
       "Everything in Pro",
-      "2 Allys, each with their own memory",
+      "2 more Allys, each with their own memory",
       "The full experience",
       "Everything in Max",
-      "4 Allys",
+      "2 more Allys, 5 in all",
+      "Every level except the deepest",
       "The deepest level with every Ally",
       "Continue with {tier}, {price} a month",
       "Current plan",
@@ -154,7 +155,8 @@ describe("copy", () => {
   const banned = ["%", "score", "level", "2000"];
 
   // The plans copy has to say "deeper level" (the spec's own wording). It never carries a number or "L6".
-  const DEEPER_LEVEL = /\b(deeper|deepest|closest) level\b/;
+  // "Every level except the deepest" is the Pro feature line (T2).
+  const DEEPER_LEVEL = /\b(deeper|deepest|closest) level\b|\bevery level except the deepest\b/i;
 
   function expectNoLeak(label: string, strings: string[]) {
     for (const s of strings) {

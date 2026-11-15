@@ -343,7 +343,7 @@ describe("trust decay (ally_private.trust_decay)", () => {
 
 describe("the hidden fair-use cap replaces the day-pass cap", () => {
   it("stops a Pro user at the Pro cap with FAIR_USE_CAP", async () => {
-    expect(HIDDEN_DAILY_CAPS.pro).toBe(300);
+    expect(HIDDEN_DAILY_CAPS.pro).toBe(400);
     const u = await makeUser("cap");
     await grantPlan(u.id, "pro");
     const c = await create(u, "M01", PSYCH);

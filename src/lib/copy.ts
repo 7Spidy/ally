@@ -201,8 +201,8 @@ export const COPY = {
     addCardBodySome: "A few questions, a new face. They won't know about each other.",
     addCardBodyNone: "A few questions, a new face.",
     addCardAction: "Start",
-    capCardTitle: "That's four",
-    capCardBody: "Four Allys is the most Ally keeps at once. Part ways with one to make room for someone new.",
+    capCardTitle: "That's five",
+    capCardBody: "Five Allys is the most Ally keeps at once. Part ways with one to make room for someone new.",
     exhaustedCardTitle: "You've met everyone",
     exhaustedCardBody: "There are no new faces left to meet.",
   },
@@ -343,9 +343,9 @@ export const COPY = {
     // tiers
     perMonth: " a month",
     yourPlan: "Your plan",
-    pro: { tag: "For daily talkers", lead: "", feats: ["Unlimited chats", "1 Ally"] },
-    max: { tag: "Room for a second Ally", lead: "Everything in Pro", feats: ["2 Allys, each with their own memory"] },
-    ultra: { tag: "The full experience", lead: "Everything in Max", feats: ["4 Allys", "The deepest level with every Ally"] },
+    pro: { tag: "For daily talkers", lead: "", feats: ["Unlimited chats", "1 Ally", "Every level except the deepest"] },
+    max: { tag: "Room for 3 Allys", lead: "Everything in Pro", feats: ["2 more Allys, each with their own memory"] },
+    ultra: { tag: "The full experience", lead: "Everything in Max", feats: ["2 more Allys, 5 in all", "The deepest level with every Ally"] },
     // actions
     ctaContinue: "Continue with {tier}, {price} a month",
     ctaCurrent: "Current plan",
