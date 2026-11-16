@@ -64,6 +64,11 @@ const MIN_TYPING_MS = 600;
 const PAGING_BACKOFF_MS = 5000;
 /** Most pages a quote jump walks back through. */
 const MAX_JUMP_PAGES = 10;
+/** How long to keep asking while another request is still writing her reply (202): past the reply route's maxDuration. */
+const PENDING_POLL_MS = 150_000;
+const PENDING_POLL_EVERY_MS = 2500;
+/** User messages the server answered with silence (an ignored double text); a resume never asks about them again. Survives remounts. */
+const answeredSilently = new Set<number>();
 const typingMs = (len: number) => Math.min(4500, Math.max(1100, len * 35));
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -218,19 +223,25 @@ function ChatContent() {
 
   // Plays a live reply: the reaction after 700 ms, typing dots then each
   // bubble, then any screen effect. The bubbles already exist server-side, so
-  // a refresh mid-play just shows them.
+  // a refresh mid-play just shows them. If the chat is left mid-play the rest
+  // go into the app state at once (the chat list and the next open have them),
+  // and a bubble the state already holds (caught up by a resync) is not typed again.
   const play = useCallback(
     async (companionId: string, userMessageId: number | undefined, r: LiveReply, timing: { readAt: number; typingCredit: number }) => {
       if (r.reaction && userMessageId !== undefined) {
         const reaction = r.reaction;
         // The tapback lands 700 ms after the message was marked read, never before.
-        setTimeout(() => {
-          if (aliveRef.current) dispatch({ type: "SET_REACTION", companionId, messageId: userMessageId, reaction });
-        }, Math.max(0, timing.readAt + REACTION_DELAY_MS - Date.now()));
+        // Lands in the app state even if the chat has been left by then.
+        setTimeout(() => dispatch({ type: "SET_REACTION", companionId, messageId: userMessageId, reaction }), Math.max(0, timing.readAt + REACTION_DELAY_MS - Date.now()));
       }
       let first = true;
+      const toMessage = (b: LiveReply["bubbles"][number]): Message => ({ id: b.id, who: "them", text: b.text, at: b.at, meta: b.meta, inReplyTo: userMessageId ?? null });
       for (const b of r.bubbles) {
-        if (!aliveRef.current) return;
+        if (companionRef.current?.messages.some((m) => m.id === b.id)) continue;
+        if (!aliveRef.current) {
+          dispatch({ type: "RECEIVE_REPLY", companionId, message: toMessage(b) });
+          continue;
+        }
         setTyping(true);
         if (b.meta?.effect === "stop") {
           await sleep(1800);
@@ -244,9 +255,8 @@ function ChatContent() {
           await sleep(wait);
         }
         first = false;
-        if (!aliveRef.current) return;
-        setTyping(false);
-        dispatch({ type: "RECEIVE_REPLY", companionId, message: { id: b.id, who: "them", text: b.text, at: b.at, meta: b.meta, inReplyTo: userMessageId ?? null } });
+        if (aliveRef.current) setTyping(false);
+        dispatch({ type: "RECEIVE_REPLY", companionId, message: toMessage(b) });
       }
       dispatch({
         type: "LIVE_SYNC",
@@ -257,8 +267,9 @@ function ChatContent() {
           ...(r.paused ? { pausedReason: "age_check" as const } : {}),
         },
       });
+      if (!aliveRef.current) return;
       if (r.resourceCard) setResourceOpen(true);
-      if (r.screen && aliveRef.current) setScreenFx(r.screen);
+      if (r.screen) setScreenFx(r.screen);
     },
     [dispatch]
   );
@@ -268,8 +279,11 @@ function ChatContent() {
   // `readDelay` is how long she takes to read the user's message first (null for an opener). The request goes
   // out at once, in parallel: the receipt turns to Read and the dots start when the delay is up, and the first
   // bubble's typing time is cut by however long the dots have already been showing.
+  // The request is sent and finished even if the chat is left meanwhile: the server writes the reply either way,
+  // and play() puts it in the app state. `resume` picks up a reply for a message sent on an earlier visit: no
+  // read delay, and the dots only while another request is still writing it.
   const fetchAndPlay = useCallback(
-    async (companionId: string, mode: "reply" | "opener", userMessageId?: number, followUp = false, readDelay: number | null = null) => {
+    async (companionId: string, mode: "reply" | "opener", userMessageId?: number, followUp = false, readDelay: number | null = null, resume = false) => {
       if (playingRef.current) {
         // The user sent again while the companion was mid-reply: answer that message next
         // (the server prompt covers both), rather than dropping it.
@@ -282,29 +296,32 @@ function ChatContent() {
       const startedAt = Date.now();
       const withRead = mode === "reply" && userMessageId !== undefined;
       // A queued follow-up is read on the free tier.
-      const delay = withRead ? (followUp ? readDelayMs("free", Math.random()) : (readDelay ?? 0)) : 0;
+      const delay = withRead && !resume ? (followUp ? readDelayMs("free", Math.random()) : (readDelay ?? 0)) : 0;
       let readAt = startedAt;
       let settled = false;
       // A dequeued follow-up may end up a tapback alone: play() shows the dots per bubble, so none while waiting.
-      if (!withRead && !followUp) setTyping(true);
+      if (!withRead && !followUp && !resume) setTyping(true);
       const readDone: Promise<void> = withRead
         ? sleep(delay).then(() => {
             if (!aliveRef.current) return;
             readAt = Date.now();
             setReadUpTo((prev) => Math.max(prev ?? 0, userMessageId as number));
-            if (!settled && !followUp) setTyping(true);
+            if (!settled && !followUp && !resume) setTyping(true);
           })
         : Promise.resolve();
       try {
         const opts = qaRef.current;
         const qaBody = opts.ignoreCaps || opts.force || opts.celebrate ? { ignoreCaps: opts.ignoreCaps, force: opts.force, celebrate: opts.celebrate } : null;
+        // 202: another request (an earlier visit, a second tab) is still writing it. Keep asking until it lands;
+        // the server takes the claim over once the request holding it has run past its time limit.
         const fetchReply = async (): Promise<LiveReply | null> => {
-          let got: LiveReply | null = null;
-          for (let i = 0; i < 6 && !got && aliveRef.current; i++) {
-            got = await requestLiveReply(companionId, mode, qaBody);
-            if (!got) await sleep(2000);
+          const until = Date.now() + PENDING_POLL_MS;
+          for (;;) {
+            const got = await requestLiveReply(companionId, mode, qaBody);
+            if (got || Date.now() >= until) return got;
+            if (resume && aliveRef.current && !settled) setTyping(true);
+            await sleep(PENDING_POLL_EVERY_MS);
           }
-          return got;
         };
         const arrival = { at: startedAt };
         const [r] = await Promise.all([fetchReply().then((got) => ((arrival.at = Date.now()), got)), readDone]);
@@ -313,13 +330,15 @@ function ChatContent() {
         if (r && opts.celebrate) setQaCelebrate(null);
         setTyping(false);
         if (r?.seenUpTo != null) lastSeenUpToRef.current = r.seenUpTo;
+        if (r && mode === "reply" && userMessageId !== undefined && !r.reaction && r.bubbles.length === 0) answeredSilently.add(userMessageId);
         const typingCredit = withRead ? Math.max(0, arrival.at - startedAt - delay) : 0;
         if (r) await play(companionId, userMessageId, r, { readAt, typingCredit });
       } catch (e) {
         setTyping(false);
         if (e instanceof LiveReplyError && e.status === 423) {
           dispatch({ type: "LIVE_SYNC", companionId, patch: { pausedReason: "age_check" } });
-        } else {
+        } else if (!resume) {
+          // A resume that fails stays quiet: the next open or return to the app asks again.
           setFailedMode(mode);
         }
       } finally {
@@ -329,8 +348,9 @@ function ChatContent() {
         const next = queuedRef.current;
         queuedRef.current = null;
         // The reply just played already saw the queued message: nothing left to ask for.
+        // Asked for even if the chat has been left, so a double text sent just before leaving is still answered.
         const covered = next && next.userMessageId !== undefined && lastSeenUpToRef.current >= next.userMessageId;
-        if (next && !covered && aliveRef.current) void fetchAndPlay(next.companionId, "reply", next.userMessageId, true);
+        if (next && !covered) void fetchAndPlay(next.companionId, "reply", next.userMessageId, true);
       }
     },
     [dispatch, play]
@@ -433,6 +453,41 @@ function ChatContent() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companion?.id, companion?.messages.length, live, needsConsent, locked, state.entitlement.plan, state.user.consentVersion, state.user.displayName]);
+
+  // Catch-up, on open and on every return to the app: pull the newest page from the server. Bubbles written
+  // while this chat was off screen (left mid-reply, or the app closed) show up, and a message of the user's that
+  // still has no reply is asked about again: the server replays a finished reply, waits on the request still
+  // writing it (taking it over if that request died), or writes it now.
+  const companionIdForSync = live && companion ? companion.id : null;
+  const canResumeRef = useRef(false);
+  canResumeRef.current = live && !needsConsent && !locked && state.entitlement.plan !== "expired" && !companion?.pausedReason;
+  useEffect(() => {
+    if (!companionIdForSync) return;
+    const cid = companionIdForSync;
+    let busy = false;
+    const sync = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
+      try {
+        const page = await getMessagesBefore(cid, Number.MAX_SAFE_INTEGER);
+        if (!aliveRef.current) return;
+        dispatch({ type: "MERGE_LATEST", companionId: cid, messages: page.messages });
+        const newest = [...page.messages].reverse().find((m) => !m.deleted);
+        const unanswered = newest && newest.who === "me" && typeof newest.id === "number" && !newest.meta?.reaction ? newest.id : null;
+        if (unanswered !== null && !answeredSilently.has(unanswered) && canResumeRef.current && !playingRef.current) void fetchAndPlay(cid, "reply", unanswered, false, 0, true);
+      } catch {
+        // The next open or return to the app tries again.
+      } finally {
+        busy = false;
+      }
+    };
+    void sync();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void sync();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [companionIdForSync, dispatch, fetchAndPlay]);
 
   // Account sheet nudge, spec §8.1's exchange-count rule applied to THIS
   // chat's companion (the spec says `companions[0].exchanges`, a slip for "the

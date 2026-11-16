@@ -49,6 +49,8 @@ export type AllyAction =
   | { type: "DROP_PENDING"; companionId: string; tempId: number }
   /** An older page of history, oldest to newest, de-duplicated by id. */
   | { type: "PREPEND_MESSAGES"; companionId: string; messages: Message[]; hasMore: boolean }
+  /** The newest page from the server, merged in: catches up on bubbles written while the chat was not on screen. */
+  | { type: "MERGE_LATEST"; companionId: string; messages: Message[] }
   /** Rows the server removed (her reply, retracted for an edit). */
   | { type: "REMOVE_MESSAGES"; companionId: string; ids: number[] }
   | { type: "RECEIVE_REPLY"; companionId: string; message: Message }
@@ -251,6 +253,28 @@ export function allyReducer(state: AllyState, action: AllyAction): AllyState {
         const have = new Set(c.messages.flatMap((m) => (typeof m.id === "number" ? [m.id] : [])));
         const older = action.messages.filter((m) => typeof m.id !== "number" || !have.has(m.id));
         return { ...c, messages: [...older, ...c.messages], hasMore: action.hasMore };
+      });
+
+    case "MERGE_LATEST":
+      return updateCompanion(state, action.companionId, (c) => {
+        const fresh = new Map(action.messages.flatMap((m) => (typeof m.id === "number" && m.id > 0 ? [[m.id, m] as const] : [])));
+        if (!fresh.size) return c;
+        let changed = false;
+        // Saved rows take the server's version (a reaction or tombstone may have landed); the temp key stays so the row does not remount.
+        const saved = c.messages.flatMap((m) => {
+          if (typeof m.id !== "number" || m.id <= 0) return [];
+          const s = fresh.get(m.id);
+          fresh.delete(m.id);
+          if (!s) return [m];
+          if (JSON.stringify(s.meta ?? {}) === JSON.stringify(m.meta ?? {}) && !!s.deleted === !!m.deleted && s.text === m.text) return [m];
+          changed = true;
+          return [m.clientKey !== undefined ? { ...s, clientKey: m.clientKey } : s];
+        });
+        if (fresh.size) changed = true;
+        if (!changed) return c;
+        const local = c.messages.filter((m) => typeof m.id !== "number" || m.id <= 0);
+        const merged = [...saved, ...fresh.values()].sort((a, b) => (a.id as number) - (b.id as number));
+        return { ...c, messages: [...merged, ...local] };
       });
 
     case "REMOVE_MESSAGES": {

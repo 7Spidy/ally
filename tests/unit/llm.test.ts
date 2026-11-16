@@ -104,18 +104,18 @@ describe("errors carry the provider's body", () => {
 });
 
 describe("env names and defaults", () => {
-  it("defaults to DeepSeek V4 Pro, and reads only LLM_* (XAI_* is ignored)", async () => {
+  it("defaults to DeepSeek V4 Flash, and reads only LLM_* (XAI_* is ignored)", async () => {
     const seen: { url?: string; body?: Record<string, unknown> }[] = [];
     const ok = { status: 200, body: { choices: [{ message: { content: "{}" } }] } };
     expect(DEFAULT_BASE_URL).toBe("https://api.deepseek.com");
-    expect(DEFAULT_MODEL).toBe("deepseek-v4-pro");
+    expect(DEFAULT_MODEL).toBe("deepseek-v4-flash");
     process.env.XAI_BASE_URL = "https://legacy.example/v1";
     process.env.XAI_MODEL = "legacy-model";
     await chat({ ...args, fetchImpl: fakeFetch(ok, seen) });
     delete process.env.XAI_BASE_URL;
     delete process.env.XAI_MODEL;
     expect(seen[0].url).toBe("https://api.deepseek.com/chat/completions");
-    expect(seen[0].body?.model).toBe("deepseek-v4-pro");
+    expect(seen[0].body?.model).toBe("deepseek-v4-flash");
     process.env.LLM_BASE_URL = "https://llm.example/v1";
     process.env.LLM_MODEL = "other-model";
     await chat({ ...args, fetchImpl: fakeFetch(ok, seen) });

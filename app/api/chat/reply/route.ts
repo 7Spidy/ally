@@ -15,7 +15,10 @@ import { applyReply, deeperLevelAvailable, effectiveLevel, freshDay, relationshi
 import type { CoreId } from "@/state/schema";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Two model calls (a lint regeneration, or the follow-up rescue) can each take a timeout and a retry: 60 s was not enough.
+export const maxDuration = 120;
+/** A claim older than this belongs to a request that is past maxDuration, so dead: the next ask takes it over. */
+const STALE_CLAIM_MS = 150_000;
 
 interface CompanionRow {
   id: string;
@@ -37,6 +40,7 @@ interface CompanionRow {
   trust_frozen_until: string | null;
   paused_reason: string | null;
   last_replied_msg: number;
+  reply_claimed_at: string | null;
 }
 
 interface MsgRow {
@@ -119,6 +123,9 @@ export async function POST(request: Request) {
 
   const now = Date.now();
   const prevReplied = c.last_replied_msg;
+  const claimedAt = new Date(now).toISOString();
+  const staleCutoff = new Date(now - STALE_CLAIM_MS).toISOString();
+  const claimStale = c.reply_claimed_at !== null && Date.parse(c.reply_claimed_at) < now - STALE_CLAIM_MS;
 
   // Idempotency lock (spec 4.3 step 2).
   let userMsg: MsgRow | null = null;
@@ -126,22 +133,36 @@ export async function POST(request: Request) {
     const { data } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).eq("who", "me").is("deleted_at", null).order("id", { ascending: false }).limit(1);
     userMsg = ((data ?? []) as MsgRow[])[0] ?? null;
     if (!userMsg) return json({ error: "no_message" }, 409);
-    const { data: claimed } = await db.from("companions").update({ last_replied_msg: userMsg.id }).eq("id", c.id).lt("last_replied_msg", userMsg.id).select("id");
+    const { data: claimed } = await db.from("companions").update({ last_replied_msg: userMsg.id, reply_claimed_at: claimedAt }).eq("id", c.id).lt("last_replied_msg", userMsg.id).select("id");
     if (!claimed?.length) {
       const { data: existing } = await db.from("messages").select("id,who,text,created_at,meta,in_reply_to").eq("companion_id", c.id).eq("in_reply_to", userMsg.id).order("id");
       if (existing?.length) return json({ replayed: true, reaction: null, bubbles: bubblesOf(existing as MsgRow[]), seenUpTo: userMsg.id, trustLevel: effectiveLevel(c.trust_level, maxLevel), leveledUp: null, resourceCard: false, paused: false });
       // A reply with no bubbles is a tapback alone. The reaction is written atomically with the reply, so its presence means the reply is done.
       const done = userMsg.meta?.reaction;
       if (typeof done === "string" && done !== "") return json({ replayed: true, reaction: done, bubbles: [], seenUpTo: userMsg.id, trustLevel: effectiveLevel(c.trust_level, maxLevel), leveledUp: null, resourceCard: false, paused: false });
-      return json({ pending: true }, 202);
+      // Claimed, nothing written, no claim time: the reply was written as silence (an ignored double text).
+      if (c.reply_claimed_at === null) return json({ replayed: true, reaction: null, bubbles: [], seenUpTo: userMsg.id, trustLevel: effectiveLevel(c.trust_level, maxLevel), leveledUp: null, resourceCard: false, paused: false });
+      if (!claimStale) return json({ pending: true }, 202);
+      // The request holding the claim was killed before it could write or give it back: take it over.
+      const { data: retaken } = await db.from("companions").update({ reply_claimed_at: claimedAt }).eq("id", c.id).eq("last_replied_msg", userMsg.id).lt("reply_claimed_at", staleCutoff).select("id");
+      if (!retaken?.length) return json({ pending: true }, 202);
+      console.info(JSON.stringify({ evt: "reply.claim_taken_over", companion: c.id }));
     }
   } else {
     const { count } = await db.from("messages").select("id", { count: "exact", head: true }).eq("companion_id", c.id);
     if ((count ?? 0) > 0) return json({ error: "not_empty" }, 409);
-    const { data: claimed } = await db.from("companions").update({ last_replied_msg: -1 }).eq("id", c.id).eq("last_replied_msg", 0).select("id");
-    if (!claimed?.length) return json({ pending: true }, 202);
+    const { data: claimed } = await db.from("companions").update({ last_replied_msg: -1, reply_claimed_at: claimedAt }).eq("id", c.id).eq("last_replied_msg", 0).select("id");
+    if (!claimed?.length) {
+      // An opener is never silent, so a held claim with no time set is one taken before reply_claimed_at existed: dead too.
+      const openerStale = c.last_replied_msg === -1 && (c.reply_claimed_at === null || claimStale);
+      if (!openerStale) return json({ pending: true }, 202);
+      const retake = db.from("companions").update({ reply_claimed_at: claimedAt }).eq("id", c.id).eq("last_replied_msg", -1);
+      const { data: retaken } = await (c.reply_claimed_at === null ? retake.is("reply_claimed_at", null) : retake.lt("reply_claimed_at", staleCutoff)).select("id");
+      if (!retaken?.length) return json({ pending: true }, 202);
+      console.info(JSON.stringify({ evt: "reply.claim_taken_over", companion: c.id, mode }));
+    }
   }
-  const release = () => db.from("companions").update({ last_replied_msg: prevReplied }).eq("id", c.id);
+  const release = () => db.from("companions").update({ last_replied_msg: prevReplied, reply_claimed_at: null }).eq("id", c.id);
 
   try {
     // Context
@@ -286,6 +307,7 @@ export async function POST(request: Request) {
     if (userMsg) {
       const { data: still } = await db.from("messages").select("deleted_at").eq("id", userMsg.id).maybeSingle();
       if (!still || still.deleted_at) {
+        await db.from("companions").update({ reply_claimed_at: null }).eq("id", c.id).eq("last_replied_msg", userMsg.id);
         return json({ reaction: null, screen: null, bubbles: [], seenUpTo: null, trustLevel: level, leveledUp: null, resourceCard: false, paused: false });
       }
     }
@@ -367,6 +389,8 @@ export async function POST(request: Request) {
     if (error) throw error;
     const result = written as { discarded: boolean; bubbles: { id: number; text: string; meta: MsgMeta; at: number }[] };
     if (result.discarded) return json({ error: "not_found" }, 404);
+    // Written: the claim is settled. Only while it is still ours, so a newer message's claim keeps its time.
+    await db.from("companions").update({ reply_claimed_at: null }).eq("id", c.id).eq("last_replied_msg", mode === "reply" ? (userMsg?.id ?? -1) : -1);
 
     // last_used_at for the facts the model just read (best effort).
     const usedIds = ((factRows ?? []) as { id: number }[]).map((f) => f.id);

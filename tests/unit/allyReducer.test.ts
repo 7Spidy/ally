@@ -252,6 +252,43 @@ describe("U1 PREPEND_MESSAGES and REMOVE_MESSAGES", () => {
   });
 });
 
+describe("MERGE_LATEST (catch-up after leaving a chat mid-reply)", () => {
+  const m = (id: number, who: "me" | "them" = "them") => ({ id, who, text: `m${id}`, at: NOW + id });
+
+  it("adds bubbles written while the chat was off screen, in id order, unread untouched", () => {
+    const st = stateWith(companion({ messages: [m(1, "me"), m(2)], unread: 0 }));
+    const next = allyReducer(st, { type: "MERGE_LATEST", companionId: "c_test", messages: [m(1, "me"), m(2), m(3, "me"), m(4), m(5)] });
+    expect(next.companions[0].messages.map((x) => x.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(next.companions[0].unread).toBe(0);
+  });
+
+  it("fills a gap left by a reply cut off mid-play", () => {
+    const st = stateWith(companion({ messages: [m(3, "me"), m(4)] }));
+    const next = allyReducer(st, { type: "MERGE_LATEST", companionId: "c_test", messages: [m(3, "me"), m(4), m(5), m(6)] });
+    expect(next.companions[0].messages.map((x) => x.id)).toEqual([3, 4, 5, 6]);
+  });
+
+  it("takes the server's version of a saved row (a reaction) and keeps its temp key", () => {
+    const mine = { ...m(7, "me"), clientKey: -3 };
+    const st = stateWith(companion({ messages: [mine] }));
+    const next = allyReducer(st, { type: "MERGE_LATEST", companionId: "c_test", messages: [{ ...m(7, "me"), meta: { reaction: "❤️" } }] });
+    expect(next.companions[0].messages[0]).toMatchObject({ id: 7, clientKey: -3, meta: { reaction: "❤️" } });
+  });
+
+  it("keeps a pending send at the end", () => {
+    const pending = { id: -1, clientKey: -1, who: "me" as const, text: "sending", at: NOW + 99, pending: true };
+    const st = stateWith(companion({ messages: [m(1), pending] }));
+    const next = allyReducer(st, { type: "MERGE_LATEST", companionId: "c_test", messages: [m(1), m(2)] });
+    expect(next.companions[0].messages.map((x) => x.id)).toEqual([1, 2, -1]);
+  });
+
+  it("returns the same state when nothing changed", () => {
+    const st = stateWith(companion({ messages: [m(1), m(2)] }));
+    const next = allyReducer(st, { type: "MERGE_LATEST", companionId: "c_test", messages: [m(1), m(2)] });
+    expect(next.companions[0]).toBe(st.companions[0]);
+  });
+});
+
 describe("B3 REPLACE_MESSAGE", () => {
   const msgs = [
     { id: 1, who: "them" as const, text: "hi", at: NOW },

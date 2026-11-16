@@ -1,8 +1,8 @@
 /**
  * LLM client (D2): OpenAI-compatible Chat Completions over fetch, no SDK.
- * Built for DeepSeek V4 Pro; the endpoint and model come from env:
+ * Built for DeepSeek V4 (Flash by default); the endpoint and model come from env:
  *   LLM_API_KEY, LLM_BASE_URL, LLM_MODEL   key, endpoint, model
- *     (unset, the endpoint and model default to DeepSeek V4 Pro)
+ *     (unset, the endpoint and model default to DeepSeek V4 Flash)
  *   LLM_THINKING          disabled (default) | enabled, always sent as thinking.type.
  *                         V4 thinks by default; when on, the next request must echo
  *                         reasoning_content and reasoning tokens count against max_tokens.
@@ -22,7 +22,7 @@ export function llmEnv(name: "API_KEY" | "BASE_URL" | "MODEL"): string | undefin
   return process.env[`LLM_${name}`] || undefined;
 }
 
-export const DEFAULT_MODEL = "deepseek-v4-pro";
+export const DEFAULT_MODEL = "deepseek-v4-flash";
 export const DEFAULT_BASE_URL = "https://api.deepseek.com";
 export const TIMEOUT_MS = 25000;
 const BODY_LIMIT = 600;
